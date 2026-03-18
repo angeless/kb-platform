@@ -1,0 +1,28 @@
+"""Search schemas."""
+
+from datetime import datetime
+from uuid import UUID
+
+from pydantic import BaseModel, Field
+
+
+class TextSearchRequest(BaseModel):
+    project_id: UUID
+    query: str = Field(..., min_length=1, max_length=500)
+    page: int = Field(default=1, ge=1)
+    page_size: int = Field(default=20, ge=1, le=100)
+
+
+class SearchHit(BaseModel):
+    """A single search result."""
+    doc_id: UUID
+    title: str
+    doc_type: str
+    status: str
+    node_id: UUID | None
+    snippet: str = Field(description="Matched text snippet")
+    matched_field: str = Field(description="title or content_md")
+    version: int
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
