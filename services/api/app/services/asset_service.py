@@ -163,6 +163,90 @@ class AssetService:
         await self.db.flush()
         return asset
 
+    async def import_archive(
+        self, project_id: uuid.UUID, archive_content: bytes, archive_filename: str
+    ) -> dict:
+        """Import a ZIP archive: extract files and create individual Asset records.
+
+        Returns dict with imported/skipped/errors counts.
+        """
+        import zipfile
+        import io
+
+        await self._verify_project(project_id)
+
+        if not zipfile.is_zipfile(io.BytesIO(archive_content)):
+            raise AppException(
+                error_code=ErrorCode.ASSET_TYPE_NOT_ALLOWED,
+                message="文件不是有效的 ZIP 压缩包",
+            )
+
+        imported = 0
+        skipped = 0
+        errors: list[str] = []
+        max_files = 100
+
+        with zipfile.ZipFile(io.BytesIO(archive_content), "r") as zf:
+            entries = [e for e in zf.namelist() if not e.endswith("/")]  # skip directories
+            if len(entries) > max_files:
+                raise AppException(
+                    error_code=ErrorCode.ASSET_TOO_LARGE,
+                    message=f"压缩包内文件数超过限制 ({max_files})",
+                )
+
+            for entry_name in entries:
+                filename = entry_name.split("/")[-1]  # strip path, keep filename
+                if not filename:
+                    continue
+
+                # Check file type whitelist
+                if not is_allowed_file(filename):
+                    skipped += 1
+                    continue
+
+                try:
+                    file_content = zf.read(entry_name)
+                except Exception as e:
+                    errors.append(f"{entry_name}: {e!s}")
+                    continue
+
+                file_hash = hashlib.sha256(file_content).hexdigest()
+
+                # Check duplicate
+                dup_q = select(Asset).where(
+                    Asset.project_id == project_id,
+                    Asset.file_hash == file_hash,
+                )
+                dup = (await self.db.execute(dup_q)).scalar_one_or_none()
+                if dup is not None:
+                    skipped += 1
+                    continue
+
+                asset_id = uuid.uuid4()
+                object_path = f"{self.tenant_id}/{project_id}/{asset_id}/{filename}"
+
+                if self.storage is not None:
+                    from app.utils.storage import guess_asset_type as _guess
+                    self.storage.upload_file(object_path, file_content)
+
+                from app.utils.storage import guess_asset_type
+                asset = Asset(
+                    id=asset_id,
+                    project_id=project_id,
+                    asset_type=guess_asset_type(filename),
+                    filename=filename,
+                    object_path=object_path,
+                    file_hash=file_hash,
+                    file_size=len(file_content),
+                    parse_status="pending",
+                    uploaded_by=self.user_id,
+                )
+                self.db.add(asset)
+                imported += 1
+
+        await self.db.flush()
+        return {"imported": imported, "skipped": skipped, "errors": errors}
+
     async def list(
         self, project_id: uuid.UUID, page: int = 1, page_size: int = 20
     ) -> tuple[list[Asset], int]:

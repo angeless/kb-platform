@@ -81,6 +81,28 @@ async def import_url(
     return DataResponse(data=AssetOut.model_validate(asset))
 
 
+@router.post("/import-archive", status_code=201)
+async def import_archive(
+    project_id: uuid.UUID = Form(...),
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    tenant_id: uuid.UUID = Depends(get_tenant_id),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings_dep),
+    storage: StorageClient | None = Depends(get_storage),
+):
+    svc = AssetService(
+        db,
+        tenant_id,
+        current_user.id,
+        storage=storage,
+        max_upload_size_bytes=settings.max_upload_size_mb * 1024 * 1024,
+    )
+    archive_content = await file.read()
+    result = await svc.import_archive(project_id, archive_content, file.filename or "archive.zip")
+    return DataResponse(data=result)
+
+
 @router.get("", response_model=ListResponse[AssetOut])
 async def list_assets(
     project_id: uuid.UUID = Query(...),

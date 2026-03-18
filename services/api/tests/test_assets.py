@@ -1,6 +1,8 @@
 """Tests for asset endpoints."""
 
+import io
 import uuid
+import zipfile
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -236,3 +238,93 @@ async def test_import_url_invalid_protocol(client: AsyncClient, auth_headers: di
     )
     # Pydantic HttpUrl type rejects non-http/https at schema level
     assert resp.status_code == 422
+
+
+# --- Archive Import Tests ---
+
+
+def _make_zip(files: dict[str, bytes]) -> bytes:
+    """Helper: create an in-memory ZIP with given filename->content pairs."""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for name, content in files.items():
+            zf.writestr(name, content)
+    return buf.getvalue()
+
+
+@pytest.mark.asyncio
+async def test_import_archive_success(client: AsyncClient, auth_headers: dict):
+    """Import a ZIP with 2 valid files should create 2 assets."""
+    proj_resp = await client.post(
+        "/v1/projects",
+        json={"name": "Archive Import Project"},
+        headers=auth_headers,
+    )
+    project_id = proj_resp.json()["data"]["id"]
+
+    zip_bytes = _make_zip({
+        "doc1.txt": b"first document content",
+        "doc2.pdf": b"second document content pdf",
+    })
+
+    resp = await client.post(
+        "/v1/assets/import-archive",
+        data={"project_id": project_id},
+        files={"file": ("archive.zip", zip_bytes, "application/zip")},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201
+    data = resp.json()["data"]
+    assert data["imported"] == 2
+    assert data["skipped"] == 0
+
+
+@pytest.mark.asyncio
+async def test_import_archive_skips_unsupported(client: AsyncClient, auth_headers: dict):
+    """Files with unsupported extensions should be skipped, not cause errors."""
+    proj_resp = await client.post(
+        "/v1/projects",
+        json={"name": "Archive Skip Project"},
+        headers=auth_headers,
+    )
+    project_id = proj_resp.json()["data"]["id"]
+
+    zip_bytes = _make_zip({
+        "readme.txt": b"valid file",
+        "malware.exe": b"should be skipped",
+        "script.bat": b"also skipped",
+    })
+
+    resp = await client.post(
+        "/v1/assets/import-archive",
+        data={"project_id": project_id},
+        files={"file": ("mixed.zip", zip_bytes, "application/zip")},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201
+    data = resp.json()["data"]
+    assert data["imported"] == 1
+    assert data["skipped"] == 2
+
+
+@pytest.mark.asyncio
+async def test_import_archive_empty_zip(client: AsyncClient, auth_headers: dict):
+    """Empty ZIP should return imported=0."""
+    proj_resp = await client.post(
+        "/v1/projects",
+        json={"name": "Empty Archive Project"},
+        headers=auth_headers,
+    )
+    project_id = proj_resp.json()["data"]["id"]
+
+    zip_bytes = _make_zip({})
+
+    resp = await client.post(
+        "/v1/assets/import-archive",
+        data={"project_id": project_id},
+        files={"file": ("empty.zip", zip_bytes, "application/zip")},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201
+    data = resp.json()["data"]
+    assert data["imported"] == 0
