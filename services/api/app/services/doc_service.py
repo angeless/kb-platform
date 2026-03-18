@@ -6,7 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared_errors import ConflictException, ErrorCode, NotFoundException
-from shared_models import KnowledgeDoc, Project
+from shared_models import KnowledgeDoc, KnowledgeDocVersion, Project
 
 
 class DocService:
@@ -60,6 +60,22 @@ class DocService:
             )
         await self._verify_project(doc.project_id)
         return doc
+
+    async def get_version(self, doc_id: uuid.UUID, version: int) -> KnowledgeDocVersion:
+        """Get a specific version of a document."""
+        doc = await self.get(doc_id)
+        q = select(KnowledgeDocVersion).where(
+            KnowledgeDocVersion.doc_id == doc.id,
+            KnowledgeDocVersion.version == version,
+        )
+        result = await self.db.execute(q)
+        ver = result.scalar_one_or_none()
+        if ver is None:
+            raise NotFoundException(
+                error_code=ErrorCode.DOC_NOT_FOUND,
+                message=f"Version {version} not found",
+            )
+        return ver
 
     async def review(self, doc_id: uuid.UUID) -> KnowledgeDoc:
         """Transition doc status to 'reviewing'. Only from 'draft'."""

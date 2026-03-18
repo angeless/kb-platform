@@ -7,7 +7,7 @@ import pytest_asyncio
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from shared_models import KnowledgeDoc, KnowledgeDocVersion
+from shared_models import Asset, AssetChunk, KnowledgeDoc, KnowledgeDocVersion, SourceRef
 
 
 @pytest_asyncio.fixture(loop_scope="session")
@@ -42,14 +42,50 @@ async def doc_fixture(client: AsyncClient, auth_headers: dict, db_session: Async
         id=uuid.uuid4(),
         doc_id=doc.id,
         version=1,
-        content_md="# Test Content",
+        content_md="# Test Content\n\nSome text [来源0]",
         change_reason="Initial version",
         created_by=user.id,
     )
     db_session.add(version)
     await db_session.flush()
 
-    return {"project_id": project_id, "doc_id": doc.id, "user_id": user.id}
+    # Create an asset + chunk + source_ref for traceability testing
+    asset = Asset(
+        id=uuid.uuid4(),
+        project_id=project_id,
+        asset_type="text",
+        filename="test.txt",
+        parse_status="parsed",
+        uploaded_by=user.id,
+    )
+    db_session.add(asset)
+    await db_session.flush()
+
+    chunk = AssetChunk(
+        id=uuid.uuid4(),
+        asset_id=asset.id,
+        chunk_index=0,
+        content_text="Original source text",
+    )
+    db_session.add(chunk)
+    await db_session.flush()
+
+    source_ref = SourceRef(
+        id=uuid.uuid4(),
+        doc_version_id=version.id,
+        asset_chunk_id=chunk.id,
+        location_hint="page 1",
+    )
+    db_session.add(source_ref)
+    await db_session.flush()
+
+    return {
+        "project_id": project_id,
+        "doc_id": doc.id,
+        "user_id": user.id,
+        "version_id": version.id,
+        "chunk_id": chunk.id,
+    }
 
 
 @pytest.mark.asyncio
@@ -70,7 +106,42 @@ async def test_get_doc_with_versions(
     doc_id = doc_fixture["doc_id"]
     resp = await client.get(f"/v1/docs/{doc_id}", headers=auth_headers)
     assert resp.status_code == 200
-    assert resp.json()["data"]["title"] == "Test Doc"
+    data = resp.json()["data"]
+    assert data["title"] == "Test Doc"
+    # Should include versions with content
+    assert "versions" in data
+    assert len(data["versions"]) >= 1
+    ver = data["versions"][0]
+    assert "content_md" in ver
+    assert "# Test Content" in ver["content_md"]
+    # Should include source_refs in version
+    assert "source_refs" in ver
+    assert len(ver["source_refs"]) >= 1
+    ref = ver["source_refs"][0]
+    assert ref["location_hint"] == "page 1"
+    assert ref["asset_chunk_id"] == str(doc_fixture["chunk_id"])
+
+
+@pytest.mark.asyncio
+async def test_get_doc_version(
+    client: AsyncClient, auth_headers: dict, doc_fixture: dict
+):
+    doc_id = doc_fixture["doc_id"]
+    resp = await client.get(f"/v1/docs/{doc_id}/versions/1", headers=auth_headers)
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    assert data["version"] == 1
+    assert "# Test Content" in data["content_md"]
+    assert len(data["source_refs"]) >= 1
+
+
+@pytest.mark.asyncio
+async def test_get_doc_version_not_found(
+    client: AsyncClient, auth_headers: dict, doc_fixture: dict
+):
+    doc_id = doc_fixture["doc_id"]
+    resp = await client.get(f"/v1/docs/{doc_id}/versions/999", headers=auth_headers)
+    assert resp.status_code == 404
 
 
 @pytest.mark.asyncio

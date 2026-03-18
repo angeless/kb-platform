@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared_schemas.common import DataResponse, ListResponse, PaginationMeta
-from shared_schemas.knowledge import DocVersionOut, KnowledgeDocOut
+from shared_schemas.knowledge import DocVersionOut, KnowledgeDocDetailOut, KnowledgeDocOut
 
 from app.deps import get_db, get_tenant_id
 from app.services.doc_service import DocService
@@ -30,7 +30,7 @@ async def list_docs(
     )
 
 
-@router.get("/{doc_id}", response_model=DataResponse[KnowledgeDocOut])
+@router.get("/{doc_id}", response_model=DataResponse[KnowledgeDocDetailOut])
 async def get_doc(
     doc_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
@@ -38,7 +38,19 @@ async def get_doc(
 ):
     svc = DocService(db, tenant_id)
     doc = await svc.get(doc_id)
-    return DataResponse(data=KnowledgeDocOut.model_validate(doc))
+    return DataResponse(data=KnowledgeDocDetailOut.model_validate(doc))
+
+
+@router.get("/{doc_id}/versions/{version}", response_model=DataResponse[DocVersionOut])
+async def get_doc_version(
+    doc_id: uuid.UUID,
+    version: int,
+    db: AsyncSession = Depends(get_db),
+    tenant_id: uuid.UUID = Depends(get_tenant_id),
+):
+    svc = DocService(db, tenant_id)
+    ver = await svc.get_version(doc_id, version)
+    return DataResponse(data=DocVersionOut.model_validate(ver))
 
 
 @router.post("/{doc_id}/review", response_model=DataResponse[KnowledgeDocOut])
