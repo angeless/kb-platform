@@ -1,0 +1,20 @@
+"""Tenant model."""
+
+from sqlalchemy import Index, String
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from .base import Base
+
+
+class Tenant(Base):
+    __tablename__ = "tenant"
+    __table_args__ = (
+        Index("ix_tenant_status", "status"),
+    )
+
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
+
+    # Relationships
+    users = relationship("User", back_populates="tenant", lazy="selectin")
+    projects = relationship("Project", back_populates="tenant", lazy="selectin")
