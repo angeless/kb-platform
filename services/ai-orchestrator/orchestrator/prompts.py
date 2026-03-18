@@ -186,3 +186,100 @@ def build_generate_doc_prompt(
     )
 
     return SYSTEM_PROMPT_GENERATE_DOC, user_prompt
+
+
+# ---------------------------------------------------------------------------
+# Incremental classification prompts
+# ---------------------------------------------------------------------------
+
+SYSTEM_PROMPT_CLASSIFY = """你是一个知识管理专家。你的任务是判断新资料片段与已有知识文档的关系。
+
+你必须：
+- 严格基于内容判断，不得编造不存在的关联
+- 如果新资料与已有文档明显矛盾，必须标记为冲突，不得强行合并
+- 如果新资料涉及已有文档未覆盖的新主题，标记为新增
+- 判断依据必须写明"""
+
+USER_PROMPT_CLASSIFY_TEMPLATE = """以下是一个知识系统中已有的知识文档摘要，以及一批新提交的资料片段。
+请判断每段新资料与已有知识的关系。
+
+--- 已有知识文档 ---
+{existing_docs_text}
+--- 已有知识文档结束 ---
+
+--- 新资料片段 ---
+{new_chunks_text}
+--- 新资料片段结束 ---
+
+请以如下 JSON 格式输出（不要输出其他内容）：
+{{
+  "reasoning": "整体判断依据（1-2句话）",
+  "classifications": [
+    {{
+      "chunk_index": 0,
+      "relation_type": "new|supplement|correction|conflict",
+      "target_doc_id": "已有文档ID（supplement/correction时必填，new/conflict时为null）",
+      "reason": "判断理由",
+      "conflict_description": "冲突描述（仅conflict时必填，其他为null）"
+    }}
+  ]
+}}
+
+relation_type 说明：
+- new：已有知识中没有对应主题，需要新建文档
+- supplement：已有主题但缺少这些细节，需要补充到已有文档
+- correction：新资料证明已有知识过期或有误，需要修正已有文档
+- conflict：新旧资料互相矛盾且无法自动判断，需要人工确认"""
+
+
+def build_classify_prompt(
+    existing_docs: list[dict],
+    new_chunks: list[dict],
+    max_existing_chars: int = 4000,
+    max_new_chars: int = 4000,
+) -> tuple[str, str]:
+    """Build prompts for classifying new chunks against existing knowledge.
+
+    existing_docs: list of {doc_id, title, summary} dicts
+    new_chunks: list of {index, content_text, page_or_timestamp} dicts
+
+    Returns (system_prompt, user_prompt).
+    """
+    # Build existing docs summary
+    doc_texts = []
+    total = 0
+    for doc in existing_docs:
+        entry = f"[文档 {doc['doc_id']}] {doc['title']}\n{doc['summary']}"
+        if total + len(entry) > max_existing_chars:
+            break
+        doc_texts.append(entry)
+        total += len(entry)
+    existing_docs_text = "\n\n".join(doc_texts) if doc_texts else "(当前无已有知识文档)"
+
+    # Build new chunks text
+    chunk_texts = []
+    total = 0
+    for chunk in new_chunks:
+        idx = chunk.get("index", "?")
+        text = chunk.get("content_text", "")
+        page = chunk.get("page_or_timestamp", "")
+        entry = f"[片段{idx}]"
+        if page:
+            entry += f" (位置: {page})"
+        entry += f"\n{text}"
+
+        if total + len(entry) > max_new_chars:
+            remaining = max_new_chars - total
+            if remaining > 100:
+                chunk_texts.append(entry[:remaining] + "...(截断)")
+            break
+        chunk_texts.append(entry)
+        total += len(entry)
+    new_chunks_text = "\n\n".join(chunk_texts) if chunk_texts else "(无新资料片段)"
+
+    user_prompt = USER_PROMPT_CLASSIFY_TEMPLATE.format(
+        existing_docs_text=existing_docs_text,
+        new_chunks_text=new_chunks_text,
+    )
+
+    return SYSTEM_PROMPT_CLASSIFY, user_prompt

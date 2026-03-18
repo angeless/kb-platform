@@ -1,6 +1,6 @@
 """Tests for prompt construction."""
 
-from orchestrator.prompts import build_propose_prompt, build_generate_doc_prompt
+from orchestrator.prompts import build_propose_prompt, build_generate_doc_prompt, build_classify_prompt
 
 
 class TestBuildProposePrompt:
@@ -93,3 +93,42 @@ class TestBuildGenerateDocPrompt:
         """When node_description is None, should show '未指定'."""
         system, user = build_generate_doc_prompt("N", "topic", None, 1, [])
         assert "未指定" in user
+
+
+class TestBuildClassifyPrompt:
+    def test_includes_existing_docs(self):
+        """Prompt should contain existing doc titles and summaries."""
+        docs = [
+            {"doc_id": "abc-123", "title": "退款规则", "summary": "7天无理由退货"},
+        ]
+        chunks = [{"index": 0, "content_text": "新的退款政策"}]
+        system, user = build_classify_prompt(docs, chunks)
+        assert "退款规则" in user
+        assert "7天无理由退货" in user
+        assert "新的退款政策" in user
+
+    def test_empty_existing_docs(self):
+        """When no existing docs, should show placeholder."""
+        chunks = [{"index": 0, "content_text": "新内容"}]
+        system, user = build_classify_prompt([], chunks)
+        assert "无已有知识文档" in user
+
+    def test_empty_new_chunks(self):
+        """When no new chunks, should show placeholder."""
+        docs = [{"doc_id": "x", "title": "Doc", "summary": "content"}]
+        system, user = build_classify_prompt(docs, [])
+        assert "无新资料片段" in user
+
+    def test_system_prompt_constraints(self):
+        """System prompt should enforce no fabrication."""
+        system, user = build_classify_prompt([], [])
+        assert "不得编造" in system
+        assert "冲突" in system
+
+    def test_relation_types_in_prompt(self):
+        """Prompt should explain all 4 relation types."""
+        system, user = build_classify_prompt([], [])
+        assert "new" in user
+        assert "supplement" in user
+        assert "correction" in user
+        assert "conflict" in user

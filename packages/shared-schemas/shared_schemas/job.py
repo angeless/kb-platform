@@ -9,9 +9,10 @@ from pydantic import BaseModel, Field
 class JobCreate(BaseModel):
     project_id: UUID
     job_type: str = Field(
-        ..., pattern="^(ingest|classify|architecture_draft|kb_generate|review_publish)$"
+        ..., pattern="^(ingest|classify|architecture_draft|kb_generate|review_publish|incremental)$"
     )
     asset_id: UUID | None = None  # Required for 'ingest' jobs
+    asset_ids: list[UUID] | None = None  # Required for 'incremental' jobs
 
 
 class JobOut(BaseModel):

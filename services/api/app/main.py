@@ -16,6 +16,7 @@ from .routers.conflicts import router as conflicts_router
 from .routers.model_providers import router as model_providers_router
 from .routers.users import router as users_router
 from .routers.search import router as search_router
+from .routers.ingestion import router as ingestion_router
 
 
 def create_app() -> FastAPI:
@@ -40,6 +41,7 @@ def create_app() -> FastAPI:
     app.include_router(model_providers_router)
     app.include_router(users_router)
     app.include_router(search_router)
+    app.include_router(ingestion_router)
 
     return app
 

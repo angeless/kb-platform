@@ -53,10 +53,17 @@ class JobService:
             )
         return project
 
-    async def create(self, project_id: uuid.UUID, job_type: str, asset_id: uuid.UUID | None = None) -> Job:
+    async def create(
+        self,
+        project_id: uuid.UUID,
+        job_type: str,
+        asset_id: uuid.UUID | None = None,
+        asset_ids: list[str] | None = None,
+    ) -> Job:
         """Create a new job for a project.
 
-        For 'ingest' jobs, asset_id is required and a Celery parse task is dispatched.
+        For 'ingest' jobs, asset_id is required.
+        For 'incremental' jobs, asset_ids is required.
         """
         await self._verify_project(project_id)
 
@@ -113,6 +120,21 @@ class JobService:
                     job.celery_task_id = result.id
                     await self.db.flush()
                     logger.info("Dispatched generate_docs task for project %s, job %s", project_id, job.id)
+                except Exception as e:
+                    logger.warning("Failed to dispatch Celery task: %s (job %s still created)", e, job.id)
+
+        # Dispatch Celery task for incremental jobs
+        elif job_type == "incremental" and asset_ids:
+            celery = _get_celery_app()
+            if celery is not None:
+                try:
+                    result = celery.send_task(
+                        "orchestrator.classify_incremental",
+                        args=[str(project_id), str(job.id), asset_ids],
+                    )
+                    job.celery_task_id = result.id
+                    await self.db.flush()
+                    logger.info("Dispatched classify_incremental task for project %s, job %s", project_id, job.id)
                 except Exception as e:
                     logger.warning("Failed to dispatch Celery task: %s (job %s still created)", e, job.id)
 

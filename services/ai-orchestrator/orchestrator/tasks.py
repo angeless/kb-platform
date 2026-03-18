@@ -15,7 +15,7 @@ from shared_models import (
 
 from .celery_app import celery_app
 from .llm_client import call_llm, parse_json_response
-from .prompts import build_propose_prompt, build_generate_doc_prompt
+from .prompts import build_propose_prompt, build_generate_doc_prompt, build_classify_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -391,6 +391,235 @@ def generate_docs(self, project_id: str, job_id: str) -> dict:
                 err_session.commit()
 
             logger.error("Failed to generate docs for project %s: %s", project_id, e)
+            return {"status": "error", "message": str(e)}
+
+
+@celery_app.task(bind=True, name="orchestrator.classify_incremental")
+def classify_incremental(self, project_id: str, job_id: str, asset_ids: list[str]) -> dict:
+    """Classify new assets against existing knowledge documents.
+
+    For each new chunk, determines if it is:
+    - new: no matching topic → create new KnowledgeDoc
+    - supplement: adds to existing topic → append new Version to existing Doc
+    - correction: updates outdated knowledge → append correction Version
+    - conflict: contradicts existing → create ConflictRecord
+
+    This task is idempotent via job status tracking.
+    """
+    project_uuid = uuid.UUID(project_id)
+    job_uuid = uuid.UUID(job_id)
+    asset_uuids = [uuid.UUID(aid) for aid in asset_ids]
+
+    with _get_sync_session() as session:
+        # Load project
+        project = session.execute(
+            select(Project).where(Project.id == project_uuid)
+        ).scalar_one_or_none()
+
+        if project is None:
+            _update_job_failed(session, job_uuid, f"Project {project_id} not found")
+            session.commit()
+            return {"status": "error", "message": "Project not found"}
+
+        # Update job to running
+        _update_job_running(session, job_uuid)
+        session.commit()
+
+        try:
+            # Get created_by from job
+            job = session.execute(
+                select(Job).where(Job.id == job_uuid)
+            ).scalar_one_or_none()
+            created_by = job.created_by if job else project_uuid
+
+            # Collect new chunks from specified assets
+            new_chunks_rows = session.execute(
+                select(AssetChunk).where(
+                    AssetChunk.asset_id.in_(asset_uuids)
+                ).order_by(AssetChunk.asset_id, AssetChunk.chunk_index)
+            ).scalars().all()
+
+            if not new_chunks_rows:
+                raise ValueError("指定的资料中没有已解析的片段")
+
+            new_chunk_dicts = [
+                {
+                    "index": i,
+                    "content_text": c.content_text,
+                    "page_or_timestamp": c.page_or_timestamp,
+                    "chunk_id": c.id,
+                }
+                for i, c in enumerate(new_chunks_rows)
+            ]
+
+            # Load existing knowledge docs with latest version summary
+            existing_docs_rows = session.execute(
+                select(KnowledgeDoc).where(
+                    KnowledgeDoc.project_id == project_uuid,
+                )
+            ).scalars().all()
+
+            existing_doc_dicts = []
+            for doc in existing_docs_rows:
+                # Get latest version summary (first 200 chars)
+                latest_ver = None
+                if doc.versions:
+                    latest_ver = max(doc.versions, key=lambda v: v.version)
+                summary = ""
+                if latest_ver:
+                    summary = latest_ver.content_md[:200]
+                    if len(latest_ver.content_md) > 200:
+                        summary += "..."
+
+                existing_doc_dicts.append({
+                    "doc_id": str(doc.id),
+                    "title": doc.title,
+                    "summary": summary,
+                })
+
+            # Build prompt and call LLM
+            system_prompt, user_prompt = build_classify_prompt(
+                existing_docs=existing_doc_dicts,
+                new_chunks=new_chunk_dicts,
+            )
+
+            llm_response = call_llm(prompt=user_prompt, system_prompt=system_prompt)
+            result = parse_json_response(llm_response)
+
+            # Process classifications
+            classifications = result.get("classifications", [])
+            new_count = 0
+            supplement_count = 0
+            correction_count = 0
+            conflict_count = 0
+
+            # Load architecture for new docs (use latest)
+            arch = session.execute(
+                select(Architecture).where(
+                    Architecture.project_id == project_uuid,
+                ).order_by(Architecture.created_at.desc())
+            ).scalar_one_or_none()
+
+            for cls in classifications:
+                chunk_idx = cls.get("chunk_index", -1)
+                if chunk_idx < 0 or chunk_idx >= len(new_chunk_dicts):
+                    continue
+
+                relation = cls.get("relation_type", "new")
+                target_doc_id = cls.get("target_doc_id")
+                reason = cls.get("reason", "")
+
+                if relation == "new":
+                    # Create new KnowledgeDoc + Version
+                    doc_id = uuid.uuid4()
+                    doc = KnowledgeDoc(
+                        id=doc_id,
+                        project_id=project_uuid,
+                        node_id=None,
+                        doc_type="topic",
+                        title=f"新增知识 - {new_chunk_dicts[chunk_idx]['content_text'][:50]}",
+                        current_version=1,
+                        status="draft",
+                    )
+                    session.add(doc)
+                    session.flush()
+
+                    ver = KnowledgeDocVersion(
+                        id=uuid.uuid4(),
+                        doc_id=doc_id,
+                        version=1,
+                        content_md=new_chunk_dicts[chunk_idx]["content_text"],
+                        change_reason=f"增量接入 - 新增: {reason}",
+                        created_by=created_by,
+                    )
+                    session.add(ver)
+                    session.flush()
+
+                    # Add source ref
+                    session.add(SourceRef(
+                        id=uuid.uuid4(),
+                        doc_version_id=ver.id,
+                        asset_chunk_id=new_chunk_dicts[chunk_idx]["chunk_id"],
+                        location_hint=new_chunk_dicts[chunk_idx].get("page_or_timestamp"),
+                    ))
+                    new_count += 1
+
+                elif relation in ("supplement", "correction") and target_doc_id:
+                    # Append new version to existing doc
+                    try:
+                        target_uuid = uuid.UUID(target_doc_id)
+                    except ValueError:
+                        continue
+
+                    target_doc = session.execute(
+                        select(KnowledgeDoc).where(KnowledgeDoc.id == target_uuid)
+                    ).scalar_one_or_none()
+
+                    if target_doc is None:
+                        continue
+
+                    new_ver_num = target_doc.current_version + 1
+                    change_label = "补充" if relation == "supplement" else "修正"
+
+                    ver = KnowledgeDocVersion(
+                        id=uuid.uuid4(),
+                        doc_id=target_uuid,
+                        version=new_ver_num,
+                        content_md=new_chunk_dicts[chunk_idx]["content_text"],
+                        change_reason=f"增量接入 - {change_label}: {reason}",
+                        created_by=created_by,
+                    )
+                    session.add(ver)
+
+                    target_doc.current_version = new_ver_num
+                    session.flush()
+
+                    # Add source ref
+                    session.add(SourceRef(
+                        id=uuid.uuid4(),
+                        doc_version_id=ver.id,
+                        asset_chunk_id=new_chunk_dicts[chunk_idx]["chunk_id"],
+                        location_hint=new_chunk_dicts[chunk_idx].get("page_or_timestamp"),
+                    ))
+
+                    if relation == "supplement":
+                        supplement_count += 1
+                    else:
+                        correction_count += 1
+
+                elif relation == "conflict":
+                    conflict_desc = cls.get("conflict_description", reason)
+                    session.add(ConflictRecord(
+                        id=uuid.uuid4(),
+                        project_id=project_uuid,
+                        node_id=None,
+                        description=conflict_desc,
+                        status="open",
+                    ))
+                    conflict_count += 1
+
+            _update_job_completed(session, job_uuid)
+            session.commit()
+
+            logger.info(
+                "Incremental classification for project %s: new=%d, supplement=%d, correction=%d, conflict=%d",
+                project_id, new_count, supplement_count, correction_count, conflict_count,
+            )
+            return {
+                "status": "success",
+                "new": new_count,
+                "supplement": supplement_count,
+                "correction": correction_count,
+                "conflict": conflict_count,
+            }
+
+        except Exception as e:
+            session.rollback()
+            with _get_sync_session() as err_session:
+                _update_job_failed(err_session, job_uuid, str(e))
+                err_session.commit()
+
+            logger.error("Failed incremental classification for project %s: %s", project_id, e)
             return {"status": "error", "message": str(e)}
 
 
