@@ -86,6 +86,21 @@ class JobService:
                 except Exception as e:
                     logger.warning("Failed to dispatch Celery task: %s (job %s still created)", e, job.id)
 
+        # Dispatch Celery task for architecture_draft jobs
+        elif job_type == "architecture_draft":
+            celery = _get_celery_app()
+            if celery is not None:
+                try:
+                    result = celery.send_task(
+                        "orchestrator.propose_architecture",
+                        args=[str(project_id), str(job.id)],
+                    )
+                    job.celery_task_id = result.id
+                    await self.db.flush()
+                    logger.info("Dispatched propose_architecture task for project %s, job %s", project_id, job.id)
+                except Exception as e:
+                    logger.warning("Failed to dispatch Celery task: %s (job %s still created)", e, job.id)
+
         return job
 
     async def list(
