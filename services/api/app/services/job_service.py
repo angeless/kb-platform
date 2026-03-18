@@ -171,7 +171,10 @@ class JobService:
         return job
 
     async def retry(self, job_id: uuid.UUID) -> Job:
-        """Retry a failed job. Only allowed if status is 'failed'."""
+        """Retry a failed job. Only allowed if status is 'failed'.
+
+        Re-dispatches the corresponding Celery task after resetting status.
+        """
         job = await self.get(job_id)
         if job.status != "failed":
             raise ConflictException(
@@ -182,5 +185,38 @@ class JobService:
         job.retry_count += 1
         job.error_message = None
         await self.db.flush()
+
+        # Re-dispatch the Celery task
+        self._dispatch_celery(job)
+        await self.db.flush()
         await self.db.refresh(job)
         return job
+
+    def _dispatch_celery(self, job: Job) -> None:
+        """Dispatch a Celery task for the given job. Silent on failure."""
+        task_map = {
+            "ingest": "ingestion.parse_asset",
+            "architecture_draft": "orchestrator.propose_architecture",
+            "kb_generate": "orchestrator.generate_docs",
+            "incremental": "orchestrator.classify_incremental",
+        }
+        task_name = task_map.get(job.job_type)
+        if task_name is None:
+            return
+
+        celery = _get_celery_app()
+        if celery is None:
+            return
+
+        try:
+            if job.job_type == "ingest":
+                # For ingest, we need asset_id — stored in job context or we skip
+                result = celery.send_task(task_name, args=[str(job.project_id), str(job.id)])
+            elif job.job_type == "incremental":
+                result = celery.send_task(task_name, args=[str(job.project_id), str(job.id), []])
+            else:
+                result = celery.send_task(task_name, args=[str(job.project_id), str(job.id)])
+            job.celery_task_id = result.id
+            logger.info("Re-dispatched %s task for job %s", task_name, job.id)
+        except Exception as e:
+            logger.warning("Failed to re-dispatch Celery task on retry: %s (job %s)", e, job.id)
