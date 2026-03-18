@@ -15,8 +15,10 @@ from shared_schemas.model_config import (
     ModelRouteUpdate,
 )
 
-from app.deps import get_db, get_tenant_id
+from app.deps import get_current_user, get_db, get_tenant_id
+from app.services.audit_service import AuditService
 from app.services.model_provider_service import ModelProviderService
+from shared_models import User
 
 router = APIRouter(tags=["model-providers"])
 
@@ -26,9 +28,12 @@ async def create_provider(
     body: ModelProviderCreate,
     db: AsyncSession = Depends(get_db),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
+    current_user: User = Depends(get_current_user),
 ):
     svc = ModelProviderService(db, tenant_id)
     provider_dict = await svc.create_provider(body.model_dump())
+    audit = AuditService(db, tenant_id, current_user.id)
+    await audit.log("create", "model_provider", provider_dict["id"])
     return DataResponse(data=ModelProviderOut.model_validate(provider_dict))
 
 

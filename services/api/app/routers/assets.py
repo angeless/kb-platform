@@ -11,6 +11,7 @@ from shared_schemas.common import DataResponse, ListResponse, PaginationMeta
 
 from app.deps import get_current_user, get_db, get_settings_dep, get_tenant_id
 from app.services.asset_service import AssetService
+from app.services.audit_service import AuditService
 from app.utils.storage import StorageClient
 from shared_models import User
 
@@ -58,6 +59,8 @@ async def upload_asset(
         file_content=file_content,
         content_type=file.content_type or "application/octet-stream",
     )
+    audit = AuditService(db, tenant_id, current_user.id)
+    await audit.log("upload", "asset", asset.id, project_id=project_id)
     return DataResponse(data=AssetOut.model_validate(asset))
 
 
@@ -78,6 +81,8 @@ async def import_url(
         max_upload_size_bytes=settings.max_upload_size_mb * 1024 * 1024,
     )
     asset = await svc.import_url(body.project_id, str(body.url))
+    audit = AuditService(db, tenant_id, current_user.id)
+    await audit.log("import_url", "asset", asset.id, project_id=body.project_id)
     return DataResponse(data=AssetOut.model_validate(asset))
 
 
@@ -100,6 +105,8 @@ async def import_archive(
     )
     archive_content = await file.read()
     result = await svc.import_archive(project_id, archive_content, file.filename or "archive.zip")
+    audit = AuditService(db, tenant_id, current_user.id)
+    await audit.log("import_archive", "asset", project_id, project_id=project_id)
     return DataResponse(data=result)
 
 

@@ -9,6 +9,7 @@ from shared_schemas.common import DataResponse, ListResponse, PaginationMeta
 from shared_schemas.knowledge import ConflictOut, ConflictResolveRequest
 
 from app.deps import get_current_user, get_db, get_tenant_id
+from app.services.audit_service import AuditService
 from app.services.conflict_service import ConflictService
 from shared_models import User
 
@@ -71,4 +72,6 @@ async def resolve_conflict(
 ):
     svc = ConflictService(db, tenant_id, current_user.id)
     conflict = await svc.resolve(conflict_id, body.resolution_note)
+    audit = AuditService(db, tenant_id, current_user.id)
+    await audit.log("resolve", "conflict", conflict_id, project_id=conflict.project_id)
     return DataResponse(data=ConflictOut.model_validate(conflict))
