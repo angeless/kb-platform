@@ -18,6 +18,7 @@ from .routers.users import router as users_router
 from .routers.search import router as search_router
 from .routers.ingestion import router as ingestion_router
 from .routers.audit import router as audit_router
+from .routers.ws import router as ws_router
 
 
 def create_app() -> FastAPI:
@@ -44,6 +45,7 @@ def create_app() -> FastAPI:
     app.include_router(search_router)
     app.include_router(ingestion_router)
     app.include_router(audit_router)
+    app.include_router(ws_router)
 
     return app
 

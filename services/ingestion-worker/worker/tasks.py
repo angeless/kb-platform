@@ -124,11 +124,33 @@ def parse_asset(self, asset_id: str, job_id: str) -> dict:
             return {"status": "error", "message": str(e)}
 
 
+def _publish_job_event(job: Job, error_message: str | None = None) -> None:
+    """Publish job status change to Redis for WebSocket subscribers."""
+    try:
+        import redis
+        r = redis.from_url(settings.redis_url)
+        import json
+        event = json.dumps({
+            "event": "job_status_changed",
+            "job_id": str(job.id),
+            "project_id": str(job.project_id),
+            "status": job.status,
+            "job_type": job.job_type,
+            "error_message": error_message,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        })
+        r.publish(f"job_events:{job.project_id}", event)
+        r.close()
+    except Exception as e:
+        logger.debug("Failed to publish job event: %s", e)
+
+
 def _update_job_running(session: Session, job_id: uuid.UUID) -> None:
     job = session.execute(select(Job).where(Job.id == job_id)).scalar_one_or_none()
     if job:
         job.status = "running"
         job.started_at = datetime.now(timezone.utc)
+        _publish_job_event(job)
 
 
 def _update_job_completed(session: Session, job_id: uuid.UUID) -> None:
@@ -136,6 +158,7 @@ def _update_job_completed(session: Session, job_id: uuid.UUID) -> None:
     if job:
         job.status = "completed"
         job.finished_at = datetime.now(timezone.utc)
+        _publish_job_event(job)
 
 
 def _update_job_failed(session: Session, job_id: uuid.UUID, error_message: str) -> None:
@@ -144,3 +167,4 @@ def _update_job_failed(session: Session, job_id: uuid.UUID, error_message: str) 
         job.status = "failed"
         job.error_message = error_message
         job.finished_at = datetime.now(timezone.utc)
+        _publish_job_event(job, error_message)
