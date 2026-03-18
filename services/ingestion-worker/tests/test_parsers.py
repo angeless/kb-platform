@@ -1,6 +1,21 @@
 """Unit tests for parsers."""
 
+import fitz
+
 from worker.parsers.text_parser import parse
+from worker.parsers.pdf_parser import parse as pdf_parse
+
+
+def _make_pdf(pages: list[str]) -> bytes:
+    """Create a minimal PDF with the given page texts."""
+    doc = fitz.open()
+    for text in pages:
+        page = doc.new_page()
+        if text:
+            page.insert_text((72, 72), text, fontsize=12)
+    pdf_bytes = doc.tobytes()
+    doc.close()
+    return pdf_bytes
 
 
 class TestTextParser:
@@ -44,3 +59,45 @@ class TestTextParser:
         content = b"First.\n\n\n\n\n\nSecond."
         result = parse(content, "gaps.txt")
         assert len(result) == 2
+
+
+class TestPdfParser:
+    def test_multi_page_pdf(self):
+        """Multi-page PDF should produce one chunk per page."""
+        pdf_bytes = _make_pdf(["Page one content", "Page two content", "Page three content"])
+        result = pdf_parse(pdf_bytes, "test.pdf")
+        assert len(result) == 3
+        assert "Page one" in result[0]["content_text"]
+        assert result[0]["page_or_timestamp"] == "page-1"
+        assert result[1]["page_or_timestamp"] == "page-2"
+        assert result[2]["page_or_timestamp"] == "page-3"
+
+    def test_empty_pages_skipped(self):
+        """Pages with no text should be skipped."""
+        pdf_bytes = _make_pdf(["Has text", "", "Also has text"])
+        result = pdf_parse(pdf_bytes, "gaps.pdf")
+        assert len(result) == 2
+        assert result[0]["page_or_timestamp"] == "page-1"
+        assert result[1]["page_or_timestamp"] == "page-3"
+
+    def test_single_page_pdf(self):
+        """Single-page PDF should produce one chunk."""
+        pdf_bytes = _make_pdf(["Hello world"])
+        result = pdf_parse(pdf_bytes, "single.pdf")
+        assert len(result) == 1
+        assert "Hello" in result[0]["content_text"]
+
+    def test_tags_contain_pdf_metadata(self):
+        """Chunks should have correct tags."""
+        pdf_bytes = _make_pdf(["Test content"])
+        result = pdf_parse(pdf_bytes, "report.pdf")
+        assert result[0]["tags"]["source_type"] == "pdf"
+        assert result[0]["tags"]["filename"] == "report.pdf"
+        assert result[0]["tags"]["page"] == 1
+
+    def test_parser_registry(self):
+        """PDF parser should be registered for 'pdf' and 'document' types."""
+        from worker.parsers import get_parser
+        assert get_parser("pdf") is not None
+        assert get_parser("document") is not None
+        assert get_parser("unknown_type") is None
