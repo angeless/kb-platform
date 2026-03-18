@@ -8,6 +8,13 @@ from .middleware.request_id import RequestIdMiddleware
 from .routers.health import router as health_router
 from .routers.auth import router as auth_router
 from .routers.projects import router as projects_router
+from .routers.jobs import router as jobs_router
+from .routers.assets import router as assets_router
+from .routers.architectures import router as architectures_router
+from .routers.docs import router as docs_router
+from .routers.conflicts import router as conflicts_router
+from .routers.model_providers import router as model_providers_router
+from .routers.users import router as users_router
 
 
 def create_app() -> FastAPI:
@@ -24,6 +31,13 @@ def create_app() -> FastAPI:
     app.include_router(health_router)
     app.include_router(auth_router)
     app.include_router(projects_router)
+    app.include_router(jobs_router)
+    app.include_router(assets_router)
+    app.include_router(architectures_router)
+    app.include_router(docs_router)
+    app.include_router(conflicts_router)
+    app.include_router(model_providers_router)
+    app.include_router(users_router)
 
     return app
 
