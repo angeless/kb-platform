@@ -6,6 +6,8 @@ from shared_errors import register_exception_handlers
 
 from .middleware.request_id import RequestIdMiddleware
 from .routers.health import router as health_router
+from .routers.auth import router as auth_router
+from .routers.projects import router as projects_router
 
 
 def create_app() -> FastAPI:
@@ -20,6 +22,8 @@ def create_app() -> FastAPI:
 
     # Routers
     app.include_router(health_router)
+    app.include_router(auth_router)
+    app.include_router(projects_router)
 
     return app
 

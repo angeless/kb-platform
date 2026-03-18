@@ -1,6 +1,5 @@
 """Test fixtures for the API service."""
 
-import asyncio
 import uuid
 from collections.abc import AsyncGenerator
 
@@ -20,38 +19,39 @@ settings = get_settings()
 
 TEST_DB_URL = settings.database_url + "_test"
 
-test_engine = create_async_engine(TEST_DB_URL, echo=False)
-TestSessionFactory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
 
-
-@pytest.fixture(scope="session")
-def event_loop():
-    """Create a single event loop for all tests."""
-    loop = asyncio.new_event_loop()
-    yield loop
-    loop.close()
-
-
-@pytest_asyncio.fixture(scope="session")
-async def setup_database():
-    """Create all tables before tests, drop after."""
-    async with test_engine.begin() as conn:
+@pytest_asyncio.fixture(scope="session", loop_scope="session")
+async def test_engine():
+    """Create engine inside the session event loop."""
+    engine = create_async_engine(TEST_DB_URL, echo=False)
+    async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    yield
-    async with test_engine.begin() as conn:
+    yield engine
+    async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
-    await test_engine.dispose()
+    await engine.dispose()
 
 
-@pytest_asyncio.fixture
-async def db_session(setup_database) -> AsyncGenerator[AsyncSession, None]:
-    """Yield a test database session that rolls back after each test."""
-    async with TestSessionFactory() as session:
-        yield session
-        await session.rollback()
+@pytest_asyncio.fixture(loop_scope="session")
+async def db_session(test_engine) -> AsyncGenerator[AsyncSession, None]:
+    """Yield a test database session that rolls back after each test.
+
+    Uses a connection + savepoint so that even sessions created by the
+    dependency override (inside BaseHTTPMiddleware's task-group) share the
+    same underlying DBAPI connection and transaction.
+    """
+    conn = await test_engine.connect()
+    txn = await conn.begin()
+
+    session = AsyncSession(bind=conn, expire_on_commit=False)
+    yield session
+
+    await session.close()
+    await txn.rollback()
+    await conn.close()
 
 
-@pytest_asyncio.fixture
+@pytest_asyncio.fixture(loop_scope="session")
 async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
     """Create an async test client with DB dependency override."""
     app = create_app()
@@ -66,7 +66,7 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
         yield ac
 
 
-@pytest_asyncio.fixture
+@pytest_asyncio.fixture(loop_scope="session")
 async def auth_headers(db_session: AsyncSession) -> dict[str, str]:
     """Create a test tenant and user, return auth headers with valid JWT."""
     tenant = Tenant(id=uuid.uuid4(), name="Test Tenant", status="active")
