@@ -1,5 +1,7 @@
 """Conflict service: list, get, resolve with tenant isolation."""
 
+from __future__ import annotations
+
 import uuid
 from datetime import datetime, timezone
 
@@ -46,6 +48,28 @@ class ConflictService:
         total = (await self.db.execute(count_q)).scalar_one()
 
         q = base.order_by(ConflictRecord.created_at.desc()).offset((page - 1) * page_size).limit(page_size)
+        rows = (await self.db.execute(q)).scalars().all()
+
+        return list(rows), total
+
+    async def list_pending(
+        self, project_id: uuid.UUID, page: int = 1, page_size: int = 20
+    ) -> tuple[list[ConflictRecord], int]:
+        """Return conflicts with node_id=NULL (pending node assignment)."""
+        await self._verify_project(project_id)
+
+        base = select(ConflictRecord).where(
+            ConflictRecord.project_id == project_id,
+            ConflictRecord.node_id.is_(None),
+            ConflictRecord.status == "open",
+        )
+
+        count_q = select(func.count()).select_from(base.subquery())
+        total = (await self.db.execute(count_q)).scalar_one()
+
+        q = base.order_by(ConflictRecord.created_at.desc()).offset(
+            (page - 1) * page_size
+        ).limit(page_size)
         rows = (await self.db.execute(q)).scalars().all()
 
         return list(rows), total

@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared_schemas.common import DataResponse, ListResponse, PaginationMeta
-from shared_schemas.knowledge import DocVersionOut, KnowledgeDocDetailOut, KnowledgeDocOut, VersionDiffOut
+from shared_schemas.knowledge import AssignNodeRequest, DocVersionOut, KnowledgeDocDetailOut, KnowledgeDocOut, VersionDiffOut
 
 from app.deps import get_db, get_tenant_id
 from app.services.doc_service import DocService
@@ -24,6 +24,22 @@ async def list_docs(
 ):
     svc = DocService(db, tenant_id)
     docs, total = await svc.list(project_id=project_id, page=page, page_size=page_size)
+    return ListResponse(
+        data=[KnowledgeDocOut.model_validate(d) for d in docs],
+        meta=PaginationMeta(page=page, page_size=page_size, total=total),
+    )
+
+
+@router.get("/pending", response_model=ListResponse[KnowledgeDocOut])
+async def list_pending_docs(
+    project_id: uuid.UUID = Query(...),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    tenant_id: uuid.UUID = Depends(get_tenant_id),
+):
+    svc = DocService(db, tenant_id)
+    docs, total = await svc.list_pending(project_id=project_id, page=page, page_size=page_size)
     return ListResponse(
         data=[KnowledgeDocOut.model_validate(d) for d in docs],
         meta=PaginationMeta(page=page, page_size=page_size, total=total),
@@ -64,6 +80,18 @@ async def diff_versions(
     svc = DocService(db, tenant_id)
     result = await svc.diff_versions(doc_id, from_version, to_version)
     return DataResponse(data=VersionDiffOut(**result))
+
+
+@router.post("/{doc_id}/assign-node", response_model=DataResponse[KnowledgeDocOut])
+async def assign_node(
+    doc_id: uuid.UUID,
+    body: AssignNodeRequest,
+    db: AsyncSession = Depends(get_db),
+    tenant_id: uuid.UUID = Depends(get_tenant_id),
+):
+    svc = DocService(db, tenant_id)
+    doc = await svc.assign_node(doc_id, body.node_id)
+    return DataResponse(data=KnowledgeDocOut.model_validate(doc))
 
 
 @router.post("/{doc_id}/review", response_model=DataResponse[KnowledgeDocOut])

@@ -96,3 +96,7 @@ class ConflictOut(BaseModel):
 
 class ConflictResolveRequest(BaseModel):
     resolution_note: str = Field(..., min_length=1)
+
+
+class AssignNodeRequest(BaseModel):
+    node_id: UUID

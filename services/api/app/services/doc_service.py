@@ -1,5 +1,7 @@
 """Knowledge document service: list, get, review, publish, diff with tenant isolation."""
 
+from __future__ import annotations
+
 import difflib
 import uuid
 
@@ -7,7 +9,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared_errors import ConflictException, ErrorCode, NotFoundException
-from shared_models import KnowledgeDoc, KnowledgeDocVersion, Project
+from shared_models import ArchitectureNode, KnowledgeDoc, KnowledgeDocVersion, Project
 
 
 class DocService:
@@ -77,6 +79,46 @@ class DocService:
                 message=f"Version {version} not found",
             )
         return ver
+
+    async def list_pending(
+        self, project_id: uuid.UUID, page: int = 1, page_size: int = 20
+    ) -> tuple[list[KnowledgeDoc], int]:
+        """Return docs with node_id=NULL (pending node assignment)."""
+        await self._verify_project(project_id)
+
+        base = select(KnowledgeDoc).where(
+            KnowledgeDoc.project_id == project_id,
+            KnowledgeDoc.node_id.is_(None),
+        )
+
+        count_q = select(func.count()).select_from(base.subquery())
+        total = (await self.db.execute(count_q)).scalar_one()
+
+        q = base.order_by(KnowledgeDoc.created_at.desc()).offset(
+            (page - 1) * page_size
+        ).limit(page_size)
+        rows = (await self.db.execute(q)).scalars().all()
+
+        return list(rows), total
+
+    async def assign_node(self, doc_id: uuid.UUID, node_id: uuid.UUID) -> KnowledgeDoc:
+        """Assign a document to an architecture node."""
+        doc = await self.get(doc_id)
+
+        # Verify the target node exists
+        q = select(ArchitectureNode).where(ArchitectureNode.id == node_id)
+        result = await self.db.execute(q)
+        node = result.scalar_one_or_none()
+        if node is None:
+            raise NotFoundException(
+                error_code=ErrorCode.ARCH_NOT_FOUND,
+                message="Architecture node not found",
+            )
+
+        doc.node_id = node_id
+        await self.db.flush()
+        await self.db.refresh(doc)
+        return doc
 
     async def diff_versions(self, doc_id: uuid.UUID, from_version: int, to_version: int) -> dict:
         """Compute line-level diff between two versions of a document."""

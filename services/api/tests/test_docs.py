@@ -269,6 +269,114 @@ async def test_diff_version_not_found(
 
 
 @pytest.mark.asyncio
+async def test_list_pending_docs(
+    client: AsyncClient, auth_headers: dict, db_session: AsyncSession, doc_fixture: dict
+):
+    """Docs with node_id=None should appear in pending list."""
+    project_id = doc_fixture["project_id"]
+
+    from sqlalchemy import select as sa_select
+    from shared_models import User
+    users_result = await db_session.execute(sa_select(User).limit(1))
+    user = users_result.scalar_one()
+
+    # Create a pending doc (node_id=None)
+    pending_doc = KnowledgeDoc(
+        id=uuid.uuid4(),
+        project_id=project_id,
+        node_id=None,
+        doc_type="topic",
+        title="Pending Doc",
+        current_version=1,
+        status="draft",
+    )
+    db_session.add(pending_doc)
+    await db_session.flush()
+
+    resp = await client.get(
+        f"/v1/docs/pending?project_id={project_id}",
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["meta"]["total"] >= 1
+    titles = [d["title"] for d in data["data"]]
+    assert "Pending Doc" in titles
+
+
+@pytest.mark.asyncio
+async def test_assign_node(
+    client: AsyncClient, auth_headers: dict, db_session: AsyncSession, doc_fixture: dict
+):
+    """Should assign a doc to an architecture node."""
+    project_id = doc_fixture["project_id"]
+
+    from sqlalchemy import select as sa_select
+    from shared_models import Architecture, ArchitectureNode, User
+    users_result = await db_session.execute(sa_select(User).limit(1))
+    user = users_result.scalar_one()
+
+    # Create architecture + node
+    arch = Architecture(
+        id=uuid.uuid4(),
+        project_id=project_id,
+        name="Test Arch",
+        version="1.0.0",
+        status="draft",
+    )
+    db_session.add(arch)
+    await db_session.flush()
+
+    node = ArchitectureNode(
+        id=uuid.uuid4(),
+        architecture_id=arch.id,
+        node_name="Test Node",
+        node_type="topic",
+        level=1,
+        status="draft",
+    )
+    db_session.add(node)
+    await db_session.flush()
+
+    # Create a pending doc
+    pending_doc = KnowledgeDoc(
+        id=uuid.uuid4(),
+        project_id=project_id,
+        node_id=None,
+        doc_type="topic",
+        title="Assign Me",
+        current_version=1,
+        status="draft",
+    )
+    db_session.add(pending_doc)
+    await db_session.flush()
+
+    # Assign it
+    resp = await client.post(
+        f"/v1/docs/{pending_doc.id}/assign-node",
+        json={"node_id": str(node.id)},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["data"]["node_id"] == str(node.id)
+
+
+@pytest.mark.asyncio
+async def test_assign_node_not_found(
+    client: AsyncClient, auth_headers: dict, db_session: AsyncSession, doc_fixture: dict
+):
+    """Assigning to non-existent node should return 404."""
+    doc_id = doc_fixture["doc_id"]
+    fake_node = str(uuid.uuid4())
+    resp = await client.post(
+        f"/v1/docs/{doc_id}/assign-node",
+        json={"node_id": fake_node},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
 async def test_get_doc_not_found(client: AsyncClient, auth_headers: dict):
     fake_id = str(uuid.uuid4())
     resp = await client.get(f"/v1/docs/{fake_id}", headers=auth_headers)
