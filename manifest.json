@@ -1,0 +1,27 @@
+{
+  "name": "kb-platform",
+  "displayName": "AI知识整理与知识系统构建平台",
+  "version": "0.1.0",
+  "description": "将多模态原始材料整理为可追溯、可维护、可被AI使用的知识系统。",
+  "modules": [
+    "web",
+    "api",
+    "ingestion-worker",
+    "pipeline-worker",
+    "ai-orchestrator",
+    "knowledge-architecture-manager"
+  ],
+  "entrypoints": {
+    "web": "apps/web",
+    "api": "services/api",
+    "workers": [
+      "services/ingestion-worker",
+      "services/pipeline-worker",
+      "services/ai-orchestrator"
+    ]
+  },
+  "requiredServices": ["postgres", "redis", "object-storage"],
+  "contracts": {
+    "openapi": "openapi/openapi.yaml"
+  }
+}

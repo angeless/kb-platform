@@ -1,0 +1,79 @@
+openapi: 3.1.0
+info:
+  title: KB Platform API
+  version: 0.1.0
+  description: 初版接口契约，用于统一 Web 端、AI 接入端和后端服务字段语义。
+servers:
+  - url: http://localhost:8080
+paths:
+  /v1/projects:
+    post:
+      summary: 创建项目
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+                industry_hint: { type: string }
+      responses:
+        '200':
+          description: ok
+  /v1/materials: 
+    post:
+      summary: 登记上传材料
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [project_id, source_type, filename]
+              properties:
+                project_id: { type: string }
+                source_type: { type: string, enum: [image, audio, video, pdf, doc, url, zip, text] }
+                filename: { type: string }
+                source_url: { type: string }
+      responses:
+        '200': { description: ok }
+  /v1/tasks:
+    post:
+      summary: 创建知识整理任务
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [project_id, task_type]
+              properties:
+                project_id: { type: string }
+                task_type: { type: string, enum: [ingest, classify, architecture_draft, kb_generate, review_publish] }
+                material_ids:
+                  type: array
+                  items: { type: string }
+      responses:
+        '200': { description: ok }
+  /v1/knowledge-architectures/{project_id}:
+    get:
+      summary: 获取当前项目的知识系统架构
+      parameters:
+        - in: path
+          name: project_id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: ok }
+  /v1/knowledge-documents/{doc_id}/publish:
+    post:
+      summary: 发布知识文档
+      parameters:
+        - in: path
+          name: doc_id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: ok }
