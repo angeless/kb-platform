@@ -79,6 +79,19 @@ async def doc_fixture(client: AsyncClient, auth_headers: dict, db_session: Async
     db_session.add(source_ref)
     await db_session.flush()
 
+    # Add a second version for diff testing
+    version2 = KnowledgeDocVersion(
+        id=uuid.uuid4(),
+        doc_id=doc.id,
+        version=2,
+        content_md="# Test Content\n\nUpdated paragraph with new info",
+        change_reason="Supplemented with new info",
+        created_by=user.id,
+    )
+    db_session.add(version2)
+    doc.current_version = 2
+    await db_session.flush()
+
     return {
         "project_id": project_id,
         "doc_id": doc.id,
@@ -207,6 +220,52 @@ async def test_invalid_transition(
     # Try to review a published doc
     resp = await client.post(f"/v1/docs/{doc.id}/review", headers=auth_headers)
     assert resp.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_diff_versions(
+    client: AsyncClient, auth_headers: dict, doc_fixture: dict
+):
+    doc_id = doc_fixture["doc_id"]
+    resp = await client.get(
+        f"/v1/docs/{doc_id}/diff?from_version=1&to_version=2",
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    assert data["from_version"] == 1
+    assert data["to_version"] == 2
+    assert data["from_change_reason"] == "Initial version"
+    assert data["to_change_reason"] == "Supplemented with new info"
+    assert len(data["diff_lines"]) > 0
+    assert data["stats"]["added"] >= 1 or data["stats"]["removed"] >= 1
+
+
+@pytest.mark.asyncio
+async def test_diff_same_version(
+    client: AsyncClient, auth_headers: dict, doc_fixture: dict
+):
+    doc_id = doc_fixture["doc_id"]
+    resp = await client.get(
+        f"/v1/docs/{doc_id}/diff?from_version=1&to_version=1",
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    assert data["stats"]["added"] == 0
+    assert data["stats"]["removed"] == 0
+
+
+@pytest.mark.asyncio
+async def test_diff_version_not_found(
+    client: AsyncClient, auth_headers: dict, doc_fixture: dict
+):
+    doc_id = doc_fixture["doc_id"]
+    resp = await client.get(
+        f"/v1/docs/{doc_id}/diff?from_version=1&to_version=999",
+        headers=auth_headers,
+    )
+    assert resp.status_code == 404
 
 
 @pytest.mark.asyncio

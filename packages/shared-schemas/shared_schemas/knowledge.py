@@ -58,6 +58,29 @@ class KnowledgeDocDetailOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class DiffLineOut(BaseModel):
+    """A single line in a version diff."""
+    type: str = Field(description="context, added, or removed")
+    content: str
+
+
+class DiffStatsOut(BaseModel):
+    added: int
+    removed: int
+    unchanged: int
+
+
+class VersionDiffOut(BaseModel):
+    """Diff between two versions of a document."""
+    doc_id: UUID
+    from_version: int
+    to_version: int
+    from_change_reason: str | None
+    to_change_reason: str | None
+    diff_lines: list[DiffLineOut]
+    stats: DiffStatsOut
+
+
 class ConflictOut(BaseModel):
     id: UUID
     project_id: UUID

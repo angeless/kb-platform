@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared_schemas.common import DataResponse, ListResponse, PaginationMeta
-from shared_schemas.knowledge import DocVersionOut, KnowledgeDocDetailOut, KnowledgeDocOut
+from shared_schemas.knowledge import DocVersionOut, KnowledgeDocDetailOut, KnowledgeDocOut, VersionDiffOut
 
 from app.deps import get_db, get_tenant_id
 from app.services.doc_service import DocService
@@ -51,6 +51,19 @@ async def get_doc_version(
     svc = DocService(db, tenant_id)
     ver = await svc.get_version(doc_id, version)
     return DataResponse(data=DocVersionOut.model_validate(ver))
+
+
+@router.get("/{doc_id}/diff", response_model=DataResponse[VersionDiffOut])
+async def diff_versions(
+    doc_id: uuid.UUID,
+    from_version: int = Query(..., ge=1),
+    to_version: int = Query(..., ge=1),
+    db: AsyncSession = Depends(get_db),
+    tenant_id: uuid.UUID = Depends(get_tenant_id),
+):
+    svc = DocService(db, tenant_id)
+    result = await svc.diff_versions(doc_id, from_version, to_version)
+    return DataResponse(data=VersionDiffOut(**result))
 
 
 @router.post("/{doc_id}/review", response_model=DataResponse[KnowledgeDocOut])

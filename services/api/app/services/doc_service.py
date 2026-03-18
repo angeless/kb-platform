@@ -1,5 +1,6 @@
-"""Knowledge document service: list, get, review, publish with tenant isolation."""
+"""Knowledge document service: list, get, review, publish, diff with tenant isolation."""
 
+import difflib
 import uuid
 
 from sqlalchemy import func, select
@@ -76,6 +77,52 @@ class DocService:
                 message=f"Version {version} not found",
             )
         return ver
+
+    async def diff_versions(self, doc_id: uuid.UUID, from_version: int, to_version: int) -> dict:
+        """Compute line-level diff between two versions of a document."""
+        ver_from = await self.get_version(doc_id, from_version)
+        ver_to = await self.get_version(doc_id, to_version)
+
+        from_lines = ver_from.content_md.splitlines(keepends=False)
+        to_lines = ver_to.content_md.splitlines(keepends=False)
+
+        diff_lines = []
+        added = 0
+        removed = 0
+        unchanged = 0
+
+        for tag, i1, i2, j1, j2 in difflib.SequenceMatcher(
+            None, from_lines, to_lines
+        ).get_opcodes():
+            if tag == "equal":
+                for line in from_lines[i1:i2]:
+                    diff_lines.append({"type": "context", "content": line})
+                    unchanged += 1
+            elif tag == "replace":
+                for line in from_lines[i1:i2]:
+                    diff_lines.append({"type": "removed", "content": line})
+                    removed += 1
+                for line in to_lines[j1:j2]:
+                    diff_lines.append({"type": "added", "content": line})
+                    added += 1
+            elif tag == "delete":
+                for line in from_lines[i1:i2]:
+                    diff_lines.append({"type": "removed", "content": line})
+                    removed += 1
+            elif tag == "insert":
+                for line in to_lines[j1:j2]:
+                    diff_lines.append({"type": "added", "content": line})
+                    added += 1
+
+        return {
+            "doc_id": doc_id,
+            "from_version": from_version,
+            "to_version": to_version,
+            "from_change_reason": ver_from.change_reason,
+            "to_change_reason": ver_to.change_reason,
+            "diff_lines": diff_lines,
+            "stats": {"added": added, "removed": removed, "unchanged": unchanged},
+        }
 
     async def review(self, doc_id: uuid.UUID) -> KnowledgeDoc:
         """Transition doc status to 'reviewing'. Only from 'draft'."""
