@@ -6,10 +6,18 @@ from . import pdf_parser, text_parser
 PARSERS: dict[str, object] = {
     "text": text_parser,
     "pdf": pdf_parser,
-    "document": pdf_parser,  # .doc/.docx files also go through PDF pipeline for now
+    "doc": pdf_parser,  # .doc/.docx files go through PDF pipeline
 }
+
+# Asset types that have a registered parser
+SUPPORTED_TYPES: set[str] = set(PARSERS.keys())
 
 
 def get_parser(asset_type: str):
     """Get parser module for asset_type, or None if not supported."""
     return PARSERS.get(asset_type)
+
+
+def is_parseable(asset_type: str) -> bool:
+    """Check if an asset type has a registered parser."""
+    return asset_type in SUPPORTED_TYPES

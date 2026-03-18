@@ -328,3 +328,50 @@ async def test_import_archive_empty_zip(client: AsyncClient, auth_headers: dict)
     assert resp.status_code == 201
     data = resp.json()["data"]
     assert data["imported"] == 0
+
+
+@pytest.mark.asyncio
+async def test_upload_unsupported_type_gets_unsupported_status(
+    client: AsyncClient, auth_headers: dict
+):
+    """Uploading an image file should succeed but set parse_status=unsupported."""
+    proj_resp = await client.post(
+        "/v1/projects",
+        json={"name": "Unsupported Type Project"},
+        headers=auth_headers,
+    )
+    project_id = proj_resp.json()["data"]["id"]
+
+    resp = await client.post(
+        "/v1/assets/upload",
+        data={"project_id": project_id, "asset_type": "image"},
+        files={"file": ("photo.jpg", b"\xff\xd8\xff\xe0fake-jpeg", "image/jpeg")},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201
+    data = resp.json()["data"]
+    assert data["parse_status"] == "unsupported"
+    assert data["asset_type"] == "image"
+
+
+@pytest.mark.asyncio
+async def test_upload_text_type_gets_pending_status(
+    client: AsyncClient, auth_headers: dict
+):
+    """Uploading a text file should set parse_status=pending."""
+    proj_resp = await client.post(
+        "/v1/projects",
+        json={"name": "Text Type Project"},
+        headers=auth_headers,
+    )
+    project_id = proj_resp.json()["data"]["id"]
+
+    resp = await client.post(
+        "/v1/assets/upload",
+        data={"project_id": project_id, "asset_type": "text"},
+        files={"file": ("notes.txt", b"some text content", "text/plain")},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201
+    data = resp.json()["data"]
+    assert data["parse_status"] == "pending"

@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from shared_errors import AppException, ConflictException, ErrorCode, NotFoundException
 from shared_models import Asset, Project
 
-from app.utils.storage import StorageClient, is_allowed_file
+from app.utils.storage import PARSEABLE_ASSET_TYPES, StorageClient, is_allowed_file
 
 
 class AssetService:
@@ -91,6 +91,8 @@ class AssetService:
         if self.storage is not None:
             self.storage.upload_file(object_path, file_content, content_type)
 
+        initial_parse_status = "pending" if asset_type in PARSEABLE_ASSET_TYPES else "unsupported"
+
         asset = Asset(
             id=asset_id,
             project_id=project_id,
@@ -99,7 +101,7 @@ class AssetService:
             object_path=object_path,
             file_hash=file_hash,
             file_size=len(file_content),
-            parse_status="pending",
+            parse_status=initial_parse_status,
             uploaded_by=self.user_id,
         )
         self.db.add(asset)
@@ -230,15 +232,16 @@ class AssetService:
                     self.storage.upload_file(object_path, file_content)
 
                 from app.utils.storage import guess_asset_type
+                guessed_type = guess_asset_type(filename)
                 asset = Asset(
                     id=asset_id,
                     project_id=project_id,
-                    asset_type=guess_asset_type(filename),
+                    asset_type=guessed_type,
                     filename=filename,
                     object_path=object_path,
                     file_hash=file_hash,
                     file_size=len(file_content),
-                    parse_status="pending",
+                    parse_status="pending" if guessed_type in PARSEABLE_ASSET_TYPES else "unsupported",
                     uploaded_by=self.user_id,
                 )
                 self.db.add(asset)

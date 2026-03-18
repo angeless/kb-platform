@@ -96,8 +96,11 @@ class TestPdfParser:
         assert result[0]["tags"]["page"] == 1
 
     def test_parser_registry(self):
-        """PDF parser should be registered for 'pdf' and 'document' types."""
-        from worker.parsers import get_parser
+        """PDF parser should be registered for 'pdf' and 'doc' types."""
+        from worker.parsers import get_parser, is_parseable
         assert get_parser("pdf") is not None
-        assert get_parser("document") is not None
+        assert get_parser("doc") is not None
+        assert get_parser("text") is not None
         assert get_parser("unknown_type") is None
+        assert is_parseable("pdf") is True
+        assert is_parseable("image") is False

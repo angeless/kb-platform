@@ -69,7 +69,11 @@ def parse_asset(self, asset_id: str, job_id: str) -> dict:
             # Get parser for this asset type
             parser = get_parser(asset.asset_type)
             if parser is None:
-                raise ValueError(f"No parser for asset_type: {asset.asset_type}")
+                asset.parse_status = "unsupported"
+                _update_job_completed(session, job_uuid)
+                session.commit()
+                logger.info("No parser for asset_type %s — marked unsupported", asset.asset_type)
+                return {"status": "unsupported", "asset_type": asset.asset_type}
 
             # Download file content from MinIO
             try:
