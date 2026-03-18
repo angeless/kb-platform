@@ -31,7 +31,7 @@ class DocService:
         if project is None:
             raise NotFoundException(
                 error_code=ErrorCode.PROJECT_NOT_FOUND,
-                message="Project not found",
+                message="项目不存在",
             )
         return project
 
@@ -59,7 +59,7 @@ class DocService:
         if doc is None:
             raise NotFoundException(
                 error_code=ErrorCode.DOC_NOT_FOUND,
-                message="Document not found",
+                message="文档不存在",
             )
         await self._verify_project(doc.project_id)
         return doc
@@ -112,7 +112,7 @@ class DocService:
         if node is None:
             raise NotFoundException(
                 error_code=ErrorCode.ARCH_NOT_FOUND,
-                message="Architecture node not found",
+                message="架构节点不存在",
             )
 
         doc.node_id = node_id
@@ -214,7 +214,7 @@ class DocService:
         if doc.status != "draft":
             raise ConflictException(
                 error_code=ErrorCode.DOC_ALREADY_PUBLISHED,
-                message="Document can only be reviewed from draft status",
+                message="只有草稿状态的文档可以提交审核",
             )
         doc.status = "reviewing"
         await self.db.flush()
@@ -227,7 +227,7 @@ class DocService:
         if doc.status != "reviewing":
             raise ConflictException(
                 error_code=ErrorCode.DOC_ALREADY_PUBLISHED,
-                message="Document can only be published from reviewing status",
+                message="只有审核中的文档可以发布",
             )
         doc.status = "published"
         await self.db.flush()

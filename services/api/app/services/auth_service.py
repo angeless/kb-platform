@@ -31,7 +31,7 @@ class AuthService:
         if result.scalar_one_or_none() is not None:
             raise ConflictException(
                 error_code=ErrorCode.AUTH_EMAIL_ALREADY_EXISTS,
-                message="Email already registered",
+                message="邮箱已注册",
             )
 
         tenant = Tenant(id=uuid.uuid4(), name=tenant_name, status="active")
@@ -63,7 +63,7 @@ class AuthService:
         if user is None or not verify_password(password, user.password_hash):
             raise UnauthorizedException(
                 error_code=ErrorCode.AUTH_INVALID_CREDENTIALS,
-                message="Invalid email or password",
+                message="邮箱或密码错误",
             )
 
         token_data = {
@@ -104,13 +104,13 @@ class AuthService:
         except Exception:
             raise UnauthorizedException(
                 error_code=ErrorCode.AUTH_REFRESH_TOKEN_INVALID,
-                message="Invalid or expired refresh token",
+                message="刷新令牌无效或已过期",
             )
 
         if payload.get("type") != "refresh":
             raise UnauthorizedException(
                 error_code=ErrorCode.AUTH_REFRESH_TOKEN_INVALID,
-                message="Token is not a refresh token",
+                message="令牌类型错误（非刷新令牌）",
             )
 
         token_data = {

@@ -76,7 +76,7 @@ class ModelProviderService:
         if provider is None:
             raise NotFoundException(
                 error_code=ErrorCode.MODEL_PROVIDER_NOT_FOUND,
-                message="Model provider not found",
+                message="模型供应商不存在",
             )
         return {"status": "ok"}
 
@@ -114,7 +114,7 @@ class ModelProviderService:
         if route is None:
             raise NotFoundException(
                 error_code=ErrorCode.MODEL_ROUTE_NOT_FOUND,
-                message="Model route not found",
+                message="模型路由不存在",
             )
         for key, value in data.items():
             if value is not None:
@@ -134,7 +134,7 @@ class ModelProviderService:
         if route is None:
             raise NotFoundException(
                 error_code=ErrorCode.MODEL_ROUTE_NOT_FOUND,
-                message="Model route not found",
+                message="模型路由不存在",
             )
         await self.db.delete(route)
         await self.db.flush()

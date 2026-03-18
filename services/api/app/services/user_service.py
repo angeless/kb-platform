@@ -39,7 +39,7 @@ class UserService:
         if dup is not None:
             raise ConflictException(
                 error_code=ErrorCode.AUTH_EMAIL_ALREADY_EXISTS,
-                message="Email already exists",
+                message="邮箱已被使用",
             )
 
         temp_password = secrets.token_urlsafe(16)
@@ -66,7 +66,7 @@ class UserService:
         if user is None:
             raise NotFoundException(
                 error_code=ErrorCode.USER_NOT_FOUND,
-                message="User not found",
+                message="用户不存在",
             )
         for key, value in kwargs.items():
             if value is not None:
@@ -86,7 +86,7 @@ class UserService:
         if user is None:
             raise NotFoundException(
                 error_code=ErrorCode.USER_NOT_FOUND,
-                message="User not found",
+                message="用户不存在",
             )
         user.status = "disabled"
         await self.db.flush()

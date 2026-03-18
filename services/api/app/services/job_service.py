@@ -49,7 +49,7 @@ class JobService:
         if project is None:
             raise NotFoundException(
                 error_code=ErrorCode.PROJECT_NOT_FOUND,
-                message="Project not found",
+                message="项目不存在",
             )
         return project
 
@@ -164,7 +164,7 @@ class JobService:
         if job is None:
             raise NotFoundException(
                 error_code=ErrorCode.JOB_NOT_FOUND,
-                message="Job not found",
+                message="任务不存在",
             )
         # Verify tenant ownership via project
         await self._verify_project(job.project_id)
@@ -179,7 +179,7 @@ class JobService:
         if job.status != "failed":
             raise ConflictException(
                 error_code=ErrorCode.JOB_ALREADY_RUNNING,
-                message="Only failed jobs can be retried",
+                message="只有失败的任务可以重试",
             )
         job.status = "pending"
         job.retry_count += 1

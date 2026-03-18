@@ -38,27 +38,27 @@ async def get_current_user(
 ) -> User:
     """Extract and verify JWT from Authorization header, then load user from DB."""
     if not authorization.startswith("Bearer "):
-        raise UnauthorizedException(message="Invalid authorization header")
+        raise UnauthorizedException(message="认证头格式错误")
 
     token = authorization[len("Bearer "):]
     try:
         payload = decode_access_token(token, settings.jwt_secret, settings.jwt_algorithm)
     except Exception:
-        raise UnauthorizedException(message="Invalid or expired token")
+        raise UnauthorizedException(message="令牌无效或已过期")
 
     user_id = payload.get("sub")
     if not user_id:
-        raise UnauthorizedException(message="Token missing subject")
+        raise UnauthorizedException(message="令牌缺少用户标识")
 
     try:
         uid = uuid.UUID(user_id)
     except ValueError:
-        raise UnauthorizedException(message="Invalid user ID in token")
+        raise UnauthorizedException(message="令牌中用户 ID 无效")
 
     result = await db.execute(select(User).where(User.id == uid))
     user = result.scalar_one_or_none()
     if user is None:
-        raise UnauthorizedException(message="User not found")
+        raise UnauthorizedException(message="用户不存在")
 
     return user
 

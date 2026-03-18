@@ -41,7 +41,7 @@ class AssetService:
         if project is None:
             raise NotFoundException(
                 error_code=ErrorCode.PROJECT_NOT_FOUND,
-                message="Project not found",
+                message="项目不存在",
             )
         return project
 
@@ -81,7 +81,7 @@ class AssetService:
         if dup is not None:
             raise ConflictException(
                 error_code=ErrorCode.ASSET_DUPLICATE_HASH,
-                message="Duplicate file already uploaded",
+                message="文件已存在（重复上传）",
             )
 
         asset_id = uuid.uuid4()
@@ -274,7 +274,7 @@ class AssetService:
         if asset is None:
             raise NotFoundException(
                 error_code=ErrorCode.ASSET_NOT_FOUND,
-                message="Asset not found",
+                message="资料不存在",
             )
         await self._verify_project(asset.project_id)
         return asset

@@ -32,7 +32,7 @@ class ConflictService:
         if project is None:
             raise NotFoundException(
                 error_code=ErrorCode.PROJECT_NOT_FOUND,
-                message="Project not found",
+                message="项目不存在",
             )
         return project
 
@@ -82,7 +82,7 @@ class ConflictService:
         if conflict is None:
             raise NotFoundException(
                 error_code=ErrorCode.CONFLICT_NOT_FOUND,
-                message="Conflict not found",
+                message="冲突记录不存在",
             )
         await self._verify_project(conflict.project_id)
         return conflict
@@ -93,7 +93,7 @@ class ConflictService:
         if conflict.status != "open":
             raise ConflictException(
                 error_code=ErrorCode.CONFLICT_ALREADY_RESOLVED,
-                message="Conflict is already resolved",
+                message="冲突已解决",
             )
         conflict.status = "resolved"
         conflict.resolved_by = self.user_id

@@ -58,7 +58,7 @@ class ProjectService:
         if project is None:
             raise NotFoundException(
                 error_code=ErrorCode.PROJECT_NOT_FOUND,
-                message="Project not found",
+                message="项目不存在",
             )
         return project
 

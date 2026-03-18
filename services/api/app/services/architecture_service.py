@@ -28,7 +28,7 @@ class ArchitectureService:
         if project is None:
             raise NotFoundException(
                 error_code=ErrorCode.PROJECT_NOT_FOUND,
-                message="Project not found",
+                message="项目不存在",
             )
         return project
 
@@ -49,7 +49,7 @@ class ArchitectureService:
         if arch is None:
             raise NotFoundException(
                 error_code=ErrorCode.ARCH_NOT_FOUND,
-                message="Architecture not found",
+                message="架构不存在",
             )
         await self._verify_project(arch.project_id)
         return arch
@@ -60,7 +60,7 @@ class ArchitectureService:
         if arch.status not in ("draft", "reviewing"):
             raise ConflictException(
                 error_code=ErrorCode.ARCH_ALREADY_PUBLISHED,
-                message="Architecture cannot be published from current status",
+                message="当前状态的架构不能发布",
             )
         arch.status = "published"
         await self.db.flush()
@@ -93,7 +93,7 @@ class ArchitectureService:
         if node is None:
             raise NotFoundException(
                 error_code=ErrorCode.ARCH_NODE_NOT_FOUND,
-                message="Architecture node not found",
+                message="架构节点不存在",
             )
         for key, value in node_data.items():
             if value is not None:
