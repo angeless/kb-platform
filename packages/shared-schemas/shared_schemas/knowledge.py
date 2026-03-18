@@ -100,3 +100,12 @@ class ConflictResolveRequest(BaseModel):
 
 class AssignNodeRequest(BaseModel):
     node_id: UUID
+
+
+class DocUpdateContent(BaseModel):
+    content_md: str = Field(..., min_length=1)
+    change_reason: str = Field(..., min_length=1)
+
+
+class DocRejectRequest(BaseModel):
+    reject_reason: str = Field(..., min_length=1)

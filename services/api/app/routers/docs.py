@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared_schemas.common import DataResponse, ListResponse, PaginationMeta
-from shared_schemas.knowledge import AssignNodeRequest, DocVersionOut, KnowledgeDocDetailOut, KnowledgeDocOut, VersionDiffOut
+from shared_schemas.knowledge import AssignNodeRequest, DocRejectRequest, DocUpdateContent, DocVersionOut, KnowledgeDocDetailOut, KnowledgeDocOut, VersionDiffOut
 
 from app.deps import get_current_user, get_db, get_tenant_id, require_role
 from app.services.audit_service import AuditService
@@ -124,4 +124,34 @@ async def publish_doc(
     doc = await svc.publish(doc_id)
     audit = AuditService(db, tenant_id, current_user.id)
     await audit.log("publish", "knowledge_doc", doc_id, project_id=doc.project_id)
+    return DataResponse(data=KnowledgeDocOut.model_validate(doc))
+
+
+@router.put("/{doc_id}/content", response_model=DataResponse[KnowledgeDocOut])
+async def update_doc_content(
+    doc_id: uuid.UUID,
+    body: DocUpdateContent,
+    db: AsyncSession = Depends(get_db),
+    tenant_id: uuid.UUID = Depends(get_tenant_id),
+    current_user: User = require_role("editor"),
+):
+    svc = DocService(db, tenant_id)
+    doc = await svc.update_content(doc_id, body.content_md, body.change_reason, current_user.id)
+    audit = AuditService(db, tenant_id, current_user.id)
+    await audit.log("edit", "knowledge_doc", doc_id, project_id=doc.project_id)
+    return DataResponse(data=KnowledgeDocOut.model_validate(doc))
+
+
+@router.post("/{doc_id}/reject", response_model=DataResponse[KnowledgeDocOut])
+async def reject_doc(
+    doc_id: uuid.UUID,
+    body: DocRejectRequest,
+    db: AsyncSession = Depends(get_db),
+    tenant_id: uuid.UUID = Depends(get_tenant_id),
+    current_user: User = require_role("reviewer"),
+):
+    svc = DocService(db, tenant_id)
+    doc = await svc.reject(doc_id)
+    audit = AuditService(db, tenant_id, current_user.id)
+    await audit.log("reject", "knowledge_doc", doc_id, project_id=doc.project_id, detail={"reason": body.reject_reason})
     return DataResponse(data=KnowledgeDocOut.model_validate(doc))

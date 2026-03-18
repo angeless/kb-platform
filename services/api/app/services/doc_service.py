@@ -9,7 +9,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared_errors import ConflictException, ErrorCode, NotFoundException
-from shared_models import ArchitectureNode, KnowledgeDoc, KnowledgeDocVersion, Project
+from shared_models import ArchitectureNode, KnowledgeDoc, KnowledgeDocVersion, Project, SourceRef
 
 
 class DocService:
@@ -165,6 +165,48 @@ class DocService:
             "diff_lines": diff_lines,
             "stats": {"added": added, "removed": removed, "unchanged": unchanged},
         }
+
+    async def update_content(
+        self,
+        doc_id: uuid.UUID,
+        content_md: str,
+        change_reason: str,
+        user_id: uuid.UUID,
+    ) -> KnowledgeDoc:
+        """Edit document content by creating a new version. Only from 'draft' status."""
+        doc = await self.get(doc_id)
+        if doc.status != "draft":
+            raise ConflictException(
+                error_code=ErrorCode.DOC_ALREADY_PUBLISHED,
+                message="只有 draft 状态的文档可以编辑",
+            )
+        new_ver_num = doc.current_version + 1
+        version = KnowledgeDocVersion(
+            id=uuid.uuid4(),
+            doc_id=doc.id,
+            version=new_ver_num,
+            content_md=content_md,
+            change_reason=change_reason,
+            created_by=user_id,
+        )
+        self.db.add(version)
+        doc.current_version = new_ver_num
+        await self.db.flush()
+        await self.db.refresh(doc)
+        return doc
+
+    async def reject(self, doc_id: uuid.UUID) -> KnowledgeDoc:
+        """Reject a document back to draft. Only from 'reviewing' status."""
+        doc = await self.get(doc_id)
+        if doc.status != "reviewing":
+            raise ConflictException(
+                error_code=ErrorCode.DOC_ALREADY_PUBLISHED,
+                message="只有 reviewing 状态的文档可以驳回",
+            )
+        doc.status = "draft"
+        await self.db.flush()
+        await self.db.refresh(doc)
+        return doc
 
     async def review(self, doc_id: uuid.UUID) -> KnowledgeDoc:
         """Transition doc status to 'reviewing'. Only from 'draft'."""

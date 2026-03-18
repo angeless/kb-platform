@@ -381,3 +381,106 @@ async def test_get_doc_not_found(client: AsyncClient, auth_headers: dict):
     fake_id = str(uuid.uuid4())
     resp = await client.get(f"/v1/docs/{fake_id}", headers=auth_headers)
     assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_edit_doc_creates_new_version(
+    client: AsyncClient, auth_headers: dict, db_session: AsyncSession, doc_fixture: dict
+):
+    """Editing a draft doc should create a new version and bump current_version."""
+    project_id = doc_fixture["project_id"]
+    doc = KnowledgeDoc(
+        id=uuid.uuid4(),
+        project_id=project_id,
+        doc_type="guide",
+        title="Edit Me",
+        current_version=1,
+        status="draft",
+    )
+    db_session.add(doc)
+    await db_session.flush()
+
+    resp = await client.put(
+        f"/v1/docs/{doc.id}/content",
+        json={"content_md": "# Updated Content\n\nNew text here.", "change_reason": "Manual edit"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    assert data["current_version"] == 2
+
+
+@pytest.mark.asyncio
+async def test_edit_non_draft_returns_409(
+    client: AsyncClient, auth_headers: dict, db_session: AsyncSession, doc_fixture: dict
+):
+    """Editing a non-draft doc should return 409."""
+    project_id = doc_fixture["project_id"]
+    doc = KnowledgeDoc(
+        id=uuid.uuid4(),
+        project_id=project_id,
+        doc_type="guide",
+        title="Published Doc",
+        current_version=1,
+        status="published",
+    )
+    db_session.add(doc)
+    await db_session.flush()
+
+    resp = await client.put(
+        f"/v1/docs/{doc.id}/content",
+        json={"content_md": "Try to edit", "change_reason": "Should fail"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_reject_doc(
+    client: AsyncClient, auth_headers: dict, db_session: AsyncSession, doc_fixture: dict
+):
+    """Rejecting a reviewing doc should return it to draft."""
+    project_id = doc_fixture["project_id"]
+    doc = KnowledgeDoc(
+        id=uuid.uuid4(),
+        project_id=project_id,
+        doc_type="guide",
+        title="Reject Me",
+        current_version=1,
+        status="reviewing",
+    )
+    db_session.add(doc)
+    await db_session.flush()
+
+    resp = await client.post(
+        f"/v1/docs/{doc.id}/reject",
+        json={"reject_reason": "需要补充更多内容"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["data"]["status"] == "draft"
+
+
+@pytest.mark.asyncio
+async def test_reject_non_reviewing_returns_409(
+    client: AsyncClient, auth_headers: dict, db_session: AsyncSession, doc_fixture: dict
+):
+    """Rejecting a draft doc should return 409."""
+    project_id = doc_fixture["project_id"]
+    doc = KnowledgeDoc(
+        id=uuid.uuid4(),
+        project_id=project_id,
+        doc_type="guide",
+        title="Draft Doc",
+        current_version=1,
+        status="draft",
+    )
+    db_session.add(doc)
+    await db_session.flush()
+
+    resp = await client.post(
+        f"/v1/docs/{doc.id}/reject",
+        json={"reject_reason": "Should fail"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 409
