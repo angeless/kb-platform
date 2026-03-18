@@ -13,6 +13,7 @@ from shared_models import Base, Tenant, User
 
 from app.deps import get_db
 from app.main import create_app
+from app.routers.assets import get_storage
 from app.utils.security import create_access_token, hash_password
 
 settings = get_settings()
@@ -60,6 +61,8 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
         yield db_session
 
     app.dependency_overrides[get_db] = override_get_db
+    # Mock storage: return None so uploads skip MinIO in tests
+    app.dependency_overrides[get_storage] = lambda: None
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:

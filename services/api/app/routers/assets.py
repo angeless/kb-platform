@@ -5,14 +5,31 @@ import uuid
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from shared_config.settings import Settings
 from shared_schemas.asset import AssetOut
 from shared_schemas.common import DataResponse, ListResponse, PaginationMeta
 
-from app.deps import get_current_user, get_db, get_tenant_id
+from app.deps import get_current_user, get_db, get_settings_dep, get_tenant_id
 from app.services.asset_service import AssetService
+from app.utils.storage import StorageClient
 from shared_models import User
 
 router = APIRouter(prefix="/v1/assets", tags=["assets"])
+
+# Lazy-initialized storage client (None in test, real in production)
+_storage_client: StorageClient | None = None
+
+
+def get_storage(settings: Settings = Depends(get_settings_dep)) -> StorageClient | None:
+    """Get or create the StorageClient singleton. Returns None if S3 is unreachable."""
+    global _storage_client
+    if _storage_client is None:
+        try:
+            _storage_client = StorageClient(settings)
+            _storage_client.ensure_bucket()
+        except Exception:
+            return None
+    return _storage_client
 
 
 @router.post("/upload", response_model=DataResponse[AssetOut], status_code=201)
@@ -23,14 +40,23 @@ async def upload_asset(
     db: AsyncSession = Depends(get_db),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
     current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings_dep),
+    storage: StorageClient | None = Depends(get_storage),
 ):
-    svc = AssetService(db, tenant_id, current_user.id)
+    svc = AssetService(
+        db,
+        tenant_id,
+        current_user.id,
+        storage=storage,
+        max_upload_size_bytes=settings.max_upload_size_mb * 1024 * 1024,
+    )
     file_content = await file.read()
     asset = await svc.upload(
         project_id=project_id,
         filename=file.filename or "unknown",
         asset_type=asset_type,
         file_content=file_content,
+        content_type=file.content_type or "application/octet-stream",
     )
     return DataResponse(data=AssetOut.model_validate(asset))
 
