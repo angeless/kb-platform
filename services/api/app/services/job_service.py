@@ -101,6 +101,21 @@ class JobService:
                 except Exception as e:
                     logger.warning("Failed to dispatch Celery task: %s (job %s still created)", e, job.id)
 
+        # Dispatch Celery task for kb_generate jobs
+        elif job_type == "kb_generate":
+            celery = _get_celery_app()
+            if celery is not None:
+                try:
+                    result = celery.send_task(
+                        "orchestrator.generate_docs",
+                        args=[str(project_id), str(job.id)],
+                    )
+                    job.celery_task_id = result.id
+                    await self.db.flush()
+                    logger.info("Dispatched generate_docs task for project %s, job %s", project_id, job.id)
+                except Exception as e:
+                    logger.warning("Failed to dispatch Celery task: %s (job %s still created)", e, job.id)
+
         return job
 
     async def list(
