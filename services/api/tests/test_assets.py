@@ -1,6 +1,7 @@
 """Tests for asset endpoints."""
 
 import uuid
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from httpx import AsyncClient
@@ -158,3 +159,80 @@ async def test_upload_object_path_format(client: AsyncClient, auth_headers: dict
     # Verify it's a real UUID-based path by checking the asset has proper fields
     assert data["filename"] == "path_test.pdf"
     assert data["asset_type"] == "document"
+
+
+# --- URL Import Tests ---
+
+
+@pytest.mark.asyncio
+async def test_import_url_success(client: AsyncClient, auth_headers: dict):
+    """URL import should fetch content and create an asset."""
+    proj_resp = await client.post(
+        "/v1/projects",
+        json={"name": "URL Import Project"},
+        headers=auth_headers,
+    )
+    project_id = proj_resp.json()["data"]["id"]
+
+    mock_response = AsyncMock()
+    mock_response.content = b"<html><body>Hello World</body></html>"
+    mock_response.headers = {"content-type": "text/html"}
+    mock_response.raise_for_status = lambda: None
+
+    with patch("app.utils.url_fetcher.httpx.AsyncClient") as mock_client_cls:
+        mock_client_instance = AsyncMock()
+        mock_client_instance.get.return_value = mock_response
+        mock_client_instance.__aenter__ = AsyncMock(return_value=mock_client_instance)
+        mock_client_instance.__aexit__ = AsyncMock(return_value=False)
+        mock_client_cls.return_value = mock_client_instance
+
+        resp = await client.post(
+            "/v1/assets/import-url",
+            json={"project_id": project_id, "url": "https://example.com/page.html"},
+            headers=auth_headers,
+        )
+
+    assert resp.status_code == 201
+    data = resp.json()["data"]
+    assert data["asset_type"] == "url"
+    assert data["source_url"] == "https://example.com/page.html"
+    assert data["filename"] == "page.html"
+    assert data["parse_status"] == "pending"
+
+
+@pytest.mark.asyncio
+async def test_import_url_ssrf_private_ip(client: AsyncClient, auth_headers: dict):
+    """Private IP addresses should be blocked (SSRF protection)."""
+    proj_resp = await client.post(
+        "/v1/projects",
+        json={"name": "SSRF Test Project"},
+        headers=auth_headers,
+    )
+    project_id = proj_resp.json()["data"]["id"]
+
+    resp = await client.post(
+        "/v1/assets/import-url",
+        json={"project_id": project_id, "url": "http://192.168.1.1/secret"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 400
+    assert resp.json()["error_code"] == "SYSTEM_SSRF_BLOCKED"
+
+
+@pytest.mark.asyncio
+async def test_import_url_invalid_protocol(client: AsyncClient, auth_headers: dict):
+    """Non http/https protocols should be rejected at schema validation (422)."""
+    proj_resp = await client.post(
+        "/v1/projects",
+        json={"name": "Protocol Test Project"},
+        headers=auth_headers,
+    )
+    project_id = proj_resp.json()["data"]["id"]
+
+    resp = await client.post(
+        "/v1/assets/import-url",
+        json={"project_id": project_id, "url": "ftp://evil.com/data"},
+        headers=auth_headers,
+    )
+    # Pydantic HttpUrl type rejects non-http/https at schema level
+    assert resp.status_code == 422

@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared_config.settings import Settings
-from shared_schemas.asset import AssetOut
+from shared_schemas.asset import AssetOut, ImportUrlRequest
 from shared_schemas.common import DataResponse, ListResponse, PaginationMeta
 
 from app.deps import get_current_user, get_db, get_settings_dep, get_tenant_id
@@ -58,6 +58,26 @@ async def upload_asset(
         file_content=file_content,
         content_type=file.content_type or "application/octet-stream",
     )
+    return DataResponse(data=AssetOut.model_validate(asset))
+
+
+@router.post("/import-url", response_model=DataResponse[AssetOut], status_code=201)
+async def import_url(
+    body: ImportUrlRequest,
+    db: AsyncSession = Depends(get_db),
+    tenant_id: uuid.UUID = Depends(get_tenant_id),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings_dep),
+    storage: StorageClient | None = Depends(get_storage),
+):
+    svc = AssetService(
+        db,
+        tenant_id,
+        current_user.id,
+        storage=storage,
+        max_upload_size_bytes=settings.max_upload_size_mb * 1024 * 1024,
+    )
+    asset = await svc.import_url(body.project_id, str(body.url))
     return DataResponse(data=AssetOut.model_validate(asset))
 
 

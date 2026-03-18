@@ -106,6 +106,63 @@ class AssetService:
         await self.db.flush()
         return asset
 
+    async def import_url(self, project_id: uuid.UUID, url: str) -> Asset:
+        """Import a URL as an asset. Fetches content, stores to MinIO, creates record.
+
+        The actual URL fetching is done by the caller (router layer) to keep
+        the service layer synchronous w.r.t. external HTTP calls. This method
+        receives the already-fetched content.
+        """
+        await self._verify_project(project_id)
+
+        # Use URL fetcher to download content
+        from app.utils.url_fetcher import fetch_url
+        content, content_type = await fetch_url(url)
+
+        file_hash = hashlib.sha256(content).hexdigest()
+
+        # Check duplicate
+        dup_q = select(Asset).where(
+            Asset.project_id == project_id,
+            Asset.file_hash == file_hash,
+        )
+        dup = (await self.db.execute(dup_q)).scalar_one_or_none()
+        if dup is not None:
+            raise ConflictException(
+                error_code=ErrorCode.ASSET_DUPLICATE_HASH,
+                message="该 URL 内容已存在（重复哈希）",
+            )
+
+        # Derive filename from URL
+        from urllib.parse import urlparse
+        parsed = urlparse(url)
+        filename = parsed.path.rstrip("/").split("/")[-1] or "index.html"
+        if "." not in filename:
+            filename += ".html"
+
+        asset_id = uuid.uuid4()
+        object_path = f"{self.tenant_id}/{project_id}/{asset_id}/{filename}"
+
+        # Upload to MinIO/S3
+        if self.storage is not None:
+            self.storage.upload_file(object_path, content, content_type)
+
+        asset = Asset(
+            id=asset_id,
+            project_id=project_id,
+            asset_type="url",
+            filename=filename,
+            source_url=url,
+            object_path=object_path,
+            file_hash=file_hash,
+            file_size=len(content),
+            parse_status="pending",
+            uploaded_by=self.user_id,
+        )
+        self.db.add(asset)
+        await self.db.flush()
+        return asset
+
     async def list(
         self, project_id: uuid.UUID, page: int = 1, page_size: int = 20
     ) -> tuple[list[Asset], int]:
