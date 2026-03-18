@@ -1,14 +1,28 @@
 """Auth request/response schemas."""
 
+import re
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
 class RegisterRequest(BaseModel):
     tenant_name: str = Field(..., min_length=1, max_length=200)
     email: EmailStr
     password: str = Field(..., min_length=8, max_length=128)
+
+    @field_validator("password")
+    @classmethod
+    def password_strength(cls, v: str) -> str:
+        if not re.search(r"[A-Z]", v):
+            raise ValueError("密码必须包含至少一个大写字母")
+        if not re.search(r"[a-z]", v):
+            raise ValueError("密码必须包含至少一个小写字母")
+        if not re.search(r"\d", v):
+            raise ValueError("密码必须包含至少一个数字")
+        if not re.search(r"[!@#$%^&*()_+\-=\[\]{};':\"\\|,.<>/?~`]", v):
+            raise ValueError("密码必须包含至少一个特殊字符")
+        return v
 
 
 class RegisterResponse(BaseModel):

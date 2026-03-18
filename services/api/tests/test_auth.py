@@ -12,7 +12,7 @@ async def test_register_success(client: AsyncClient):
         json={
             "tenant_name": "Acme Corp",
             "email": "new-user@example.com",
-            "password": "securepass123",
+            "password": "Secure@pass123",
         },
     )
     assert resp.status_code == 201
@@ -27,11 +27,11 @@ async def test_register_duplicate_email(client: AsyncClient):
     email = "dup-user@example.com"
     await client.post(
         "/v1/auth/register",
-        json={"tenant_name": "T1", "email": email, "password": "securepass123"},
+        json={"tenant_name": "T1", "email": email, "password": "Secure@pass123"},
     )
     resp = await client.post(
         "/v1/auth/register",
-        json={"tenant_name": "T2", "email": email, "password": "securepass456"},
+        json={"tenant_name": "T2", "email": email, "password": "Secure@pass456"},
     )
     assert resp.status_code == 409
 
@@ -41,11 +41,11 @@ async def test_login_success(client: AsyncClient):
     email = "login-user@example.com"
     await client.post(
         "/v1/auth/register",
-        json={"tenant_name": "T", "email": email, "password": "securepass123"},
+        json={"tenant_name": "T", "email": email, "password": "Secure@pass123"},
     )
     resp = await client.post(
         "/v1/auth/login",
-        json={"email": email, "password": "securepass123"},
+        json={"email": email, "password": "Secure@pass123"},
     )
     assert resp.status_code == 200
     data = resp.json()["data"]
@@ -58,7 +58,7 @@ async def test_login_wrong_password(client: AsyncClient):
     email = "wrongpw-user@example.com"
     await client.post(
         "/v1/auth/register",
-        json={"tenant_name": "T", "email": email, "password": "securepass123"},
+        json={"tenant_name": "T", "email": email, "password": "Secure@pass123"},
     )
     resp = await client.post(
         "/v1/auth/login",
@@ -73,11 +73,11 @@ async def test_refresh_token(client: AsyncClient):
     email = "refresh-user@example.com"
     await client.post(
         "/v1/auth/register",
-        json={"tenant_name": "T", "email": email, "password": "securepass123"},
+        json={"tenant_name": "T", "email": email, "password": "Secure@pass123"},
     )
     login_resp = await client.post(
         "/v1/auth/login",
-        json={"email": email, "password": "securepass123"},
+        json={"email": email, "password": "Secure@pass123"},
     )
     refresh_token = login_resp.json()["data"]["refresh_token"]
 
@@ -88,3 +88,33 @@ async def test_refresh_token(client: AsyncClient):
     assert resp.status_code == 200
     data = resp.json()["data"]
     assert "access_token" in data
+
+
+@pytest.mark.asyncio
+async def test_register_weak_password_no_uppercase(client: AsyncClient):
+    """Password without uppercase should be rejected."""
+    resp = await client.post(
+        "/v1/auth/register",
+        json={"tenant_name": "T", "email": "weak1@example.com", "password": "secure@pass123"},
+    )
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_register_weak_password_no_special_char(client: AsyncClient):
+    """Password without special character should be rejected."""
+    resp = await client.post(
+        "/v1/auth/register",
+        json={"tenant_name": "T", "email": "weak2@example.com", "password": "SecurePass123"},
+    )
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_register_weak_password_only_digits(client: AsyncClient):
+    """Purely numeric password should be rejected."""
+    resp = await client.post(
+        "/v1/auth/register",
+        json={"tenant_name": "T", "email": "weak3@example.com", "password": "12345678"},
+    )
+    assert resp.status_code == 422
