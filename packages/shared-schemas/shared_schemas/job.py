@@ -11,6 +11,7 @@ class JobCreate(BaseModel):
     job_type: str = Field(
         ..., pattern="^(ingest|classify|architecture_draft|kb_generate|review_publish)$"
     )
+    asset_id: UUID | None = None  # Required for 'ingest' jobs
 
 
 class JobOut(BaseModel):

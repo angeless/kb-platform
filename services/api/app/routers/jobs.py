@@ -23,7 +23,7 @@ async def create_job(
     current_user: User = Depends(get_current_user),
 ):
     svc = JobService(db, tenant_id, current_user.id)
-    job = await svc.create(project_id=body.project_id, job_type=body.job_type)
+    job = await svc.create(project_id=body.project_id, job_type=body.job_type, asset_id=body.asset_id)
     return DataResponse(data=JobOut.model_validate(job))
 
 

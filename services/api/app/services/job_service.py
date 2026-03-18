@@ -1,12 +1,32 @@
 """Job service: CRUD with tenant isolation via project chain."""
 
+import logging
 import uuid
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared_errors import ConflictException, ErrorCode, NotFoundException
-from shared_models import Job, Project
+from shared_models import Asset, Job, Project
+
+logger = logging.getLogger(__name__)
+
+# Celery task dispatch — lazy import to avoid hard dependency
+_celery_app = None
+
+
+def _get_celery_app():
+    """Lazy-load Celery app to avoid import errors when Celery is not installed."""
+    global _celery_app
+    if _celery_app is None:
+        try:
+            from celery import Celery
+            from shared_config.settings import get_settings
+            settings = get_settings()
+            _celery_app = Celery(broker=settings.redis_url)
+        except Exception:
+            logger.warning("Celery not available, tasks will not be dispatched")
+    return _celery_app
 
 
 class JobService:
@@ -33,9 +53,13 @@ class JobService:
             )
         return project
 
-    async def create(self, project_id: uuid.UUID, job_type: str) -> Job:
-        """Create a new job for a project."""
+    async def create(self, project_id: uuid.UUID, job_type: str, asset_id: uuid.UUID | None = None) -> Job:
+        """Create a new job for a project.
+
+        For 'ingest' jobs, asset_id is required and a Celery parse task is dispatched.
+        """
         await self._verify_project(project_id)
+
         job = Job(
             id=uuid.uuid4(),
             project_id=project_id,
@@ -46,6 +70,22 @@ class JobService:
         )
         self.db.add(job)
         await self.db.flush()
+
+        # Dispatch Celery task for ingest jobs
+        if job_type == "ingest" and asset_id is not None:
+            celery = _get_celery_app()
+            if celery is not None:
+                try:
+                    result = celery.send_task(
+                        "ingestion.parse_asset",
+                        args=[str(asset_id), str(job.id)],
+                    )
+                    job.celery_task_id = result.id
+                    await self.db.flush()
+                    logger.info("Dispatched parse_asset task for asset %s, job %s", asset_id, job.id)
+                except Exception as e:
+                    logger.warning("Failed to dispatch Celery task: %s (job %s still created)", e, job.id)
+
         return job
 
     async def list(
