@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from shared_schemas.common import DataResponse, ListResponse, PaginationMeta
 from shared_schemas.knowledge import ConflictOut, ConflictResolveRequest
 
-from app.deps import get_current_user, get_db, get_tenant_id
+from app.deps import get_current_user, get_db, get_tenant_id, require_role
 from app.services.audit_service import AuditService
 from app.services.conflict_service import ConflictService
 from shared_models import User
@@ -68,7 +68,7 @@ async def resolve_conflict(
     body: ConflictResolveRequest,
     db: AsyncSession = Depends(get_db),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
-    current_user: User = Depends(get_current_user),
+    current_user: User = require_role("reviewer"),
 ):
     svc = ConflictService(db, tenant_id, current_user.id)
     conflict = await svc.resolve(conflict_id, body.resolution_note)

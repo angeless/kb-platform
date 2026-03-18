@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from shared_schemas.common import DataResponse, ListResponse, PaginationMeta
 from shared_schemas.job import JobCreate, JobOut
 
-from app.deps import get_current_user, get_db, get_tenant_id
+from app.deps import get_current_user, get_db, get_tenant_id, require_role
 from app.services.job_service import JobService
 from shared_models import User
 
@@ -20,7 +20,7 @@ async def create_job(
     body: JobCreate,
     db: AsyncSession = Depends(get_db),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
-    current_user: User = Depends(get_current_user),
+    current_user: User = require_role("editor"),
 ):
     svc = JobService(db, tenant_id, current_user.id)
     job = await svc.create(project_id=body.project_id, job_type=body.job_type, asset_id=body.asset_id)

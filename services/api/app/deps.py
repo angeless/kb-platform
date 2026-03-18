@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared_config.settings import Settings, get_settings
-from shared_errors import UnauthorizedException
+from shared_errors import ForbiddenException, UnauthorizedException
 from shared_models import User
 from shared_models.database import async_session_factory
 
@@ -66,3 +66,31 @@ async def get_current_user(
 async def get_tenant_id(current_user: User = Depends(get_current_user)) -> uuid.UUID:
     """Return the tenant ID of the current user."""
     return current_user.tenant_id
+
+
+# Role hierarchy: higher number = more permissions
+ROLE_HIERARCHY: dict[str, int] = {
+    "viewer": 0,
+    "editor": 1,
+    "reviewer": 2,
+    "project_admin": 3,
+    "tenant_admin": 4,
+    "admin": 4,  # legacy alias for tenant_admin
+    "platform_admin": 5,
+}
+
+
+def require_role(minimum_role: str):
+    """Factory that returns a FastAPI dependency enforcing a minimum role level."""
+
+    async def _check(current_user: User = Depends(get_current_user)) -> User:
+        user_level = ROLE_HIERARCHY.get(current_user.role, -1)
+        required_level = ROLE_HIERARCHY.get(minimum_role, 99)
+        if user_level < required_level:
+            raise ForbiddenException(
+                message=f"需要 {minimum_role} 或更高权限",
+                detail={"current_role": current_user.role, "required_role": minimum_role},
+            )
+        return current_user
+
+    return Depends(_check)

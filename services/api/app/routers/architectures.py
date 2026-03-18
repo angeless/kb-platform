@@ -8,7 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from shared_schemas.architecture import ArchitectureOut, NodeCreate, NodeOut, NodeUpdate
 from shared_schemas.common import DataResponse, ListResponse, PaginationMeta
 
-from app.deps import get_current_user, get_db, get_tenant_id
+from app.deps import get_db, get_tenant_id, require_role
+from shared_models import User
 from app.services.architecture_service import ArchitectureService
 
 router = APIRouter(tags=["architectures"])
@@ -53,6 +54,7 @@ async def publish_architecture(
     arch_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
+    _user: User = require_role("project_admin"),
 ):
     svc = ArchitectureService(db, tenant_id)
     arch = await svc.publish(arch_id)
@@ -69,6 +71,7 @@ async def create_node(
     body: NodeCreate,
     db: AsyncSession = Depends(get_db),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
+    _user: User = require_role("project_admin"),
 ):
     svc = ArchitectureService(db, tenant_id)
     node = await svc.create_node(arch_id, body.model_dump())
@@ -85,6 +88,7 @@ async def update_node(
     body: NodeUpdate,
     db: AsyncSession = Depends(get_db),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
+    _user: User = require_role("project_admin"),
 ):
     svc = ArchitectureService(db, tenant_id)
     node = await svc.update_node(arch_id, node_id, body.model_dump(exclude_unset=True))

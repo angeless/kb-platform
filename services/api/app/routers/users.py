@@ -8,8 +8,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from shared_schemas.common import DataResponse, ListResponse, PaginationMeta
 from shared_schemas.user import UserInviteRequest, UserOut, UserUpdate
 
-from app.deps import get_db, get_tenant_id
+from app.deps import get_db, get_tenant_id, require_role
 from app.services.user_service import UserService
+from shared_models import User
 
 router = APIRouter(prefix="/v1/users", tags=["users"])
 
@@ -34,6 +35,7 @@ async def invite_user(
     body: UserInviteRequest,
     db: AsyncSession = Depends(get_db),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
+    _user: User = require_role("tenant_admin"),
 ):
     svc = UserService(db, tenant_id)
     user = await svc.invite(email=body.email, role=body.role)
@@ -46,6 +48,7 @@ async def update_user(
     body: UserUpdate,
     db: AsyncSession = Depends(get_db),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
+    _user: User = require_role("tenant_admin"),
 ):
     svc = UserService(db, tenant_id)
     user = await svc.update(user_id, role=body.role, status=body.status)
@@ -57,6 +60,7 @@ async def delete_user(
     user_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
+    _user: User = require_role("tenant_admin"),
 ):
     svc = UserService(db, tenant_id)
     user = await svc.delete(user_id)

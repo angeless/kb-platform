@@ -8,7 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from shared_schemas.common import DataResponse, ListResponse, PaginationMeta
 from shared_schemas.project import ProjectCreate, ProjectOut, ProjectUpdate
 
-from app.deps import get_current_user, get_db, get_tenant_id
+from app.deps import get_db, get_tenant_id, require_role
+from shared_models import User
 from app.services.project_service import ProjectService
 
 router = APIRouter(prefix="/v1/projects", tags=["projects"])
@@ -73,6 +74,7 @@ async def delete_project(
     project_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
+    _user: User = require_role("tenant_admin"),
 ):
     svc = ProjectService(db, tenant_id)
     await svc.delete(project_id)

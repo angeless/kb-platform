@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from shared_schemas.common import DataResponse, ListResponse, PaginationMeta
 from shared_schemas.knowledge import AssignNodeRequest, DocVersionOut, KnowledgeDocDetailOut, KnowledgeDocOut, VersionDiffOut
 
-from app.deps import get_current_user, get_db, get_tenant_id
+from app.deps import get_current_user, get_db, get_tenant_id, require_role
 from app.services.audit_service import AuditService
 from app.services.doc_service import DocService
 from shared_models import User
@@ -90,7 +90,7 @@ async def assign_node(
     body: AssignNodeRequest,
     db: AsyncSession = Depends(get_db),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
-    current_user: User = Depends(get_current_user),
+    current_user: User = require_role("editor"),
 ):
     svc = DocService(db, tenant_id)
     doc = await svc.assign_node(doc_id, body.node_id)
@@ -104,7 +104,7 @@ async def review_doc(
     doc_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
-    current_user: User = Depends(get_current_user),
+    current_user: User = require_role("reviewer"),
 ):
     svc = DocService(db, tenant_id)
     doc = await svc.review(doc_id)
@@ -118,7 +118,7 @@ async def publish_doc(
     doc_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
-    current_user: User = Depends(get_current_user),
+    current_user: User = require_role("project_admin"),
 ):
     svc = DocService(db, tenant_id)
     doc = await svc.publish(doc_id)

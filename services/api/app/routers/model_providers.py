@@ -15,7 +15,7 @@ from shared_schemas.model_config import (
     ModelRouteUpdate,
 )
 
-from app.deps import get_current_user, get_db, get_tenant_id
+from app.deps import get_current_user, get_db, get_tenant_id, require_role
 from app.services.audit_service import AuditService
 from app.services.model_provider_service import ModelProviderService
 from shared_models import User
@@ -28,7 +28,7 @@ async def create_provider(
     body: ModelProviderCreate,
     db: AsyncSession = Depends(get_db),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
-    current_user: User = Depends(get_current_user),
+    current_user: User = require_role("tenant_admin"),
 ):
     svc = ModelProviderService(db, tenant_id)
     provider_dict = await svc.create_provider(body.model_dump())
@@ -66,6 +66,7 @@ async def create_route(
     body: ModelRouteCreate,
     db: AsyncSession = Depends(get_db),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
+    _user: User = require_role("tenant_admin"),
 ):
     svc = ModelProviderService(db, tenant_id)
     route = await svc.create_route(body.model_dump())
@@ -91,6 +92,7 @@ async def update_route(
     body: ModelRouteUpdate,
     db: AsyncSession = Depends(get_db),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
+    _user: User = require_role("tenant_admin"),
 ):
     svc = ModelProviderService(db, tenant_id)
     route = await svc.update_route(route_id, body.model_dump(exclude_unset=True))
@@ -102,6 +104,7 @@ async def delete_route(
     route_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
+    _user: User = require_role("tenant_admin"),
 ):
     svc = ModelProviderService(db, tenant_id)
     await svc.delete_route(route_id)

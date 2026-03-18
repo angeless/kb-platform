@@ -9,7 +9,7 @@ from shared_config.settings import Settings
 from shared_schemas.asset import AssetOut, ImportUrlRequest
 from shared_schemas.common import DataResponse, ListResponse, PaginationMeta
 
-from app.deps import get_current_user, get_db, get_settings_dep, get_tenant_id
+from app.deps import get_current_user, get_db, get_settings_dep, get_tenant_id, require_role
 from app.services.asset_service import AssetService
 from app.services.audit_service import AuditService
 from app.utils.storage import StorageClient
@@ -40,7 +40,7 @@ async def upload_asset(
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
-    current_user: User = Depends(get_current_user),
+    current_user: User = require_role("editor"),
     settings: Settings = Depends(get_settings_dep),
     storage: StorageClient | None = Depends(get_storage),
 ):
@@ -69,7 +69,7 @@ async def import_url(
     body: ImportUrlRequest,
     db: AsyncSession = Depends(get_db),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
-    current_user: User = Depends(get_current_user),
+    current_user: User = require_role("editor"),
     settings: Settings = Depends(get_settings_dep),
     storage: StorageClient | None = Depends(get_storage),
 ):
@@ -92,7 +92,7 @@ async def import_archive(
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
-    current_user: User = Depends(get_current_user),
+    current_user: User = require_role("editor"),
     settings: Settings = Depends(get_settings_dep),
     storage: StorageClient | None = Depends(get_storage),
 ):
