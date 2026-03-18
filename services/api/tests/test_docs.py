@@ -484,3 +484,87 @@ async def test_reject_non_reviewing_returns_409(
         headers=auth_headers,
     )
     assert resp.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_batch_review(
+    client: AsyncClient, auth_headers: dict, db_session: AsyncSession, doc_fixture: dict
+):
+    """Batch review should succeed for draft docs."""
+    project_id = doc_fixture["project_id"]
+    doc1 = KnowledgeDoc(
+        id=uuid.uuid4(), project_id=project_id, doc_type="guide",
+        title="Batch Review 1", current_version=1, status="draft",
+    )
+    doc2 = KnowledgeDoc(
+        id=uuid.uuid4(), project_id=project_id, doc_type="guide",
+        title="Batch Review 2", current_version=1, status="draft",
+    )
+    db_session.add_all([doc1, doc2])
+    await db_session.flush()
+
+    resp = await client.post(
+        "/v1/docs/batch/review",
+        json={"doc_ids": [str(doc1.id), str(doc2.id)]},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    assert len(data["succeeded"]) == 2
+    assert len(data["failed"]) == 0
+
+
+@pytest.mark.asyncio
+async def test_batch_review_partial_failure(
+    client: AsyncClient, auth_headers: dict, db_session: AsyncSession, doc_fixture: dict
+):
+    """Batch review with mixed statuses should partially succeed."""
+    project_id = doc_fixture["project_id"]
+    good = KnowledgeDoc(
+        id=uuid.uuid4(), project_id=project_id, doc_type="guide",
+        title="Batch Good", current_version=1, status="draft",
+    )
+    bad = KnowledgeDoc(
+        id=uuid.uuid4(), project_id=project_id, doc_type="guide",
+        title="Batch Bad", current_version=1, status="published",
+    )
+    db_session.add_all([good, bad])
+    await db_session.flush()
+
+    resp = await client.post(
+        "/v1/docs/batch/review",
+        json={"doc_ids": [str(good.id), str(bad.id)]},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    assert len(data["succeeded"]) == 1
+    assert len(data["failed"]) == 1
+    assert data["failed"][0]["id"] == str(bad.id)
+
+
+@pytest.mark.asyncio
+async def test_batch_publish(
+    client: AsyncClient, auth_headers: dict, db_session: AsyncSession, doc_fixture: dict
+):
+    """Batch publish should succeed for reviewing docs."""
+    project_id = doc_fixture["project_id"]
+    doc1 = KnowledgeDoc(
+        id=uuid.uuid4(), project_id=project_id, doc_type="guide",
+        title="Batch Pub 1", current_version=1, status="reviewing",
+    )
+    doc2 = KnowledgeDoc(
+        id=uuid.uuid4(), project_id=project_id, doc_type="guide",
+        title="Batch Pub 2", current_version=1, status="reviewing",
+    )
+    db_session.add_all([doc1, doc2])
+    await db_session.flush()
+
+    resp = await client.post(
+        "/v1/docs/batch/publish",
+        json={"doc_ids": [str(doc1.id), str(doc2.id)]},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    assert len(data["succeeded"]) == 2

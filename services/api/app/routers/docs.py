@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared_schemas.common import DataResponse, ListResponse, PaginationMeta
-from shared_schemas.knowledge import AssignNodeRequest, DocRejectRequest, DocUpdateContent, DocVersionOut, KnowledgeDocDetailOut, KnowledgeDocOut, VersionDiffOut
+from shared_schemas.knowledge import AssignNodeRequest, BatchDocRequest, BatchFailedItem, BatchResultOut, DocRejectRequest, DocUpdateContent, DocVersionOut, KnowledgeDocDetailOut, KnowledgeDocOut, VersionDiffOut
 
 from app.deps import get_current_user, get_db, get_tenant_id, require_role
 from app.services.audit_service import AuditService
@@ -46,6 +46,72 @@ async def list_pending_docs(
         data=[KnowledgeDocOut.model_validate(d) for d in docs],
         meta=PaginationMeta(page=page, page_size=page_size, total=total),
     )
+
+
+# --- Batch operations (must be before /{doc_id} routes) ---
+
+
+@router.post("/batch/review", response_model=DataResponse[BatchResultOut])
+async def batch_review(
+    body: BatchDocRequest,
+    db: AsyncSession = Depends(get_db),
+    tenant_id: uuid.UUID = Depends(get_tenant_id),
+    current_user: User = require_role("reviewer"),
+):
+    svc = DocService(db, tenant_id)
+    audit = AuditService(db, tenant_id, current_user.id)
+    succeeded, failed = [], []
+    for doc_id in body.doc_ids:
+        try:
+            doc = await svc.review(doc_id)
+            await audit.log("review", "knowledge_doc", doc_id, project_id=doc.project_id)
+            succeeded.append(doc_id)
+        except Exception as e:
+            failed.append(BatchFailedItem(id=doc_id, reason=str(e)))
+    return DataResponse(data=BatchResultOut(succeeded=succeeded, failed=failed))
+
+
+@router.post("/batch/publish", response_model=DataResponse[BatchResultOut])
+async def batch_publish(
+    body: BatchDocRequest,
+    db: AsyncSession = Depends(get_db),
+    tenant_id: uuid.UUID = Depends(get_tenant_id),
+    current_user: User = require_role("project_admin"),
+):
+    svc = DocService(db, tenant_id)
+    audit = AuditService(db, tenant_id, current_user.id)
+    succeeded, failed = [], []
+    for doc_id in body.doc_ids:
+        try:
+            doc = await svc.publish(doc_id)
+            await audit.log("publish", "knowledge_doc", doc_id, project_id=doc.project_id)
+            succeeded.append(doc_id)
+        except Exception as e:
+            failed.append(BatchFailedItem(id=doc_id, reason=str(e)))
+    return DataResponse(data=BatchResultOut(succeeded=succeeded, failed=failed))
+
+
+@router.post("/batch/reject", response_model=DataResponse[BatchResultOut])
+async def batch_reject(
+    body: BatchDocRequest,
+    db: AsyncSession = Depends(get_db),
+    tenant_id: uuid.UUID = Depends(get_tenant_id),
+    current_user: User = require_role("reviewer"),
+):
+    svc = DocService(db, tenant_id)
+    audit = AuditService(db, tenant_id, current_user.id)
+    succeeded, failed = [], []
+    for doc_id in body.doc_ids:
+        try:
+            doc = await svc.reject(doc_id)
+            await audit.log("reject", "knowledge_doc", doc_id, project_id=doc.project_id)
+            succeeded.append(doc_id)
+        except Exception as e:
+            failed.append(BatchFailedItem(id=doc_id, reason=str(e)))
+    return DataResponse(data=BatchResultOut(succeeded=succeeded, failed=failed))
+
+
+# --- Single doc operations ---
 
 
 @router.get("/{doc_id}", response_model=DataResponse[KnowledgeDocDetailOut])

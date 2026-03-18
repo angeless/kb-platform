@@ -109,3 +109,17 @@ class DocUpdateContent(BaseModel):
 
 class DocRejectRequest(BaseModel):
     reject_reason: str = Field(..., min_length=1)
+
+
+class BatchDocRequest(BaseModel):
+    doc_ids: list[UUID] = Field(..., min_length=1, max_length=50)
+
+
+class BatchFailedItem(BaseModel):
+    id: UUID
+    reason: str
+
+
+class BatchResultOut(BaseModel):
+    succeeded: list[UUID]
+    failed: list[BatchFailedItem]
