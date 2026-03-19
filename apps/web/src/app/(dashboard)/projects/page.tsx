@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { api, ApiClientError } from "@/lib/api";
 
 interface Project {
@@ -122,9 +123,10 @@ export default function ProjectsPage() {
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {projects.map((project) => (
-            <div
+            <Link
+              href={`/projects/${project.id}`}
               key={project.id}
-              className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm transition-shadow hover:shadow-md"
+              className="block rounded-xl border border-gray-200 bg-white p-5 shadow-sm transition-shadow hover:shadow-md"
             >
               <div className="mb-3 flex items-start justify-between">
                 <h3 className="font-semibold text-gray-900">{project.name}</h3>
@@ -140,7 +142,7 @@ export default function ProjectsPage() {
               <p className="text-xs text-gray-400">
                 创建于 {new Date(project.created_at).toLocaleDateString("zh-CN")}
               </p>
-            </div>
+            </Link>
           ))}
         </div>
       )}
