@@ -84,12 +84,15 @@ export default function ProjectDetailPage() {
       </div>
 
       {/* Quick Stats */}
-      <div className="mb-6 grid grid-cols-4 gap-4">
+      <div className="mb-6 grid grid-cols-4 gap-3 lg:grid-cols-7">
         {[
           { label: "资料", count: assetTotal, href: `/projects/${projectId}/assets` },
-          { label: "文档", count: "—", href: `/docs?project_id=${projectId}` },
-          { label: "架构", count: "—", href: `/architectures?project_id=${projectId}` },
-          { label: "任务", count: "—", href: `/jobs?project_id=${projectId}` },
+          { label: "文档", count: "—", href: `/projects/${projectId}/docs` },
+          { label: "架构", count: "—", href: `/projects/${projectId}/architectures` },
+          { label: "任务", count: "—", href: `/projects/${projectId}/jobs` },
+          { label: "检索", count: "—", href: `/projects/${projectId}/search` },
+          { label: "冲突", count: "—", href: `/projects/${projectId}/conflicts` },
+          { label: "导出", count: "—", href: `/projects/${projectId}/exports` },
         ].map((stat) => (
           <Link
             key={stat.label}
