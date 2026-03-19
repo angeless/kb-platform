@@ -1,0 +1,72 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "title": "API Requests by Endpoint",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum by (path) (rate(http_requests_total{path=~\"/v1/docs.*|/v1/projects.*\"}[5m]))",
+          "legendFormat": "{{path}}"
+        }
+      ]
+    },
+    {
+      "title": "Upload / Ingestion Rate",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{path=~\"/v1/assets/upload.*\", method=\"POST\"}[5m]))",
+          "legendFormat": "Uploads/s"
+        },
+        {
+          "expr": "sum(rate(http_requests_total{path=~\"/v1/ingestion.*\", method=\"POST\"}[5m]))",
+          "legendFormat": "Ingestions/s"
+        }
+      ]
+    },
+    {
+      "title": "Auth Activity",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{path=\"/v1/auth/login\", method=\"POST\"}[5m]))",
+          "legendFormat": "Logins/s"
+        },
+        {
+          "expr": "sum(rate(http_requests_total{path=\"/v1/auth/register\", method=\"POST\"}[5m]))",
+          "legendFormat": "Registrations/s"
+        }
+      ]
+    },
+    {
+      "title": "Search Activity",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{path=~\"/v1/search.*\"}[5m]))",
+          "legendFormat": "Searches/s"
+        }
+      ]
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["kb-platform", "business"],
+  "templating": { "list": [] },
+  "time": { "from": "now-1h", "to": "now" },
+  "title": "KB Platform - Business Metrics",
+  "uid": "kb-business-metrics"
+}

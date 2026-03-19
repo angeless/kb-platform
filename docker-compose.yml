@@ -87,13 +87,14 @@ services:
       timeout: 5s
       retries: 5
       start_period: 15s
+    stop_grace_period: 30s
     restart: unless-stopped
 
   ingestion-worker:
     build:
       context: .
       dockerfile: infra/docker/ingestion-worker.Dockerfile
-    command: celery -A worker.celery_app worker --loglevel=info -Q ingestion -c 2
+    command: celery -A worker.celery_app worker --loglevel=info -Q ingestion -c 2 --soft-time-limit=25 --time-limit=30
     environment:
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
@@ -112,13 +113,14 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+    stop_grace_period: 35s
     restart: unless-stopped
 
   pipeline-worker:
     build:
       context: .
       dockerfile: infra/docker/pipeline-worker.Dockerfile
-    command: celery -A worker.celery_app worker --loglevel=info -Q pipeline -c 2
+    command: celery -A worker.celery_app worker --loglevel=info -Q pipeline -c 2 --soft-time-limit=25 --time-limit=30
     environment:
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
@@ -137,13 +139,14 @@ services:
         condition: service_healthy
       api:
         condition: service_healthy
+    stop_grace_period: 35s
     restart: unless-stopped
 
   ai-orchestrator:
     build:
       context: .
       dockerfile: infra/docker/ai-orchestrator.Dockerfile
-    command: celery -A orchestrator.celery_app worker --loglevel=info -Q ai -c 2
+    command: celery -A orchestrator.celery_app worker --loglevel=info -Q ai -c 2 --soft-time-limit=25 --time-limit=30
     environment:
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
@@ -159,6 +162,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    stop_grace_period: 35s
     restart: unless-stopped
 
 volumes:

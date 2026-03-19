@@ -1,11 +1,16 @@
 """FastAPI application factory."""
 
+import logging
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from shared_config.settings import get_settings
 from shared_errors import register_exception_handlers
 
+from .logging_config import setup_logging
+from .middleware.metrics import MetricsMiddleware
 from .middleware.rate_limit import RateLimitMiddleware
 from .middleware.request_id import RequestIdMiddleware
 from .routers.health import router as health_router
@@ -24,13 +29,31 @@ from .routers.audit import router as audit_router
 from .routers.ws import router as ws_router
 from .routers.export import router as export_router
 
+logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan: startup and shutdown hooks."""
+    logger.info("KB Platform API starting up")
+    yield
+    # Shutdown: close DB pool, Redis, flush logs
+    logger.info("KB Platform API shutting down — closing connections")
+    from shared_models.database import engine
+    if engine is not None:
+        await engine.dispose()
+        logger.info("Database connection pool closed")
+    logging.shutdown()
+
 
 def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
-    app = FastAPI(title="KB Platform API", version="0.35.0")
+    setup_logging()
+    app = FastAPI(title="KB Platform API", version="0.35.0", lifespan=lifespan)
 
     # Middleware (order matters: first added = outermost)
     app.add_middleware(RequestIdMiddleware)
+    app.add_middleware(MetricsMiddleware)
     app.add_middleware(RateLimitMiddleware)
 
     # CORS middleware (outermost — added last so it wraps everything)
