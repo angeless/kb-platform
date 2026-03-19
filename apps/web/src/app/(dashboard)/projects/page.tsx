@@ -1,65 +1,43 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
-import { api, ApiClientError } from "@/lib/api";
-
-interface Project {
-  id: string;
-  name: string;
-  industry_hint: string | null;
-  status: string;
-  created_at: string;
-}
+import { ApiClientError } from "@/lib/api";
+import { useProjects, useCreateProject } from "@/hooks/useProjects";
 
 export default function ProjectsPage() {
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [total, setTotal] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState("");
+  const { data, isLoading, error } = useProjects();
+  const createProject = useCreateProject();
 
   // Create project form
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState("");
   const [newIndustry, setNewIndustry] = useState("");
-  const [creating, setCreating] = useState(false);
 
-  const fetchProjects = async () => {
-    setIsLoading(true);
-    try {
-      const resp = await api.get<Project[]>("/v1/projects?page=1&page_size=50");
-      setProjects(resp.data);
-      setTotal(resp.meta?.total ?? resp.data.length);
-    } catch (e) {
-      setError(e instanceof ApiClientError ? e.message : "加载项目失败");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchProjects();
-  }, []);
+  const projects = data?.data ?? [];
+  const total = data?.total ?? 0;
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newName.trim()) return;
-    setCreating(true);
     try {
-      await api.post("/v1/projects", {
+      await createProject.mutateAsync({
         name: newName,
         industry_hint: newIndustry || null,
       });
       setNewName("");
       setNewIndustry("");
       setShowCreate(false);
-      await fetchProjects();
-    } catch (e) {
-      setError(e instanceof ApiClientError ? e.message : "创建失败");
-    } finally {
-      setCreating(false);
+    } catch {
+      // error is available via createProject.error
     }
   };
+
+  const errorMessage =
+    error instanceof ApiClientError ? error.message :
+    createProject.error instanceof ApiClientError ? createProject.error.message :
+    error ? "加载项目失败" :
+    createProject.error ? "创建失败" : "";
 
   return (
     <div>
@@ -76,9 +54,9 @@ export default function ProjectsPage() {
         </button>
       </div>
 
-      {error && (
+      {errorMessage && (
         <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-600">
-          {error}
+          {errorMessage}
         </div>
       )}
 
@@ -102,10 +80,10 @@ export default function ProjectsPage() {
             />
             <button
               type="submit"
-              disabled={creating}
+              disabled={createProject.isPending}
               className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50"
             >
-              {creating ? "创建中..." : "创建"}
+              {createProject.isPending ? "创建中..." : "创建"}
             </button>
           </form>
         </div>
@@ -117,7 +95,7 @@ export default function ProjectsPage() {
         <div className="py-12 text-center">
           <p className="text-gray-400">还没有项目</p>
           <p className="mt-1 text-sm text-gray-400">
-            点击"新建项目"开始构建知识系统
+            点击&ldquo;新建项目&rdquo;开始构建知识系统
           </p>
         </div>
       ) : (

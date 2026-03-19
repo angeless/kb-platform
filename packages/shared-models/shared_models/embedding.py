@@ -6,6 +6,11 @@ from sqlalchemy import ForeignKey, Index, Integer, String
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
+try:
+    from pgvector.sqlalchemy import Vector
+except ImportError:  # pragma: no cover — pgvector optional at import time
+    Vector = None  # type: ignore[assignment,misc]
+
 from .base import Base
 
 
@@ -24,5 +29,7 @@ class DocEmbedding(Base):
     )
     version: Mapped[int] = mapped_column(Integer, nullable=False)
     embedding: Mapped[list] = mapped_column(JSONB, nullable=False)
+    # pgvector native column — coexists with JSONB during migration period
+    embedding_vec = mapped_column(Vector(1536), nullable=True) if Vector else None
     model_name: Mapped[str] = mapped_column(String(100), nullable=False)
     dimensions: Mapped[int] = mapped_column(Integer, nullable=False)

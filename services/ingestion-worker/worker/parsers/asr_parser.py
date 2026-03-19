@@ -10,6 +10,7 @@ Conforms to the parser interface: parse(content: bytes, filename: str) -> list[d
 import logging
 import os
 import tempfile
+import threading
 
 logger = logging.getLogger(__name__)
 
@@ -19,17 +20,20 @@ WHISPER_MODEL = os.environ.get("WHISPER_MODEL", "base")
 # Minimum segment text length to keep
 MIN_SEGMENT_CHARS = 5
 
-# Cache the loaded model to avoid reloading on every parse call
+# Thread-safe model cache (double-checked locking pattern)
+_model_lock = threading.Lock()
 _whisper_model = None
 
 
 def _get_model():
-    """Load and cache the Whisper model."""
+    """Load and cache the Whisper model (thread-safe)."""
     global _whisper_model
     if _whisper_model is None:
-        import whisper
-        logger.info("Loading Whisper model '%s'...", WHISPER_MODEL)
-        _whisper_model = whisper.load_model(WHISPER_MODEL)
+        with _model_lock:
+            if _whisper_model is None:
+                import whisper
+                logger.info("Loading Whisper model '%s'...", WHISPER_MODEL)
+                _whisper_model = whisper.load_model(WHISPER_MODEL)
     return _whisper_model
 
 

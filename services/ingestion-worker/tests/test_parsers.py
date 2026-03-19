@@ -289,3 +289,34 @@ class TestAsrParser:
         from worker.parsers import get_parser, is_parseable
         assert get_parser("audio") is not None
         assert is_parseable("audio") is True
+
+    def test_asr_concurrent_model_loading(self):
+        """Concurrent calls should not crash or deadlock (thread-safety test)."""
+        import threading
+        from unittest.mock import MagicMock
+
+        mock_model = MagicMock()
+        mock_model.transcribe.return_value = self._mock_transcribe_result()
+
+        results = [None, None]
+        errors = [None, None]
+
+        def run_parse(index):
+            try:
+                with patch("worker.parsers.asr_parser._get_model", return_value=mock_model):
+                    from worker.parsers.asr_parser import parse as asr_parse
+                    results[index] = asr_parse(b"fake audio", f"thread_{index}.mp3")
+            except Exception as e:
+                errors[index] = e
+
+        t1 = threading.Thread(target=run_parse, args=(0,))
+        t2 = threading.Thread(target=run_parse, args=(1,))
+        t1.start()
+        t2.start()
+        t1.join(timeout=10)
+        t2.join(timeout=10)
+
+        assert errors[0] is None, f"Thread 0 failed: {errors[0]}"
+        assert errors[1] is None, f"Thread 1 failed: {errors[1]}"
+        assert len(results[0]) == 2
+        assert len(results[1]) == 2

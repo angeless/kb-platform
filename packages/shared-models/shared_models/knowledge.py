@@ -6,8 +6,17 @@ from datetime import datetime
 from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.types import UserDefinedType
 
 from .base import Base
+
+
+class TSVector(UserDefinedType):
+    """Custom type for PostgreSQL tsvector."""
+    cache_ok = True
+
+    def get_col_spec(self) -> str:
+        return "tsvector"
 
 
 class KnowledgeDoc(Base):
@@ -15,6 +24,7 @@ class KnowledgeDoc(Base):
     __table_args__ = (
         Index("ix_knowledge_doc_project_status", "project_id", "status"),
         Index("ix_knowledge_doc_node", "node_id"),
+        Index("ix_knowledge_doc_search_vector", "search_vector", postgresql_using="gin"),
     )
 
     project_id: Mapped[uuid.UUID] = mapped_column(
@@ -27,6 +37,7 @@ class KnowledgeDoc(Base):
     title: Mapped[str] = mapped_column(String(500), nullable=False)
     current_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="draft")
+    search_vector = mapped_column(TSVector(), nullable=True)
 
     # Relationships
     versions = relationship("KnowledgeDocVersion", back_populates="doc", lazy="selectin")
@@ -36,6 +47,7 @@ class KnowledgeDocVersion(Base):
     __tablename__ = "knowledge_doc_version"
     __table_args__ = (
         Index("ix_doc_version_doc_version", "doc_id", "version"),
+        Index("ix_knowledge_doc_version_search_vector", "search_vector", postgresql_using="gin"),
     )
 
     doc_id: Mapped[uuid.UUID] = mapped_column(
@@ -47,6 +59,7 @@ class KnowledgeDocVersion(Base):
     created_by: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("user.id"), nullable=False
     )
+    search_vector = mapped_column(TSVector(), nullable=True)
 
     # Relationships
     doc = relationship("KnowledgeDoc", back_populates="versions")

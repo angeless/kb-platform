@@ -67,7 +67,8 @@ async def batch_review(
             await audit.log("review", "knowledge_doc", doc_id, project_id=doc.project_id)
             succeeded.append(doc_id)
         except Exception as e:
-            failed.append(BatchFailedItem(id=doc_id, reason=str(e)))
+            error_code = getattr(e, "error_code", "OPERATION_FAILED")
+            failed.append(BatchFailedItem(id=doc_id, error_code=str(error_code), message=str(e)))
     return DataResponse(data=BatchResultOut(succeeded=succeeded, failed=failed))
 
 
@@ -87,7 +88,8 @@ async def batch_publish(
             await audit.log("publish", "knowledge_doc", doc_id, project_id=doc.project_id)
             succeeded.append(doc_id)
         except Exception as e:
-            failed.append(BatchFailedItem(id=doc_id, reason=str(e)))
+            error_code = getattr(e, "error_code", "OPERATION_FAILED")
+            failed.append(BatchFailedItem(id=doc_id, error_code=str(error_code), message=str(e)))
     return DataResponse(data=BatchResultOut(succeeded=succeeded, failed=failed))
 
 
@@ -107,7 +109,8 @@ async def batch_reject(
             await audit.log("reject", "knowledge_doc", doc_id, project_id=doc.project_id)
             succeeded.append(doc_id)
         except Exception as e:
-            failed.append(BatchFailedItem(id=doc_id, reason=str(e)))
+            error_code = getattr(e, "error_code", "OPERATION_FAILED")
+            failed.append(BatchFailedItem(id=doc_id, error_code=str(error_code), message=str(e)))
     return DataResponse(data=BatchResultOut(succeeded=succeeded, failed=failed))
 
 

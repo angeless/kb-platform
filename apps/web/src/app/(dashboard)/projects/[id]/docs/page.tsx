@@ -1,50 +1,19 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { api, ApiClientError } from "@/lib/api";
 import { StatusBadge } from "@/components/status-badge";
-
-interface Doc {
-  id: string;
-  title: string;
-  doc_type: string;
-  status: string;
-  current_version: number;
-  node_id: string | null;
-  created_at: string;
-}
+import { useDocs } from "@/hooks/useDocs";
 
 export default function ProjectDocsPage() {
   const params = useParams();
   const projectId = params.id as string;
-
-  const [docs, setDocs] = useState<Doc[]>([]);
-  const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState("");
 
-  const fetchDocs = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      const resp = await api.get<Doc[]>(
-        `/v1/docs?project_id=${projectId}&page=${page}&page_size=20`,
-      );
-      setDocs(resp.data);
-      setTotal(resp.meta?.total ?? 0);
-    } catch (e) {
-      setError(e instanceof ApiClientError ? e.message : "加载失败");
-    } finally {
-      setIsLoading(false);
-    }
-  }, [projectId, page]);
-
-  useEffect(() => {
-    fetchDocs();
-  }, [fetchDocs]);
-
+  const { data, isLoading, error } = useDocs(projectId, page);
+  const docs = data?.data ?? [];
+  const total = data?.total ?? 0;
   const totalPages = Math.ceil(total / 20);
 
   return (
@@ -68,7 +37,7 @@ export default function ProjectDocsPage() {
         </Link>
       </div>
 
-      {error && <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-600">{error}</div>}
+      {error && <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-600">{error instanceof Error ? error.message : "加载失败"}</div>}
 
       {isLoading ? (
         <div className="py-12 text-center text-gray-400">加载中...</div>

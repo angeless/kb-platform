@@ -117,7 +117,8 @@ class BatchDocRequest(BaseModel):
 
 class BatchFailedItem(BaseModel):
     id: UUID
-    reason: str
+    error_code: str
+    message: str
 
 
 class BatchResultOut(BaseModel):
