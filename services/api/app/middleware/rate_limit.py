@@ -13,7 +13,7 @@ from shared_config.settings import get_settings
 logger = logging.getLogger(__name__)
 
 # Paths exempt from rate limiting
-EXEMPT_PATHS = {"/healthz", "/readyz", "/docs", "/openapi.json", "/redoc"}
+EXEMPT_PATHS = {"/healthz", "/readyz", "/docs", "/openapi.json", "/redoc", "/api/health/ready", "/api/versions", "/metrics"}
 
 # Paths with stricter upload rate limits
 UPLOAD_PATHS = {"/v1/assets/upload", "/v1/assets/import-url", "/v1/assets/import-archive"}

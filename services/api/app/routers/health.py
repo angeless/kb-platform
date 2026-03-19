@@ -1,12 +1,24 @@
 """Health check endpoints."""
 
+import asyncio
+import time
+
+import boto3
+import redis.asyncio as aioredis
+from botocore.exceptions import ClientError, EndpointConnectionError
 from fastapi import APIRouter, Depends
+from fastapi.responses import JSONResponse, Response
+from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.deps import get_db
+from shared_config.settings import get_settings
 
 router = APIRouter(tags=["health"])
+
+# Per-check timeout in seconds
+_CHECK_TIMEOUT = 1.0
 
 
 @router.get("/healthz")
@@ -30,3 +42,116 @@ async def api_versions():
             {"version": "v1", "status": "active", "deprecation_date": None}
         ]
     }
+
+
+@router.get("/metrics")
+async def metrics():
+    """Prometheus metrics endpoint."""
+    return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+
+# --- Deep health check ---
+
+
+async def _check_postgres(db: AsyncSession) -> dict:
+    """Check PostgreSQL connectivity via SELECT 1."""
+    start = time.monotonic()
+    try:
+        await asyncio.wait_for(db.execute(text("SELECT 1")), timeout=_CHECK_TIMEOUT)
+        latency = int((time.monotonic() - start) * 1000)
+        return {"status": "ok", "latency_ms": latency, "message": "Connected"}
+    except asyncio.TimeoutError:
+        latency = int((time.monotonic() - start) * 1000)
+        return {"status": "error", "latency_ms": latency, "message": "Timeout"}
+    except Exception as e:
+        latency = int((time.monotonic() - start) * 1000)
+        return {"status": "error", "latency_ms": latency, "message": str(e)[:200]}
+
+
+async def _check_redis() -> dict:
+    """Check Redis connectivity via PING."""
+    settings = get_settings()
+    start = time.monotonic()
+    try:
+        r = aioredis.Redis(
+            host=settings.redis_host,
+            port=settings.redis_port,
+            db=settings.redis_db,
+            socket_connect_timeout=_CHECK_TIMEOUT,
+            socket_timeout=_CHECK_TIMEOUT,
+        )
+        try:
+            pong = await asyncio.wait_for(r.ping(), timeout=_CHECK_TIMEOUT)
+            latency = int((time.monotonic() - start) * 1000)
+            if pong:
+                return {"status": "ok", "latency_ms": latency, "message": "PING successful"}
+            return {"status": "error", "latency_ms": latency, "message": "PING returned False"}
+        finally:
+            await r.aclose()
+    except asyncio.TimeoutError:
+        latency = int((time.monotonic() - start) * 1000)
+        return {"status": "error", "latency_ms": latency, "message": "Timeout"}
+    except Exception as e:
+        latency = int((time.monotonic() - start) * 1000)
+        return {"status": "error", "latency_ms": latency, "message": str(e)[:200]}
+
+
+async def _check_minio() -> dict:
+    """Check MinIO/S3 connectivity via head_bucket."""
+    settings = get_settings()
+    start = time.monotonic()
+    try:
+
+        def _do_check():
+            client = boto3.client(
+                "s3",
+                endpoint_url=settings.s3_endpoint,
+                aws_access_key_id=settings.s3_access_key,
+                aws_secret_access_key=settings.s3_secret_key,
+                region_name=settings.s3_region,
+            )
+            client.head_bucket(Bucket=settings.s3_bucket)
+
+        await asyncio.wait_for(
+            asyncio.get_event_loop().run_in_executor(None, _do_check),
+            timeout=_CHECK_TIMEOUT,
+        )
+        latency = int((time.monotonic() - start) * 1000)
+        return {"status": "ok", "latency_ms": latency, "message": "Bucket access OK"}
+    except asyncio.TimeoutError:
+        latency = int((time.monotonic() - start) * 1000)
+        return {"status": "error", "latency_ms": latency, "message": "Timeout"}
+    except (ClientError, EndpointConnectionError, Exception) as e:
+        latency = int((time.monotonic() - start) * 1000)
+        return {"status": "error", "latency_ms": latency, "message": str(e)[:200]}
+
+
+@router.get("/api/health/ready")
+async def health_ready(db: AsyncSession = Depends(get_db)):
+    """Deep health check — checks PostgreSQL, Redis, and MinIO connectivity."""
+    pg_result, redis_result, minio_result = await asyncio.gather(
+        _check_postgres(db),
+        _check_redis(),
+        _check_minio(),
+    )
+
+    # Determine overall status
+    if pg_result["status"] == "error":
+        overall = "unhealthy"
+    elif redis_result["status"] == "error" or minio_result["status"] == "error":
+        overall = "degraded"
+    else:
+        overall = "ok"
+
+    body = {
+        "status": overall,
+        "version": "0.35.0",
+        "checks": {
+            "postgres": pg_result,
+            "redis": redis_result,
+            "minio": minio_result,
+        },
+    }
+
+    status_code = 503 if overall == "unhealthy" else 200
+    return JSONResponse(content=body, status_code=status_code)
