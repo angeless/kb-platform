@@ -23,4 +23,9 @@ celery_app.conf.update(
     worker_prefetch_multiplier=1,
     task_default_retry_delay=60,
     task_max_retries=3,
+    task_routes={
+        "ingestion.*": {"queue": "ingestion"},
+        "pipeline.*": {"queue": "pipeline"},
+        "orchestrator.*": {"queue": "ai"},
+    },
 )

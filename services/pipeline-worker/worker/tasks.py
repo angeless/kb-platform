@@ -63,7 +63,7 @@ def _publish_event(project_id: uuid.UUID, job_id: uuid.UUID, stage: str, status:
         logger.warning("Failed to publish stage event: %s", e)
 
 
-@celery_app.task(bind=True, max_retries=3, default_retry_delay=60)
+@celery_app.task(bind=True, name="pipeline.run_pipeline", max_retries=3, default_retry_delay=60)
 def run_pipeline(self, project_id: str, job_id: str, asset_ids: list[str], user_id: str) -> dict:
     """Execute the full knowledge processing pipeline (stages 3-9).
 

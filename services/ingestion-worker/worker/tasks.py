@@ -107,6 +107,10 @@ def parse_asset(self, asset_id: str, job_id: str) -> dict:
             session.commit()
 
             logger.info("Parsed asset %s: %d chunks created", asset_id, len(chunks))
+
+            # Trigger pipeline worker to process parsed chunks
+            _trigger_pipeline(session, asset, job_uuid)
+
             return {"status": "success", "chunks": len(chunks)}
 
         except Exception as e:
@@ -122,6 +126,40 @@ def parse_asset(self, asset_id: str, job_id: str) -> dict:
 
             logger.error("Failed to parse asset %s: %s", asset_id, e)
             return {"status": "error", "message": str(e)}
+
+
+def _trigger_pipeline(session: Session, asset: Asset, ingest_job_id: uuid.UUID) -> None:
+    """After ingestion completes, create and dispatch a pipeline job."""
+    try:
+        # Create a pipeline job
+        pipeline_job = Job(
+            id=uuid.uuid4(),
+            project_id=asset.project_id,
+            job_type="kb_generate",
+            status="pending",
+            retry_count=0,
+            created_by=asset.uploaded_by,
+        )
+        session.add(pipeline_job)
+        session.commit()
+
+        # Dispatch to pipeline-worker
+        celery_app.send_task(
+            "pipeline.run_pipeline",
+            args=[
+                str(asset.project_id),
+                str(pipeline_job.id),
+                [str(asset.id)],
+                str(asset.uploaded_by),
+            ],
+            queue="pipeline",
+        )
+        logger.info(
+            "Triggered pipeline for asset %s, pipeline job %s",
+            asset.id, pipeline_job.id,
+        )
+    except Exception as e:
+        logger.warning("Failed to trigger pipeline after ingestion: %s", e)
 
 
 def _publish_job_event(job: Job, error_message: str | None = None) -> None:
