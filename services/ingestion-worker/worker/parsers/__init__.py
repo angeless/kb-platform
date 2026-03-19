@@ -1,6 +1,6 @@
 """Parser registry — maps asset_type to parser module."""
 
-from . import ocr_parser, pdf_parser, text_parser
+from . import asr_parser, ocr_parser, pdf_parser, text_parser
 
 # Maps asset_type -> parser module (must have parse(content: bytes, filename: str) -> list[dict])
 PARSERS: dict[str, object] = {
@@ -8,6 +8,7 @@ PARSERS: dict[str, object] = {
     "pdf": pdf_parser,
     "doc": pdf_parser,  # .doc/.docx files go through PDF pipeline
     "image": ocr_parser,
+    "audio": asr_parser,
 }
 
 # Asset types that have a registered parser

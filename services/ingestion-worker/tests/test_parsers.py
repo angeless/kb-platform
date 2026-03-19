@@ -193,3 +193,99 @@ class TestOcrParser:
         from worker.parsers import get_parser, is_parseable
         assert get_parser("image") is not None
         assert is_parseable("image") is True
+
+
+class TestAsrParser:
+    """Tests for the audio ASR parser using mocked Whisper."""
+
+    def _mock_transcribe_result(self):
+        """Return a mock Whisper transcription result."""
+        return {
+            "text": "Hello world. This is a test transcription.",
+            "language": "en",
+            "segments": [
+                {"text": "Hello world.", "start": 0.0, "end": 2.5},
+                {"text": "This is a test transcription.", "start": 2.5, "end": 5.0},
+            ],
+        }
+
+    def test_asr_parses_segments(self):
+        """ASR should produce chunks from Whisper segments."""
+        from unittest.mock import MagicMock
+        mock_model = MagicMock()
+        mock_model.transcribe.return_value = self._mock_transcribe_result()
+
+        with patch("worker.parsers.asr_parser._get_model", return_value=mock_model):
+            from worker.parsers.asr_parser import parse as asr_parse
+            result = asr_parse(b"fake audio bytes", "test.mp3")
+
+        assert len(result) == 2
+        assert "Hello world" in result[0]["content_text"]
+        assert result[0]["page_or_timestamp"] == "00:00:00-00:00:02"
+        assert result[0]["tags"]["source_type"] == "audio"
+        assert result[0]["tags"]["language"] == "en"
+        assert result[1]["page_or_timestamp"] == "00:00:02-00:00:05"
+
+    def test_asr_empty_transcription(self):
+        """Empty transcription should return empty list."""
+        from unittest.mock import MagicMock
+        mock_model = MagicMock()
+        mock_model.transcribe.return_value = {"text": "", "language": "en", "segments": []}
+
+        with patch("worker.parsers.asr_parser._get_model", return_value=mock_model):
+            from worker.parsers.asr_parser import parse as asr_parse
+            result = asr_parse(b"silence", "silent.wav")
+
+        assert result == []
+
+    def test_asr_fallback_single_chunk(self):
+        """If no segments but full text exists, should return single chunk."""
+        from unittest.mock import MagicMock
+        mock_model = MagicMock()
+        mock_model.transcribe.return_value = {
+            "text": "Full text without segments available.",
+            "language": "en",
+            "segments": [],
+        }
+
+        with patch("worker.parsers.asr_parser._get_model", return_value=mock_model):
+            from worker.parsers.asr_parser import parse as asr_parse
+            result = asr_parse(b"audio data", "recording.m4a")
+
+        assert len(result) == 1
+        assert "Full text" in result[0]["content_text"]
+        assert result[0]["page_or_timestamp"] == "00:00:00-full"
+
+    def test_asr_graceful_without_whisper(self):
+        """ASR should return empty list when whisper is not importable."""
+        with patch.dict("sys.modules", {"whisper": None}):
+            from importlib import reload
+            from worker.parsers import asr_parser
+            reload(asr_parser)
+            result = asr_parser.parse(b"audio", "test.mp3")
+            assert result == []
+            reload(asr_parser)
+
+    def test_asr_tags_contain_metadata(self):
+        """Chunks should have correct audio metadata in tags."""
+        from unittest.mock import MagicMock
+        mock_model = MagicMock()
+        mock_model.transcribe.return_value = self._mock_transcribe_result()
+
+        with patch("worker.parsers.asr_parser._get_model", return_value=mock_model):
+            from worker.parsers.asr_parser import parse as asr_parse
+            result = asr_parse(b"audio", "meeting.mp3")
+
+        assert len(result) >= 1
+        tags = result[0]["tags"]
+        assert tags["source_type"] == "audio"
+        assert tags["filename"] == "meeting.mp3"
+        assert tags["language"] == "en"
+        assert "start_seconds" in tags
+        assert "end_seconds" in tags
+
+    def test_asr_registered_for_audio_type(self):
+        """ASR parser should be registered for 'audio' asset type."""
+        from worker.parsers import get_parser, is_parseable
+        assert get_parser("audio") is not None
+        assert is_parseable("audio") is True
