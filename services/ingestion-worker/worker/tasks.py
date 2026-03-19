@@ -115,14 +115,17 @@ def parse_asset(self, asset_id: str, job_id: str) -> dict:
 
         except Exception as e:
             session.rollback()
+            session.close()
 
-            # Reload asset in new transaction to update status
-            asset = session.execute(
-                select(Asset).where(Asset.id == asset_uuid)
-            ).scalar_one()
-            asset.parse_status = "failed"
-            _update_job_failed(session, job_uuid, str(e))
-            session.commit()
+            # Use a fresh session for error status updates (T-33-10 fix)
+            with _get_sync_session() as err_session:
+                asset = err_session.execute(
+                    select(Asset).where(Asset.id == asset_uuid)
+                ).scalar_one_or_none()
+                if asset:
+                    asset.parse_status = "failed"
+                _update_job_failed(err_session, job_uuid, str(e))
+                err_session.commit()
 
             logger.error("Failed to parse asset %s: %s", asset_id, e)
             return {"status": "error", "message": str(e)}

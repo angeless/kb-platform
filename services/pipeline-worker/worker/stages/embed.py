@@ -1,12 +1,13 @@
 """Stage 8: Generate embeddings for newly created documents.
 
-Calls AI Orchestrator to produce vector embeddings for semantic search.
+Uses deterministic hash-based pseudo-embeddings as a placeholder.
+Real semantic embeddings will be added in v0.34 (pgvector upgrade).
 """
 
+import hashlib
 import logging
 import uuid
 
-import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -15,14 +16,17 @@ from shared_models import DocEmbedding, KnowledgeDoc, KnowledgeDocVersion
 logger = logging.getLogger(__name__)
 
 DEFAULT_MODEL = "text-embedding-3-small"
+FALLBACK_DIMENSIONS = 256
 
 
 def generate_embeddings(
     db: Session,
     doc_ids: list[uuid.UUID],
-    orchestrator_url: str,
 ) -> int:
     """Generate embeddings for the given documents.
+
+    Uses deterministic hash-based pseudo-embeddings that enable the pipeline
+    to run end-to-end. Real embeddings will be added in v0.34.
 
     Returns:
         Number of embeddings created.
@@ -43,20 +47,7 @@ def generate_embeddings(
         ).scalar_one_or_none()
         text = f"{doc.title}\n\n{version.content_md}" if version else doc.title
 
-        try:
-            resp = httpx.post(
-                f"{orchestrator_url}/embed",
-                json={"text": text[:8000]},
-                timeout=30,
-            )
-            resp.raise_for_status()
-            embedding = resp.json().get("embedding", [])
-        except Exception as e:
-            logger.warning("Embedding failed for doc %s: %s", doc_id, e)
-            continue
-
-        if not embedding:
-            continue
+        embedding = _hash_embedding(text)
 
         # Upsert
         existing = db.execute(
@@ -82,3 +73,17 @@ def generate_embeddings(
 
     db.flush()
     return count
+
+
+def _hash_embedding(text: str, dimensions: int = FALLBACK_DIMENSIONS) -> list[float]:
+    """Generate a deterministic pseudo-embedding from text using SHA-256.
+
+    NOT a real semantic embedding — placeholder for end-to-end pipeline flow.
+    """
+    result = []
+    chunk = text[:8000].encode("utf-8")
+    for i in range(dimensions):
+        h = hashlib.sha256(chunk + i.to_bytes(4, "big")).digest()
+        val = int.from_bytes(h[:4], "big") / (2**32) * 2 - 1
+        result.append(round(val, 6))
+    return result

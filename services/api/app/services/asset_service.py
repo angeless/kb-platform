@@ -172,8 +172,9 @@ class AssetService:
 
         Returns dict with imported/skipped/errors counts.
         """
-        import zipfile
         import io
+        import os
+        import zipfile
 
         await self._verify_project(project_id)
 
@@ -196,8 +197,19 @@ class AssetService:
                     message=f"压缩包内文件数超过限制 ({max_files})",
                 )
 
+            # Security: check ALL entries for path traversal before processing any
             for entry_name in entries:
-                filename = entry_name.split("/")[-1]  # strip path, keep filename
+                normalized = os.path.normpath(entry_name)
+                if ".." in normalized.split(os.sep) or normalized.startswith("/"):
+                    raise AppException(
+                        error_code=ErrorCode.ASSET_TYPE_NOT_ALLOWED,
+                        message=f"ZIP 文件包含非法路径（路径穿越）: {entry_name}",
+                    )
+
+            for entry_name in entries:
+                # Extract safe filename (basename after normpath)
+                normalized = os.path.normpath(entry_name)
+                filename = os.path.basename(normalized)
                 if not filename:
                     continue
 
@@ -228,7 +240,6 @@ class AssetService:
                 object_path = f"{self.tenant_id}/{project_id}/{asset_id}/{filename}"
 
                 if self.storage is not None:
-                    from app.utils.storage import guess_asset_type as _guess
                     self.storage.upload_file(object_path, file_content)
 
                 from app.utils.storage import guess_asset_type

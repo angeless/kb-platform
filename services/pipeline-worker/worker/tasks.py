@@ -68,14 +68,12 @@ def run_pipeline(self, project_id: str, job_id: str, asset_ids: list[str], user_
     """Execute the full knowledge processing pipeline (stages 3-9).
 
     Called after ingestion-worker completes stages 1-2 (parsing).
+    All AI Orchestrator calls are dispatched via Celery send_task (not HTTP).
     """
     pid = uuid.UUID(project_id)
     jid = uuid.UUID(job_id)
     uid = uuid.UUID(user_id)
     aids = [uuid.UUID(a) for a in asset_ids]
-
-    settings = get_settings()
-    orchestrator_url = f"http://ai-orchestrator:{settings.app_port}"
 
     db = sync_session_factory()
     current_stage = ""
@@ -90,7 +88,7 @@ def run_pipeline(self, project_id: str, job_id: str, asset_ids: list[str], user_
         # --- Stage 3: Classify ---
         current_stage = "classify"
         _publish_event(pid, jid, current_stage, "running")
-        classification = classify_chunks(db, pid, aids, orchestrator_url)
+        classification = classify_chunks(db, pid, aids)
         _publish_event(pid, jid, current_stage, "completed")
         logger.info("Stage 3 classify: new=%d, supplement=%d, correction=%d, conflict=%d",
                      len(classification.get("new", [])),
@@ -101,20 +99,20 @@ def run_pipeline(self, project_id: str, job_id: str, asset_ids: list[str], user_
         # --- Stage 4: Architecture Draft ---
         current_stage = "architecture_draft"
         _publish_event(pid, jid, current_stage, "running")
-        arch_id = generate_architecture_draft(db, pid, classification, orchestrator_url)
+        arch_id = generate_architecture_draft(db, pid, classification)
         _publish_event(pid, jid, current_stage, "completed")
 
         # --- Stage 5: Document Generation ---
         current_stage = "doc_generate"
         _publish_event(pid, jid, current_stage, "running")
-        doc_ids = generate_documents(db, pid, arch_id, classification, orchestrator_url, uid)
+        doc_ids = generate_documents(db, pid, arch_id, classification, uid)
         _publish_event(pid, jid, current_stage, "completed")
         logger.info("Stage 5: generated %d documents", len(doc_ids))
 
         # --- Stage 6: Quality Check ---
         current_stage = "quality_check"
         _publish_event(pid, jid, current_stage, "running")
-        qc_result = quality_check(db, doc_ids, orchestrator_url)
+        qc_result = quality_check(db, doc_ids)
         _publish_event(pid, jid, current_stage, "completed")
         logger.info("Stage 6: %d passed, %d flagged",
                      len(qc_result.get("passed", [])),
@@ -130,7 +128,7 @@ def run_pipeline(self, project_id: str, job_id: str, asset_ids: list[str], user_
         # --- Stage 8: Embedding ---
         current_stage = "embed"
         _publish_event(pid, jid, current_stage, "running")
-        embed_count = generate_embeddings(db, doc_ids, orchestrator_url)
+        embed_count = generate_embeddings(db, doc_ids)
         db.commit()
         _publish_event(pid, jid, current_stage, "completed")
         logger.info("Stage 8: embedded %d documents", embed_count)
@@ -156,14 +154,20 @@ def run_pipeline(self, project_id: str, job_id: str, asset_ids: list[str], user_
     except Exception as exc:
         logger.error("Pipeline failed at stage '%s': %s", current_stage, exc)
 
-        # Update job status
+        # Update job status in a new session to avoid stale state
         try:
-            if job:
-                job.status = "failed"
-                job.error_message = f"Stage '{current_stage}' failed: {exc}"
-                db.commit()
-        except Exception:
             db.rollback()
+            new_db = sync_session_factory()
+            try:
+                job = new_db.execute(select(Job).where(Job.id == jid)).scalar_one_or_none()
+                if job:
+                    job.status = "failed"
+                    job.error_message = f"Stage '{current_stage}' failed: {exc}"
+                    new_db.commit()
+            finally:
+                new_db.close()
+        except Exception:
+            pass
 
         _publish_event(pid, jid, current_stage, "failed")
         raise self.retry(exc=exc)

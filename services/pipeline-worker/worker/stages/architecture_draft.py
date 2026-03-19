@@ -1,16 +1,17 @@
 """Stage 4: Generate or update knowledge architecture draft.
 
-Calls AI Orchestrator to propose architecture nodes based on classified content.
+Calls AI Orchestrator via Celery to propose architecture nodes based on classified content.
 """
 
 import logging
 import uuid
 
-import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from shared_models import Architecture, ArchitectureNode
+
+from ..celery_app import celery_app
 
 logger = logging.getLogger(__name__)
 
@@ -19,71 +20,78 @@ def generate_architecture_draft(
     db: Session,
     project_id: uuid.UUID,
     classification: dict,
-    orchestrator_url: str,
 ) -> uuid.UUID:
     """Generate or update architecture draft based on classification results.
+
+    Dispatches orchestrator.propose_architecture via Celery if no architecture exists.
 
     Returns:
         The architecture ID (existing or newly created).
     """
-    # Find existing draft architecture or create one
+    # Check for existing architecture (prefer published, fallback to draft)
     arch = db.execute(
         select(Architecture).where(
             Architecture.project_id == project_id,
-            Architecture.status == "draft",
+            Architecture.status == "published",
         ).order_by(Architecture.created_at.desc()).limit(1)
     ).scalar_one_or_none()
 
     if arch is None:
-        arch = Architecture(
-            id=uuid.uuid4(),
-            project_id=project_id,
-            name="自动生成架构",
-            version="0.1.0",
-            status="draft",
-        )
-        db.add(arch)
-        db.flush()
+        arch = db.execute(
+            select(Architecture).where(
+                Architecture.project_id == project_id,
+                Architecture.status == "draft",
+            ).order_by(Architecture.created_at.desc()).limit(1)
+        ).scalar_one_or_none()
 
-    # Get existing nodes for context
-    existing_nodes = db.execute(
-        select(ArchitectureNode).where(ArchitectureNode.architecture_id == arch.id)
-    ).scalars().all()
-    existing = [{"name": n.node_name, "type": n.node_type, "level": n.level} for n in existing_nodes]
+    if arch is not None:
+        logger.info("Using existing architecture %s for project %s", arch.id, project_id)
+        return arch.id
 
-    # Call AI Orchestrator for node suggestions
+    # No architecture exists — call AI Orchestrator to propose one
     try:
-        resp = httpx.post(
-            f"{orchestrator_url}/architecture-draft",
-            json={
-                "project_id": str(project_id),
-                "classification": classification,
-                "existing_nodes": existing,
-            },
-            timeout=120,
+        # Create a temporary job for the orchestrator task
+        temp_job_id = str(uuid.uuid4())
+        result = celery_app.send_task(
+            "orchestrator.propose_architecture",
+            args=[str(project_id), temp_job_id],
+            queue="ai",
         )
-        resp.raise_for_status()
-        suggestions = resp.json().get("nodes", [])
+        response = result.get(timeout=120)
+
+        if response.get("status") == "success":
+            arch_id_str = response.get("architecture_id")
+            if arch_id_str:
+                logger.info("AI Orchestrator proposed architecture %s", arch_id_str)
+                # Refresh the session to see the new architecture
+                db.expire_all()
+                return uuid.UUID(arch_id_str)
     except Exception as e:
-        logger.error("Architecture draft generation failed: %s", e)
-        suggestions = []
+        logger.error("Architecture proposal via Celery failed: %s", e)
 
-    # Create suggested nodes that don't already exist
-    existing_names = {n.node_name for n in existing_nodes}
-    for node_data in suggestions:
-        name = node_data.get("node_name", "")
-        if name and name not in existing_names:
-            node = ArchitectureNode(
-                id=uuid.uuid4(),
-                architecture_id=arch.id,
-                node_name=name,
-                node_type=node_data.get("node_type", "topic"),
-                level=node_data.get("level", 1),
-                description=node_data.get("description", ""),
-                status="draft",
-            )
-            db.add(node)
-            existing_names.add(name)
-
+    # Fallback: create a minimal architecture locally
+    arch = Architecture(
+        id=uuid.uuid4(),
+        project_id=project_id,
+        name="自动生成架构",
+        version="0.1.0",
+        status="draft",
+    )
+    db.add(arch)
     db.flush()
+
+    # Create a default root node
+    root = ArchitectureNode(
+        id=uuid.uuid4(),
+        architecture_id=arch.id,
+        node_name="知识根节点",
+        node_type="category",
+        level=1,
+        description="自动创建的根节点",
+        status="draft",
+    )
+    db.add(root)
+    db.flush()
+
+    logger.info("Created fallback architecture %s for project %s", arch.id, project_id)
     return arch.id

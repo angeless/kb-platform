@@ -1,16 +1,17 @@
 """Stage 5: Generate knowledge documents from classified chunks.
 
-Calls AI Orchestrator to synthesize chunks into structured Markdown documents.
+Calls AI Orchestrator via Celery to synthesize chunks into structured Markdown documents.
 """
 
 import logging
 import uuid
 
-import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from shared_models import ArchitectureNode, AssetChunk, KnowledgeDoc, KnowledgeDocVersion, SourceRef
+from shared_models import AssetChunk, KnowledgeDoc, KnowledgeDocVersion, SourceRef
+
+from ..celery_app import celery_app
 
 logger = logging.getLogger(__name__)
 
@@ -20,10 +21,12 @@ def generate_documents(
     project_id: uuid.UUID,
     architecture_id: uuid.UUID,
     classification: dict,
-    orchestrator_url: str,
     user_id: uuid.UUID,
 ) -> list[uuid.UUID]:
     """Generate knowledge documents for new/supplement chunks.
+
+    Dispatches orchestrator.generate_docs via Celery and waits for the result.
+    Falls back to local document creation if AI Orchestrator is unavailable.
 
     Returns:
         List of created/updated KnowledgeDoc IDs.
@@ -35,53 +38,44 @@ def generate_documents(
     if not all_ids:
         return []
 
-    # Load chunks
+    # Try AI Orchestrator via Celery
+    try:
+        temp_job_id = str(uuid.uuid4())
+        result = celery_app.send_task(
+            "orchestrator.generate_docs",
+            args=[str(project_id), temp_job_id],
+            queue="ai",
+        )
+        response = result.get(timeout=180)
+
+        if response.get("status") == "success":
+            docs_created = response.get("docs_created", 0)
+            logger.info("AI Orchestrator generated %d docs for project %s", docs_created, project_id)
+            # Orchestrator writes docs directly to DB — refresh and collect doc IDs
+            db.expire_all()
+            created_docs = db.execute(
+                select(KnowledgeDoc).where(
+                    KnowledgeDoc.project_id == project_id,
+                    KnowledgeDoc.status == "draft",
+                )
+            ).scalars().all()
+            return [d.id for d in created_docs]
+    except Exception as e:
+        logger.warning("Doc generation via Celery failed, using fallback: %s", e)
+
+    # Fallback: create raw docs from chunks locally
     chunks = db.execute(
         select(AssetChunk).where(AssetChunk.id.in_(all_ids))
     ).scalars().all()
 
-    chunk_texts = [{"chunk_id": str(c.id), "content": c.content_text} for c in chunks]
-
-    # Load architecture nodes for assignment
-    nodes = db.execute(
-        select(ArchitectureNode).where(
-            ArchitectureNode.architecture_id == architecture_id
-        )
-    ).scalars().all()
-    node_names = [{"node_id": str(n.id), "name": n.node_name, "type": n.node_type} for n in nodes]
-
-    # Call AI Orchestrator for document generation
-    try:
-        resp = httpx.post(
-            f"{orchestrator_url}/generate-docs",
-            json={
-                "project_id": str(project_id),
-                "chunks": chunk_texts,
-                "architecture_nodes": node_names,
-            },
-            timeout=180,
-        )
-        resp.raise_for_status()
-        generated = resp.json().get("documents", [])
-    except Exception as e:
-        logger.error("Document generation failed: %s", e)
-        # Fallback: create raw docs from chunks
-        generated = [{
-            "title": f"文档-{c.id.hex[:8]}",
-            "content_md": c.content_text,
-            "doc_type": "topic",
-            "node_id": None,
-            "source_chunk_ids": [str(c.id)],
-        } for c in chunks[:10]]  # Limit fallback
-
     doc_ids = []
-    for doc_data in generated:
+    for c in chunks[:10]:  # Limit fallback
         doc = KnowledgeDoc(
             id=uuid.uuid4(),
             project_id=project_id,
-            node_id=uuid.UUID(doc_data["node_id"]) if doc_data.get("node_id") else None,
-            doc_type=doc_data.get("doc_type", "topic"),
-            title=doc_data.get("title", "未命名文档"),
+            node_id=None,
+            doc_type="topic",
+            title=f"文档-{c.id.hex[:8]}",
             current_version=1,
             status="draft",
         )
@@ -92,22 +86,19 @@ def generate_documents(
             id=uuid.uuid4(),
             doc_id=doc.id,
             version=1,
-            content_md=doc_data.get("content_md", ""),
-            change_reason="Pipeline 自动生成",
+            content_md=c.content_text,
+            change_reason="Pipeline 自动生成（降级模式）",
             created_by=user_id,
         )
         db.add(version)
 
-        # Create source references
-        for chunk_id_str in doc_data.get("source_chunk_ids", []):
-            ref = SourceRef(
-                id=uuid.uuid4(),
-                doc_version_id=version.id,
-                asset_chunk_id=uuid.UUID(chunk_id_str),
-                location_hint="auto-generated",
-            )
-            db.add(ref)
-
+        ref = SourceRef(
+            id=uuid.uuid4(),
+            doc_version_id=version.id,
+            asset_chunk_id=c.id,
+            location_hint="auto-generated",
+        )
+        db.add(ref)
         doc_ids.append(doc.id)
 
     db.flush()

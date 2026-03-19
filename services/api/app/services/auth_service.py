@@ -55,12 +55,24 @@ class AuthService:
             "email": user.email,
         }
 
+    # Pre-computed bcrypt dummy hash for timing-attack protection.
+    # Ensures verify_password runs even when user doesn't exist.
+    _DUMMY_HASH = "$2b$12$LJ3m9ZOH0MkMNQan/GZVqeJUhOHQSEzFR0iEvEfVJmOYEah0jCzGi"
+
     async def login(self, email: str, password: str) -> dict:
-        """Verify credentials and return access + refresh tokens."""
+        """Verify credentials and return access + refresh tokens.
+
+        Constant-time: always runs bcrypt verify to prevent user enumeration
+        via timing side-channel.
+        """
         result = await self.db.execute(select(User).where(User.email == email))
         user = result.scalar_one_or_none()
 
-        if user is None or not verify_password(password, user.password_hash):
+        # Always run bcrypt verify regardless of user existence
+        hash_to_check = user.password_hash if user else self._DUMMY_HASH
+        password_valid = verify_password(password, hash_to_check)
+
+        if user is None or not password_valid:
             raise UnauthorizedException(
                 error_code=ErrorCode.AUTH_INVALID_CREDENTIALS,
                 message="邮箱或密码错误",

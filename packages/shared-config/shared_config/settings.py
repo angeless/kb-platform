@@ -1,6 +1,10 @@
 """Application configuration loaded from environment variables."""
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_DEFAULT_JWT_SECRET = "change-me-in-production"
+_DEFAULT_ENCRYPTION_KEY = "change-me-32-byte-key-for-aes256"
 
 
 class Settings(BaseSettings):
@@ -10,6 +14,9 @@ class Settings(BaseSettings):
     app_name: str = "kb-platform"
     app_port: int = 8080
     debug: bool = False
+
+    # Environment (development / staging / production)
+    environment: str = "development"
 
     # PostgreSQL
     postgres_host: str = "localhost"
@@ -65,8 +72,37 @@ class Settings(BaseSettings):
     # Upload
     max_upload_size_mb: int = 100
 
+    # Auth rate limiting (stricter than general rate limits)
+    auth_login_rate_limit: int = 10
+    auth_register_rate_limit: int = 5
+    auth_refresh_rate_limit: int = 30
+
     # Logging
     log_level: str = "INFO"
+
+    @model_validator(mode="after")
+    def validate_production_secrets(self) -> "Settings":
+        """Reject default secrets in production environment."""
+        if self.environment == "production":
+            if self.jwt_secret == _DEFAULT_JWT_SECRET:
+                raise ValueError(
+                    "jwt_secret must not use default value in production. "
+                    "Set JWT_SECRET environment variable."
+                )
+            if self.encryption_key == _DEFAULT_ENCRYPTION_KEY:
+                raise ValueError(
+                    "encryption_key must not use default value in production. "
+                    "Set ENCRYPTION_KEY environment variable."
+                )
+            if len(self.jwt_secret) < 32:
+                raise ValueError(
+                    "jwt_secret must be at least 32 characters in production."
+                )
+            if len(self.encryption_key) < 32:
+                raise ValueError(
+                    "encryption_key must be at least 32 characters in production."
+                )
+        return self
 
 
 def get_settings() -> Settings:

@@ -8,6 +8,7 @@ import pytest
 from worker.stages.classify import classify_chunks
 from worker.stages.conflict_detect import detect_conflicts
 from worker.stages.quality_check import quality_check
+from worker.stages.embed import generate_embeddings, _hash_embedding
 
 
 class TestClassifyChunks:
@@ -16,36 +17,39 @@ class TestClassifyChunks:
     def test_empty_assets_returns_empty(self):
         db = MagicMock()
         db.execute.return_value.scalars.return_value.all.return_value = []
-        result = classify_chunks(db, uuid.uuid4(), [], "http://fake")
+        result = classify_chunks(db, uuid.uuid4(), [])
         assert result == {"new": [], "supplement": [], "correction": [], "conflict": []}
 
-    @patch("worker.stages.classify.httpx.post")
-    def test_calls_orchestrator(self, mock_post):
+    @patch("worker.stages.classify.celery_app")
+    def test_calls_orchestrator_via_celery(self, mock_celery):
         db = MagicMock()
         chunk = MagicMock()
         chunk.id = uuid.uuid4()
         chunk.content_text = "Test content"
         db.execute.return_value.scalars.return_value.all.return_value = [chunk]
 
-        mock_post.return_value.status_code = 200
-        mock_post.return_value.raise_for_status = MagicMock()
-        mock_post.return_value.json.return_value = {
-            "new": [str(chunk.id)], "supplement": [], "correction": [], "conflict": [],
+        # Mock the Celery send_task → result.get() chain
+        mock_result = MagicMock()
+        mock_result.get.return_value = {
+            "status": "success", "new": 1, "supplement": 0, "correction": 0, "conflict": 0,
         }
+        mock_celery.send_task.return_value = mock_result
 
-        result = classify_chunks(db, uuid.uuid4(), [uuid.uuid4()], "http://fake")
+        result = classify_chunks(db, uuid.uuid4(), [uuid.uuid4()])
         assert str(chunk.id) in result["new"]
-        mock_post.assert_called_once()
+        mock_celery.send_task.assert_called_once()
 
-    @patch("worker.stages.classify.httpx.post", side_effect=Exception("timeout"))
-    def test_fallback_on_failure(self, mock_post):
+    @patch("worker.stages.classify.celery_app")
+    def test_fallback_on_failure(self, mock_celery):
         db = MagicMock()
         chunk = MagicMock()
         chunk.id = uuid.uuid4()
         chunk.content_text = "Test"
         db.execute.return_value.scalars.return_value.all.return_value = [chunk]
 
-        result = classify_chunks(db, uuid.uuid4(), [uuid.uuid4()], "http://fake")
+        mock_celery.send_task.side_effect = Exception("timeout")
+
+        result = classify_chunks(db, uuid.uuid4(), [uuid.uuid4()])
         assert str(chunk.id) in result["new"]
 
 
@@ -66,40 +70,69 @@ class TestConflictDetect:
 
 
 class TestQualityCheck:
-    """Tests for quality check stage."""
+    """Tests for quality check stage (local validation)."""
 
-    @patch("worker.stages.quality_check.httpx.post")
-    def test_returns_results(self, mock_post):
+    def test_doc_passes_quality_check(self):
+        db = MagicMock()
+        doc_id = uuid.uuid4()
+        doc = MagicMock()
+        doc.current_version = 1
+        doc.title = "Test Document"
+        version = MagicMock()
+        version.content_md = "A" * 100  # Exceeds MIN_CONTENT_LENGTH
+        db.execute.return_value.scalar_one_or_none.side_effect = [doc, version]
+
+        result = quality_check(db, [doc_id])
+        assert str(doc_id) in result["passed"]
+
+    def test_short_content_flagged(self):
         db = MagicMock()
         doc_id = uuid.uuid4()
         doc = MagicMock()
         doc.current_version = 1
         doc.title = "Test"
         version = MagicMock()
-        version.content_md = "# Test content"
+        version.content_md = "Short"  # Below MIN_CONTENT_LENGTH
         db.execute.return_value.scalar_one_or_none.side_effect = [doc, version]
 
-        mock_post.return_value.raise_for_status = MagicMock()
-        mock_post.return_value.json.return_value = {
-            "passed": [str(doc_id)], "flagged": [],
-        }
+        result = quality_check(db, [doc_id])
+        assert len(result["flagged"]) == 1
+        assert "过短" in result["flagged"][0]["issues"][0]
 
-        result = quality_check(db, [doc_id], "http://fake")
-        assert str(doc_id) in result["passed"]
-
-    @patch("worker.stages.quality_check.httpx.post", side_effect=Exception("timeout"))
-    def test_fail_open(self, mock_post):
+    def test_missing_title_flagged(self):
         db = MagicMock()
         doc_id = uuid.uuid4()
         doc = MagicMock()
         doc.current_version = 1
-        doc.title = "Test"
+        doc.title = ""
         version = MagicMock()
-        version.content_md = "content"
+        version.content_md = "A" * 100
         db.execute.return_value.scalar_one_or_none.side_effect = [doc, version]
 
-        result = quality_check(db, [doc_id], "http://fake")
-        assert str(doc_id) in result["passed"]
+        result = quality_check(db, [doc_id])
+        assert len(result["flagged"]) == 1
+
+
+class TestHashEmbedding:
+    """Tests for the hash-based pseudo-embedding."""
+
+    def test_deterministic(self):
+        e1 = _hash_embedding("test text")
+        e2 = _hash_embedding("test text")
+        assert e1 == e2
+
+    def test_correct_dimensions(self):
+        e = _hash_embedding("test text", dimensions=128)
+        assert len(e) == 128
+
+    def test_values_in_range(self):
+        e = _hash_embedding("test text")
+        assert all(-1 <= v <= 1 for v in e)
+
+    def test_different_texts_different_embeddings(self):
+        e1 = _hash_embedding("text A")
+        e2 = _hash_embedding("text B")
+        assert e1 != e2
 
 
 class TestPipelineStages:

@@ -18,6 +18,13 @@ EXEMPT_PATHS = {"/healthz", "/readyz", "/docs", "/openapi.json", "/redoc"}
 # Paths with stricter upload rate limits
 UPLOAD_PATHS = {"/v1/assets/upload", "/v1/assets/import-url", "/v1/assets/import-archive"}
 
+# Auth endpoints with per-IP stricter rate limits (anti-brute-force)
+AUTH_RATE_LIMITS: dict[str, str] = {
+    "/v1/auth/login": "auth_login_rate_limit",
+    "/v1/auth/register": "auth_register_rate_limit",
+    "/v1/auth/refresh": "auth_refresh_rate_limit",
+}
+
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
     """Sliding window rate limiter using Redis sorted sets.
@@ -75,10 +82,22 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         settings = get_settings()
         identity = self._extract_identity(request)
-        is_upload = path in UPLOAD_PATHS
-        limit = settings.upload_rate_limit_per_minute if is_upload else settings.rate_limit_per_minute
 
-        key = f"ratelimit:{identity}:{'upload' if is_upload else 'api'}"
+        # Determine rate limit based on path type
+        is_upload = path in UPLOAD_PATHS
+        auth_setting = AUTH_RATE_LIMITS.get(path)
+        if auth_setting:
+            # Auth endpoints: always use IP-based key (no JWT available yet)
+            limit = getattr(settings, auth_setting)
+            client_ip = request.client.host if request.client else "unknown"
+            identity = f"ip:{client_ip}"
+        elif is_upload:
+            limit = settings.upload_rate_limit_per_minute
+        else:
+            limit = settings.rate_limit_per_minute
+
+        category = "auth" if auth_setting else ("upload" if is_upload else "api")
+        key = f"ratelimit:{identity}:{category}"
         now = time.time()
         window_start = now - 60  # 1 minute window
 
