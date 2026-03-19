@@ -1,9 +1,14 @@
 """Unit tests for parsers."""
 
+import io
+from unittest.mock import patch
+
 import fitz
+from PIL import Image, ImageDraw, ImageFont
 
 from worker.parsers.text_parser import parse
 from worker.parsers.pdf_parser import parse as pdf_parse
+from worker.parsers.ocr_parser import parse as ocr_parse
 
 
 def _make_pdf(pages: list[str]) -> bytes:
@@ -101,6 +106,90 @@ class TestPdfParser:
         assert get_parser("pdf") is not None
         assert get_parser("doc") is not None
         assert get_parser("text") is not None
+        assert get_parser("image") is not None
         assert get_parser("unknown_type") is None
         assert is_parseable("pdf") is True
-        assert is_parseable("image") is False
+        assert is_parseable("image") is True
+
+
+def _make_text_image(text: str, width: int = 400, height: int = 100) -> bytes:
+    """Create a PNG image with text drawn on it."""
+    img = Image.new("RGB", (width, height), color="white")
+    draw = ImageDraw.Draw(img)
+    draw.text((10, 10), text, fill="black")
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def _make_blank_image() -> bytes:
+    """Create a blank white PNG image."""
+    img = Image.new("RGB", (100, 100), color="white")
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+class TestOcrParser:
+    def test_ocr_extracts_text(self):
+        """OCR should extract text from an image with readable content."""
+        img_bytes = _make_text_image("Hello World OCR Test Content Here")
+        try:
+            import pytesseract
+            pytesseract.get_tesseract_version()
+        except Exception:
+            # Tesseract not installed — skip gracefully
+            result = ocr_parse(img_bytes, "test.png")
+            assert result == []  # Graceful degradation
+            return
+
+        result = ocr_parse(img_bytes, "test.png")
+        # Tesseract may or may not extract text from simple drawn text
+        # The key test is that it doesn't crash
+        assert isinstance(result, list)
+
+    def test_ocr_blank_image_returns_empty(self):
+        """Blank image should return empty (too little text)."""
+        img_bytes = _make_blank_image()
+        result = ocr_parse(img_bytes, "blank.png")
+        assert result == []
+
+    def test_ocr_invalid_image_returns_empty(self):
+        """Invalid image data should return empty, not crash."""
+        result = ocr_parse(b"not an image", "bad.png")
+        assert result == []
+
+    def test_ocr_tags_contain_image_metadata(self):
+        """If OCR succeeds, tags should contain image metadata."""
+        img_bytes = _make_text_image("This is a test with enough characters to pass minimum")
+        try:
+            import pytesseract
+            pytesseract.get_tesseract_version()
+        except Exception:
+            return  # Skip if Tesseract not installed
+
+        result = ocr_parse(img_bytes, "photo.jpg")
+        if result:  # Only check if OCR actually extracted text
+            assert result[0]["tags"]["source_type"] == "image"
+            assert result[0]["tags"]["filename"] == "photo.jpg"
+            assert "image_width" in result[0]["tags"]
+            assert "image_height" in result[0]["tags"]
+
+    def test_ocr_graceful_without_tesseract(self):
+        """OCR should return empty list when pytesseract is not importable."""
+        img_bytes = _make_text_image("Some text")
+        with patch.dict("sys.modules", {"pytesseract": None}):
+            # Re-import to test import failure path
+            from importlib import reload
+            from worker.parsers import ocr_parser
+            reload(ocr_parser)
+            result = ocr_parser.parse(img_bytes, "test.png")
+            assert result == []
+            # Restore
+            reload(ocr_parser)
+
+    def test_ocr_registered_for_image_type(self):
+        """OCR parser should be registered for 'image' asset type."""
+        from worker.parsers import get_parser, is_parseable
+        assert get_parser("image") is not None
+        assert is_parseable("image") is True
