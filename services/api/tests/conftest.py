@@ -6,6 +6,7 @@ from collections.abc import AsyncGenerator
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from shared_config.settings import get_settings
@@ -25,6 +26,12 @@ TEST_DB_URL = settings.database_url + "_test"
 async def test_engine():
     """Create engine inside the session event loop."""
     engine = create_async_engine(TEST_DB_URL, echo=False)
+    # Try to enable pgvector extension (available in Docker, may not be locally)
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+    except Exception:
+        pass  # pgvector not installed locally — Docker tests will have it
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     yield engine

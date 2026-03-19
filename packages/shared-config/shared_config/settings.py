@@ -80,6 +80,9 @@ class Settings(BaseSettings):
     # Logging
     log_level: str = "INFO"
 
+    # CORS
+    cors_origins: str = "http://localhost:3000,http://localhost:3001"
+
     @model_validator(mode="after")
     def validate_production_secrets(self) -> "Settings":
         """Reject default secrets in production environment."""

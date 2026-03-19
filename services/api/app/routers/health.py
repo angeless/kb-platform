@@ -20,3 +20,13 @@ async def readyz(db: AsyncSession = Depends(get_db)):
     """Readiness probe — checks database connectivity."""
     await db.execute(text("SELECT 1"))
     return {"status": "ok"}
+
+
+@router.get("/api/versions")
+async def api_versions():
+    """Return supported API versions."""
+    return {
+        "versions": [
+            {"version": "v1", "status": "active", "deprecation_date": None}
+        ]
+    }

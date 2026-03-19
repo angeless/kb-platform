@@ -1,7 +1,9 @@
 """FastAPI application factory."""
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
+from shared_config.settings import get_settings
 from shared_errors import register_exception_handlers
 
 from .middleware.rate_limit import RateLimitMiddleware
@@ -25,11 +27,22 @@ from .routers.export import router as export_router
 
 def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
-    app = FastAPI(title="KB Platform API", version="0.1.0")
+    app = FastAPI(title="KB Platform API", version="0.35.0")
 
     # Middleware (order matters: first added = outermost)
     app.add_middleware(RequestIdMiddleware)
     app.add_middleware(RateLimitMiddleware)
+
+    # CORS middleware (outermost — added last so it wraps everything)
+    settings = get_settings()
+    origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=origins,
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+        allow_headers=["*"],
+    )
 
     # Exception handlers
     register_exception_handlers(app)
