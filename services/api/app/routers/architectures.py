@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared_schemas.architecture import ArchitectureOut, NodeCreate, NodeOut, NodeUpdate
-from shared_schemas.common import DataResponse, ListResponse, PaginationMeta
+from shared_schemas.common import DataResponse, ErrorDetail, ListResponse, PaginationMeta
 
 from app.deps import get_db, get_tenant_id, require_role
 from shared_models import User
@@ -14,10 +14,23 @@ from app.services.architecture_service import ArchitectureService
 
 router = APIRouter(tags=["architectures"])
 
+_RESP_AUTH = {
+    401: {"description": "Unauthorized", "model": ErrorDetail},
+    403: {"description": "Forbidden", "model": ErrorDetail},
+}
+
 
 @router.get(
     "/v1/projects/{project_id}/architectures",
     response_model=ListResponse[ArchitectureOut],
+    summary="List architectures for a project",
+    description="Returns all knowledge architecture versions for a project, including drafts and published versions.",
+    responses={
+        200: {"description": "Architecture list returned"},
+        **_RESP_AUTH,
+        404: {"description": "Project not found", "model": ErrorDetail},
+        500: {"description": "Internal server error", "model": ErrorDetail},
+    },
 )
 async def list_architectures(
     project_id: uuid.UUID,
@@ -35,6 +48,14 @@ async def list_architectures(
 @router.get(
     "/v1/architectures/{arch_id}",
     response_model=DataResponse[ArchitectureOut],
+    summary="Get an architecture",
+    description="Returns details of a single architecture version by ID.",
+    responses={
+        200: {"description": "Architecture details returned"},
+        **_RESP_AUTH,
+        404: {"description": "Architecture not found", "model": ErrorDetail},
+        500: {"description": "Internal server error", "model": ErrorDetail},
+    },
 )
 async def get_architecture(
     arch_id: uuid.UUID,
@@ -49,6 +70,14 @@ async def get_architecture(
 @router.get(
     "/v1/architectures/{arch_id}/nodes",
     response_model=ListResponse[NodeOut],
+    summary="List architecture nodes",
+    description="Returns all nodes (tree structure) of an architecture version.",
+    responses={
+        200: {"description": "Node list returned"},
+        **_RESP_AUTH,
+        404: {"description": "Architecture not found", "model": ErrorDetail},
+        500: {"description": "Internal server error", "model": ErrorDetail},
+    },
 )
 async def list_nodes(
     arch_id: uuid.UUID,
@@ -66,6 +95,15 @@ async def list_nodes(
 @router.post(
     "/v1/architectures/{arch_id}/publish",
     response_model=DataResponse[ArchitectureOut],
+    summary="Publish an architecture",
+    description="Transitions an architecture from draft to published status. Requires project_admin role.",
+    responses={
+        200: {"description": "Architecture published"},
+        **_RESP_AUTH,
+        404: {"description": "Architecture not found", "model": ErrorDetail},
+        409: {"description": "Architecture is not in publishable state", "model": ErrorDetail},
+        500: {"description": "Internal server error", "model": ErrorDetail},
+    },
 )
 async def publish_architecture(
     arch_id: uuid.UUID,
@@ -82,6 +120,15 @@ async def publish_architecture(
     "/v1/architectures/{arch_id}/nodes",
     response_model=DataResponse[NodeOut],
     status_code=201,
+    summary="Create a node",
+    description="Adds a new node to an architecture's tree structure. Requires project_admin role.",
+    responses={
+        201: {"description": "Node created"},
+        **_RESP_AUTH,
+        404: {"description": "Architecture not found", "model": ErrorDetail},
+        422: {"description": "Validation error"},
+        500: {"description": "Internal server error", "model": ErrorDetail},
+    },
 )
 async def create_node(
     arch_id: uuid.UUID,
@@ -98,6 +145,15 @@ async def create_node(
 @router.patch(
     "/v1/architectures/{arch_id}/nodes/{node_id}",
     response_model=DataResponse[NodeOut],
+    summary="Update a node",
+    description="Partially updates a node's properties (name, description, parent, sort_order). Requires project_admin role.",
+    responses={
+        200: {"description": "Node updated"},
+        **_RESP_AUTH,
+        404: {"description": "Architecture or node not found", "model": ErrorDetail},
+        422: {"description": "Validation error"},
+        500: {"description": "Internal server error", "model": ErrorDetail},
+    },
 )
 async def update_node(
     arch_id: uuid.UUID,
@@ -116,6 +172,14 @@ async def update_node(
     "/v1/architectures/{arch_id}/fork",
     response_model=DataResponse[ArchitectureOut],
     status_code=201,
+    summary="Fork an architecture",
+    description="Creates a new draft architecture by deep-copying all nodes from an existing version. Requires project_admin role.",
+    responses={
+        201: {"description": "Architecture forked"},
+        **_RESP_AUTH,
+        404: {"description": "Architecture not found", "model": ErrorDetail},
+        500: {"description": "Internal server error", "model": ErrorDetail},
+    },
 )
 async def fork_architecture(
     arch_id: uuid.UUID,
@@ -131,6 +195,14 @@ async def fork_architecture(
 @router.get(
     "/v1/architectures/{arch_id}/compare/{other_id}",
     response_model=DataResponse,
+    summary="Compare two architectures",
+    description="Returns a diff between two architecture versions, showing added, removed, and changed nodes.",
+    responses={
+        200: {"description": "Architecture comparison returned"},
+        **_RESP_AUTH,
+        404: {"description": "Architecture not found", "model": ErrorDetail},
+        500: {"description": "Internal server error", "model": ErrorDetail},
+    },
 )
 async def compare_architectures(
     arch_id: uuid.UUID,
@@ -147,6 +219,14 @@ async def compare_architectures(
     "/v1/architectures/{arch_id}/rollback/{target_id}",
     response_model=DataResponse[ArchitectureOut],
     status_code=201,
+    summary="Rollback architecture to a previous version",
+    description="Creates a new draft architecture by copying the target version's nodes. Requires project_admin role.",
+    responses={
+        201: {"description": "Architecture rolled back (new draft created)"},
+        **_RESP_AUTH,
+        404: {"description": "Architecture not found", "model": ErrorDetail},
+        500: {"description": "Internal server error", "model": ErrorDetail},
+    },
 )
 async def rollback_architecture(
     arch_id: uuid.UUID,

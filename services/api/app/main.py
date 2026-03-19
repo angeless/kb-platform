@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.utils import get_openapi
 
 from shared_config.settings import get_settings
 from shared_errors import register_exception_handlers
@@ -86,6 +87,41 @@ def create_app() -> FastAPI:
     app.include_router(audit_router)
     app.include_router(ws_router)
     app.include_router(export_router)
+
+    # Custom OpenAPI schema: add Bearer security scheme
+    _PUBLIC_PATHS = {"/healthz", "/readyz", "/metrics", "/api/versions", "/api/health/ready"}
+
+    def custom_openapi():
+        if app.openapi_schema:
+            return app.openapi_schema
+        schema = get_openapi(
+            title=app.title,
+            version=app.version,
+            description="KB Platform — AI 知识整理与知识系统构建平台 API",
+            routes=app.routes,
+        )
+        schema.setdefault("components", {})["securitySchemes"] = {
+            "BearerAuth": {
+                "type": "http",
+                "scheme": "bearer",
+                "bearerFormat": "JWT",
+                "description": "JWT access token obtained from POST /v1/auth/login",
+            }
+        }
+        # Apply BearerAuth to all paths except public ones
+        for path, methods in schema.get("paths", {}).items():
+            if path in _PUBLIC_PATHS:
+                for method_detail in methods.values():
+                    if isinstance(method_detail, dict):
+                        method_detail["security"] = []
+            else:
+                for method_detail in methods.values():
+                    if isinstance(method_detail, dict) and "security" not in method_detail:
+                        method_detail["security"] = [{"BearerAuth": []}]
+        app.openapi_schema = schema
+        return schema
+
+    app.openapi = custom_openapi
 
     return app
 

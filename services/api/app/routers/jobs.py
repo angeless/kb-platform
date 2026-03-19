@@ -5,7 +5,7 @@ import uuid
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from shared_schemas.common import DataResponse, ListResponse, PaginationMeta
+from shared_schemas.common import DataResponse, ErrorDetail, ListResponse, PaginationMeta
 from shared_schemas.job import JobCreate, JobOut
 
 from app.deps import get_current_user, get_db, get_tenant_id, require_role
@@ -14,8 +14,25 @@ from shared_models import User
 
 router = APIRouter(prefix="/v1/jobs", tags=["jobs"])
 
+_RESP_AUTH = {
+    401: {"description": "Unauthorized", "model": ErrorDetail},
+    403: {"description": "Forbidden", "model": ErrorDetail},
+}
 
-@router.post("", response_model=DataResponse[JobOut], status_code=201)
+
+@router.post(
+    "",
+    response_model=DataResponse[JobOut],
+    status_code=201,
+    summary="Create a processing job",
+    description="Creates a new async processing job (e.g., ingestion, pipeline, AI orchestration). The job is dispatched to a Celery worker.",
+    responses={
+        201: {"description": "Job created and queued"},
+        **_RESP_AUTH,
+        422: {"description": "Validation error"},
+        500: {"description": "Internal server error", "model": ErrorDetail},
+    },
+)
 async def create_job(
     body: JobCreate,
     db: AsyncSession = Depends(get_db),
@@ -27,7 +44,17 @@ async def create_job(
     return DataResponse(data=JobOut.model_validate(job))
 
 
-@router.get("", response_model=ListResponse[JobOut])
+@router.get(
+    "",
+    response_model=ListResponse[JobOut],
+    summary="List jobs",
+    description="Returns a paginated list of processing jobs for a given project.",
+    responses={
+        200: {"description": "Job list returned"},
+        **_RESP_AUTH,
+        500: {"description": "Internal server error", "model": ErrorDetail},
+    },
+)
 async def list_jobs(
     project_id: uuid.UUID = Query(...),
     page: int = Query(default=1, ge=1),
@@ -44,7 +71,18 @@ async def list_jobs(
     )
 
 
-@router.get("/{job_id}", response_model=DataResponse[JobOut])
+@router.get(
+    "/{job_id}",
+    response_model=DataResponse[JobOut],
+    summary="Get a job",
+    description="Returns details of a single processing job by ID, including its current status and progress.",
+    responses={
+        200: {"description": "Job details returned"},
+        **_RESP_AUTH,
+        404: {"description": "Job not found", "model": ErrorDetail},
+        500: {"description": "Internal server error", "model": ErrorDetail},
+    },
+)
 async def get_job(
     job_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
@@ -56,7 +94,19 @@ async def get_job(
     return DataResponse(data=JobOut.model_validate(job))
 
 
-@router.post("/{job_id}/retry", response_model=DataResponse[JobOut])
+@router.post(
+    "/{job_id}/retry",
+    response_model=DataResponse[JobOut],
+    summary="Retry a failed job",
+    description="Re-queues a failed job for processing. Only jobs in 'failed' status can be retried.",
+    responses={
+        200: {"description": "Job re-queued for processing"},
+        **_RESP_AUTH,
+        404: {"description": "Job not found", "model": ErrorDetail},
+        409: {"description": "Job is not in a retriable state", "model": ErrorDetail},
+        500: {"description": "Internal server error", "model": ErrorDetail},
+    },
+)
 async def retry_job(
     job_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),

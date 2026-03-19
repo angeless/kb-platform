@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared_schemas.audit import AuditLogOut
-from shared_schemas.common import ListResponse, PaginationMeta
+from shared_schemas.common import ErrorDetail, ListResponse, PaginationMeta
 
 from app.deps import get_db, get_tenant_id, require_role
 from app.services.audit_service import AuditService
@@ -15,7 +15,18 @@ from shared_models import User
 router = APIRouter(prefix="/v1/audit-logs", tags=["audit"])
 
 
-@router.get("", response_model=ListResponse[AuditLogOut])
+@router.get(
+    "",
+    response_model=ListResponse[AuditLogOut],
+    summary="List audit logs",
+    description="Returns a paginated list of audit log entries. Can be filtered by project, action, or resource type. Requires tenant_admin role.",
+    responses={
+        200: {"description": "Audit log list returned"},
+        401: {"description": "Unauthorized", "model": ErrorDetail},
+        403: {"description": "Forbidden — requires tenant_admin role", "model": ErrorDetail},
+        500: {"description": "Internal server error", "model": ErrorDetail},
+    },
+)
 async def list_audit_logs(
     project_id: uuid.UUID | None = Query(default=None),
     action: str | None = Query(default=None),

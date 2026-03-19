@@ -5,7 +5,7 @@ import uuid
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from shared_schemas.common import DataResponse, ListResponse, PaginationMeta
+from shared_schemas.common import DataResponse, ErrorDetail, ListResponse, PaginationMeta
 from shared_schemas.knowledge import AssignNodeRequest, BatchDocRequest, BatchFailedItem, BatchResultOut, DocRejectRequest, DocUpdateContent, DocVersionOut, KnowledgeDocDetailOut, KnowledgeDocOut, VersionDiffOut
 
 from app.deps import get_current_user, get_db, get_tenant_id, require_role
@@ -15,8 +15,24 @@ from shared_models import User
 
 router = APIRouter(prefix="/v1/docs", tags=["docs"])
 
+_RESP_AUTH = {
+    401: {"description": "Unauthorized", "model": ErrorDetail},
+    403: {"description": "Forbidden", "model": ErrorDetail},
+}
 
-@router.get("", response_model=ListResponse[KnowledgeDocOut])
+
+@router.get(
+    "",
+    response_model=ListResponse[KnowledgeDocOut],
+    summary="List knowledge documents",
+    description="Returns a paginated list of knowledge documents for a given project.",
+    responses={
+        200: {"description": "Document list returned"},
+        **_RESP_AUTH,
+        422: {"description": "Validation error"},
+        500: {"description": "Internal server error", "model": ErrorDetail},
+    },
+)
 async def list_docs(
     project_id: uuid.UUID = Query(...),
     page: int = Query(default=1, ge=1),
@@ -32,7 +48,17 @@ async def list_docs(
     )
 
 
-@router.get("/pending", response_model=ListResponse[KnowledgeDocOut])
+@router.get(
+    "/pending",
+    response_model=ListResponse[KnowledgeDocOut],
+    summary="List pending documents",
+    description="Returns a paginated list of documents awaiting review for a given project.",
+    responses={
+        200: {"description": "Pending document list returned"},
+        **_RESP_AUTH,
+        500: {"description": "Internal server error", "model": ErrorDetail},
+    },
+)
 async def list_pending_docs(
     project_id: uuid.UUID = Query(...),
     page: int = Query(default=1, ge=1),
@@ -51,7 +77,18 @@ async def list_pending_docs(
 # --- Batch operations (must be before /{doc_id} routes) ---
 
 
-@router.post("/batch/review", response_model=DataResponse[BatchResultOut])
+@router.post(
+    "/batch/review",
+    response_model=DataResponse[BatchResultOut],
+    summary="Batch review documents",
+    description="Transitions multiple documents to 'reviewed' status. Requires reviewer role. Returns succeeded and failed IDs.",
+    responses={
+        200: {"description": "Batch review result"},
+        **_RESP_AUTH,
+        422: {"description": "Validation error"},
+        500: {"description": "Internal server error", "model": ErrorDetail},
+    },
+)
 async def batch_review(
     body: BatchDocRequest,
     db: AsyncSession = Depends(get_db),
@@ -72,7 +109,18 @@ async def batch_review(
     return DataResponse(data=BatchResultOut(succeeded=succeeded, failed=failed))
 
 
-@router.post("/batch/publish", response_model=DataResponse[BatchResultOut])
+@router.post(
+    "/batch/publish",
+    response_model=DataResponse[BatchResultOut],
+    summary="Batch publish documents",
+    description="Transitions multiple reviewed documents to 'published' status. Requires project_admin role.",
+    responses={
+        200: {"description": "Batch publish result"},
+        **_RESP_AUTH,
+        422: {"description": "Validation error"},
+        500: {"description": "Internal server error", "model": ErrorDetail},
+    },
+)
 async def batch_publish(
     body: BatchDocRequest,
     db: AsyncSession = Depends(get_db),
@@ -93,7 +141,18 @@ async def batch_publish(
     return DataResponse(data=BatchResultOut(succeeded=succeeded, failed=failed))
 
 
-@router.post("/batch/reject", response_model=DataResponse[BatchResultOut])
+@router.post(
+    "/batch/reject",
+    response_model=DataResponse[BatchResultOut],
+    summary="Batch reject documents",
+    description="Rejects multiple documents, returning them to draft status. Requires reviewer role.",
+    responses={
+        200: {"description": "Batch reject result"},
+        **_RESP_AUTH,
+        422: {"description": "Validation error"},
+        500: {"description": "Internal server error", "model": ErrorDetail},
+    },
+)
 async def batch_reject(
     body: BatchDocRequest,
     db: AsyncSession = Depends(get_db),
@@ -117,7 +176,18 @@ async def batch_reject(
 # --- Single doc operations ---
 
 
-@router.get("/{doc_id}", response_model=DataResponse[KnowledgeDocDetailOut])
+@router.get(
+    "/{doc_id}",
+    response_model=DataResponse[KnowledgeDocDetailOut],
+    summary="Get document details",
+    description="Returns full details of a knowledge document including content, metadata, and version history.",
+    responses={
+        200: {"description": "Document details returned"},
+        **_RESP_AUTH,
+        404: {"description": "Document not found", "model": ErrorDetail},
+        500: {"description": "Internal server error", "model": ErrorDetail},
+    },
+)
 async def get_doc(
     doc_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
@@ -128,7 +198,18 @@ async def get_doc(
     return DataResponse(data=KnowledgeDocDetailOut.model_validate(doc))
 
 
-@router.get("/{doc_id}/versions/{version}", response_model=DataResponse[DocVersionOut])
+@router.get(
+    "/{doc_id}/versions/{version}",
+    response_model=DataResponse[DocVersionOut],
+    summary="Get document version",
+    description="Returns a specific historical version of a document by version number.",
+    responses={
+        200: {"description": "Version details returned"},
+        **_RESP_AUTH,
+        404: {"description": "Document or version not found", "model": ErrorDetail},
+        500: {"description": "Internal server error", "model": ErrorDetail},
+    },
+)
 async def get_doc_version(
     doc_id: uuid.UUID,
     version: int,
@@ -140,7 +221,19 @@ async def get_doc_version(
     return DataResponse(data=DocVersionOut.model_validate(ver))
 
 
-@router.get("/{doc_id}/diff", response_model=DataResponse[VersionDiffOut])
+@router.get(
+    "/{doc_id}/diff",
+    response_model=DataResponse[VersionDiffOut],
+    summary="Compare document versions",
+    description="Returns a diff between two versions of a document, showing added, removed, and changed content.",
+    responses={
+        200: {"description": "Version diff returned"},
+        **_RESP_AUTH,
+        404: {"description": "Document or version not found", "model": ErrorDetail},
+        422: {"description": "Validation error"},
+        500: {"description": "Internal server error", "model": ErrorDetail},
+    },
+)
 async def diff_versions(
     doc_id: uuid.UUID,
     from_version: int = Query(..., ge=1),
@@ -153,7 +246,18 @@ async def diff_versions(
     return DataResponse(data=VersionDiffOut(**result))
 
 
-@router.post("/{doc_id}/assign-node", response_model=DataResponse[KnowledgeDocOut])
+@router.post(
+    "/{doc_id}/assign-node",
+    response_model=DataResponse[KnowledgeDocOut],
+    summary="Assign document to architecture node",
+    description="Links a knowledge document to an architecture tree node. Requires editor role.",
+    responses={
+        200: {"description": "Document assigned to node"},
+        **_RESP_AUTH,
+        404: {"description": "Document or node not found", "model": ErrorDetail},
+        500: {"description": "Internal server error", "model": ErrorDetail},
+    },
+)
 async def assign_node(
     doc_id: uuid.UUID,
     body: AssignNodeRequest,
@@ -168,7 +272,19 @@ async def assign_node(
     return DataResponse(data=KnowledgeDocOut.model_validate(doc))
 
 
-@router.post("/{doc_id}/review", response_model=DataResponse[KnowledgeDocOut])
+@router.post(
+    "/{doc_id}/review",
+    response_model=DataResponse[KnowledgeDocOut],
+    summary="Review a document",
+    description="Transitions a document from draft to reviewed status. Requires reviewer role.",
+    responses={
+        200: {"description": "Document reviewed"},
+        **_RESP_AUTH,
+        404: {"description": "Document not found", "model": ErrorDetail},
+        409: {"description": "Invalid state transition", "model": ErrorDetail},
+        500: {"description": "Internal server error", "model": ErrorDetail},
+    },
+)
 async def review_doc(
     doc_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
@@ -182,7 +298,19 @@ async def review_doc(
     return DataResponse(data=KnowledgeDocOut.model_validate(doc))
 
 
-@router.post("/{doc_id}/publish", response_model=DataResponse[KnowledgeDocOut])
+@router.post(
+    "/{doc_id}/publish",
+    response_model=DataResponse[KnowledgeDocOut],
+    summary="Publish a document",
+    description="Transitions a reviewed document to published status. Requires project_admin role.",
+    responses={
+        200: {"description": "Document published"},
+        **_RESP_AUTH,
+        404: {"description": "Document not found", "model": ErrorDetail},
+        409: {"description": "Invalid state transition", "model": ErrorDetail},
+        500: {"description": "Internal server error", "model": ErrorDetail},
+    },
+)
 async def publish_doc(
     doc_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
@@ -196,7 +324,19 @@ async def publish_doc(
     return DataResponse(data=KnowledgeDocOut.model_validate(doc))
 
 
-@router.put("/{doc_id}/content", response_model=DataResponse[KnowledgeDocOut])
+@router.put(
+    "/{doc_id}/content",
+    response_model=DataResponse[KnowledgeDocOut],
+    summary="Update document content",
+    description="Replaces the content of a document and creates a new version. Requires editor role.",
+    responses={
+        200: {"description": "Document content updated, new version created"},
+        **_RESP_AUTH,
+        404: {"description": "Document not found", "model": ErrorDetail},
+        409: {"description": "Document is not in editable state", "model": ErrorDetail},
+        500: {"description": "Internal server error", "model": ErrorDetail},
+    },
+)
 async def update_doc_content(
     doc_id: uuid.UUID,
     body: DocUpdateContent,
@@ -211,7 +351,19 @@ async def update_doc_content(
     return DataResponse(data=KnowledgeDocOut.model_validate(doc))
 
 
-@router.post("/{doc_id}/reject", response_model=DataResponse[KnowledgeDocOut])
+@router.post(
+    "/{doc_id}/reject",
+    response_model=DataResponse[KnowledgeDocOut],
+    summary="Reject a document",
+    description="Rejects a document with a reason, returning it to draft status. Requires reviewer role.",
+    responses={
+        200: {"description": "Document rejected"},
+        **_RESP_AUTH,
+        404: {"description": "Document not found", "model": ErrorDetail},
+        409: {"description": "Invalid state transition", "model": ErrorDetail},
+        500: {"description": "Internal server error", "model": ErrorDetail},
+    },
+)
 async def reject_doc(
     doc_id: uuid.UUID,
     body: DocRejectRequest,
