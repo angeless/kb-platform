@@ -4,6 +4,7 @@ from fastapi import FastAPI
 
 from shared_errors import register_exception_handlers
 
+from .middleware.rate_limit import RateLimitMiddleware
 from .middleware.request_id import RequestIdMiddleware
 from .routers.health import router as health_router
 from .routers.auth import router as auth_router
@@ -26,8 +27,9 @@ def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
     app = FastAPI(title="KB Platform API", version="0.1.0")
 
-    # Middleware
+    # Middleware (order matters: first added = outermost)
     app.add_middleware(RequestIdMiddleware)
+    app.add_middleware(RateLimitMiddleware)
 
     # Exception handlers
     register_exception_handlers(app)

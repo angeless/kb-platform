@@ -110,3 +110,51 @@ async def update_node(
     svc = ArchitectureService(db, tenant_id)
     node = await svc.update_node(arch_id, node_id, body.model_dump(exclude_unset=True))
     return DataResponse(data=NodeOut.model_validate(node))
+
+
+@router.post(
+    "/v1/architectures/{arch_id}/fork",
+    response_model=DataResponse[ArchitectureOut],
+    status_code=201,
+)
+async def fork_architecture(
+    arch_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    tenant_id: uuid.UUID = Depends(get_tenant_id),
+    _user: User = require_role("project_admin"),
+):
+    svc = ArchitectureService(db, tenant_id)
+    new_arch = await svc.fork(arch_id)
+    return DataResponse(data=ArchitectureOut.model_validate(new_arch))
+
+
+@router.get(
+    "/v1/architectures/{arch_id}/compare/{other_id}",
+    response_model=DataResponse,
+)
+async def compare_architectures(
+    arch_id: uuid.UUID,
+    other_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    tenant_id: uuid.UUID = Depends(get_tenant_id),
+):
+    svc = ArchitectureService(db, tenant_id)
+    diff = await svc.compare(arch_id, other_id)
+    return DataResponse(data=diff)
+
+
+@router.post(
+    "/v1/architectures/{arch_id}/rollback/{target_id}",
+    response_model=DataResponse[ArchitectureOut],
+    status_code=201,
+)
+async def rollback_architecture(
+    arch_id: uuid.UUID,
+    target_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    tenant_id: uuid.UUID = Depends(get_tenant_id),
+    _user: User = require_role("project_admin"),
+):
+    svc = ArchitectureService(db, tenant_id)
+    new_arch = await svc.rollback(arch_id, target_id)
+    return DataResponse(data=ArchitectureOut.model_validate(new_arch))

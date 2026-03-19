@@ -147,6 +147,63 @@ async def test_list_nodes_with_created_node(
 
 
 @pytest.mark.asyncio
+async def test_fork_architecture(
+    client: AsyncClient, auth_headers: dict, db_session: AsyncSession, architecture_fixture: dict
+):
+    """Forking should create a new architecture with copied nodes."""
+    arch_id = architecture_fixture["arch_id"]
+    # Add a node first
+    from shared_models import ArchitectureNode
+    node = ArchitectureNode(
+        id=uuid.uuid4(), architecture_id=arch_id,
+        node_name="Fork Me", node_type="topic", level=1, status="draft",
+    )
+    db_session.add(node)
+    await db_session.flush()
+
+    resp = await client.post(f"/v1/architectures/{arch_id}/fork", headers=auth_headers)
+    assert resp.status_code == 201
+    new_arch = resp.json()["data"]
+    assert new_arch["id"] != str(arch_id)
+    assert new_arch["status"] == "draft"
+
+    # New arch should have copied nodes
+    nodes_resp = await client.get(f"/v1/architectures/{new_arch['id']}/nodes", headers=auth_headers)
+    names = [n["node_name"] for n in nodes_resp.json()["data"]]
+    assert "Fork Me" in names
+
+
+@pytest.mark.asyncio
+async def test_compare_architectures(
+    client: AsyncClient, auth_headers: dict, db_session: AsyncSession, architecture_fixture: dict
+):
+    """Compare should show differences between two architectures."""
+    arch_id = architecture_fixture["arch_id"]
+    # Fork first
+    fork_resp = await client.post(f"/v1/architectures/{arch_id}/fork", headers=auth_headers)
+    new_id = fork_resp.json()["data"]["id"]
+
+    # Add a node to the new arch only
+    await client.post(
+        f"/v1/architectures/{new_id}/nodes",
+        json={"node_name": "New Only Node", "node_type": "category", "level": 0},
+        headers=auth_headers,
+    )
+
+    resp = await client.get(
+        f"/v1/architectures/{arch_id}/compare/{new_id}",
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+    diff = resp.json()["data"]
+    assert "added" in diff
+    assert "removed" in diff
+    assert "modified" in diff
+    added_names = [n["node_name"] for n in diff["added"]]
+    assert "New Only Node" in added_names
+
+
+@pytest.mark.asyncio
 async def test_get_architecture_not_found(client: AsyncClient, auth_headers: dict):
     fake_id = str(uuid.uuid4())
     resp = await client.get(f"/v1/architectures/{fake_id}", headers=auth_headers)
