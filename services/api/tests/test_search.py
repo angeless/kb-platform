@@ -1,6 +1,7 @@
-"""Tests for text search endpoint."""
+"""Tests for text search and semantic search endpoints."""
 
 import uuid
+from unittest.mock import patch
 
 import pytest
 import pytest_asyncio
@@ -166,3 +167,88 @@ async def test_search_snippet_contains_context(client: AsyncClient, auth_headers
     # At least one hit should have snippet containing "退款"
     snippets = [h["snippet"] for h in hits]
     assert any("退款" in s for s in snippets)
+
+
+# --- Semantic Search Tests ---
+
+
+def _mock_embed_fn(vector: list[float]):
+    """Create a mock embed function that always returns the given vector."""
+    async def _fn(text: str) -> list[float]:
+        return vector
+    return _fn
+
+
+@pytest.mark.asyncio
+async def test_embed_doc(client: AsyncClient, auth_headers: dict, search_fixture: dict):
+    """Embedding a doc should create an embedding record."""
+    doc_id = search_fixture["doc1_id"]
+    mock_vector = [0.1] * 16  # small vector for testing
+
+    async def _fake_embed(text: str) -> list[float]:
+        return mock_vector
+
+    with patch("app.services.embedding_service._default_embed_fn", new=_fake_embed):
+        resp = await client.post(
+            f"/v1/search/embed/{doc_id}",
+            headers=auth_headers,
+        )
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    assert data["doc_id"] == str(doc_id)
+    assert data["dimensions"] == 16
+
+
+@pytest.mark.asyncio
+async def test_semantic_search_returns_results(
+    client: AsyncClient, auth_headers: dict, search_fixture: dict
+):
+    """Semantic search should return scored results."""
+    project_id = search_fixture["project_id"]
+    mock_vector = [0.1] * 16
+
+    async def _fake_embed(text: str) -> list[float]:
+        return mock_vector
+
+    with patch("app.services.embedding_service._default_embed_fn", new=_fake_embed):
+        # Embed both docs first
+        await client.post(f"/v1/search/embed/{search_fixture['doc1_id']}", headers=auth_headers)
+        await client.post(f"/v1/search/embed/{search_fixture['doc2_id']}", headers=auth_headers)
+
+        # Search
+        resp = await client.post(
+            "/v1/search/semantic",
+            json={"project_id": str(project_id), "query": "退款流程"},
+            headers=auth_headers,
+        )
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    assert len(data) >= 1
+    assert "score" in data[0]
+    assert "title" in data[0]
+
+
+@pytest.mark.asyncio
+async def test_semantic_search_empty_project(
+    client: AsyncClient, auth_headers: dict
+):
+    """Semantic search on project with no embeddings should return empty."""
+    proj_resp = await client.post(
+        "/v1/projects",
+        json={"name": "No Embeddings Project"},
+        headers=auth_headers,
+    )
+    project_id = proj_resp.json()["data"]["id"]
+
+    mock_vector = [0.1] * 16
+    async def _fake_embed(text: str) -> list[float]:
+        return mock_vector
+
+    with patch("app.services.embedding_service._default_embed_fn", new=_fake_embed):
+        resp = await client.post(
+            "/v1/search/semantic",
+            json={"project_id": project_id, "query": "anything"},
+            headers=auth_headers,
+        )
+    assert resp.status_code == 200
+    assert resp.json()["data"] == []

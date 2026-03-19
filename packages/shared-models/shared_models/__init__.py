@@ -8,6 +8,7 @@ from .knowledge import KnowledgeDoc, KnowledgeDocVersion, SourceRef, ConflictRec
 from .job import Job
 from .model_config import ModelProvider, ModelRoute
 from .audit import AuditLog
+from .embedding import DocEmbedding
 from .database import engine, async_session_factory, get_db_session
 
 __all__ = [
@@ -19,5 +20,6 @@ __all__ = [
     "Job",
     "ModelProvider", "ModelRoute",
     "AuditLog",
+    "DocEmbedding",
     "engine", "async_session_factory", "get_db_session",
 ]

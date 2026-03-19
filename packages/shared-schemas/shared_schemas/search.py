@@ -26,3 +26,18 @@ class SearchHit(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class SemanticSearchRequest(BaseModel):
+    project_id: UUID
+    query: str = Field(..., min_length=1, max_length=500)
+    top_k: int = Field(default=10, ge=1, le=50)
+
+
+class SemanticHit(BaseModel):
+    """A semantic search result with similarity score."""
+    doc_id: UUID
+    title: str
+    doc_type: str
+    status: str
+    score: float = Field(description="Cosine similarity score (0-1)")
