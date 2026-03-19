@@ -115,6 +115,38 @@ async def test_update_node(
 
 
 @pytest.mark.asyncio
+async def test_list_nodes(
+    client: AsyncClient, auth_headers: dict, architecture_fixture: dict
+):
+    arch_id = architecture_fixture["arch_id"]
+    resp = await client.get(f"/v1/architectures/{arch_id}/nodes", headers=auth_headers)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert isinstance(data["data"], list)
+    assert data["meta"]["total"] >= 0
+
+
+@pytest.mark.asyncio
+async def test_list_nodes_with_created_node(
+    client: AsyncClient, auth_headers: dict, db_session: AsyncSession, architecture_fixture: dict
+):
+    """After creating a node, list should include it."""
+    from shared_models import ArchitectureNode
+    arch_id = architecture_fixture["arch_id"]
+    node = ArchitectureNode(
+        id=uuid.uuid4(), architecture_id=arch_id,
+        node_name="Listed Node", node_type="category", level=0, status="draft",
+    )
+    db_session.add(node)
+    await db_session.flush()
+
+    resp = await client.get(f"/v1/architectures/{arch_id}/nodes", headers=auth_headers)
+    assert resp.status_code == 200
+    names = [n["node_name"] for n in resp.json()["data"]]
+    assert "Listed Node" in names
+
+
+@pytest.mark.asyncio
 async def test_get_architecture_not_found(client: AsyncClient, auth_headers: dict):
     fake_id = str(uuid.uuid4())
     resp = await client.get(f"/v1/architectures/{fake_id}", headers=auth_headers)

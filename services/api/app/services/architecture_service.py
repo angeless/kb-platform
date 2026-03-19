@@ -67,6 +67,17 @@ class ArchitectureService:
         await self.db.refresh(arch)
         return arch
 
+    async def list_nodes(self, arch_id: uuid.UUID) -> list[ArchitectureNode]:
+        """List all nodes for an architecture, ordered by level then name."""
+        await self.get(arch_id)  # verify exists and tenant access
+        q = (
+            select(ArchitectureNode)
+            .where(ArchitectureNode.architecture_id == arch_id)
+            .order_by(ArchitectureNode.level, ArchitectureNode.node_name)
+        )
+        rows = (await self.db.execute(q)).scalars().all()
+        return list(rows)
+
     async def create_node(self, arch_id: uuid.UUID, node_data: dict) -> ArchitectureNode:
         """Create a node under an architecture."""
         await self.get(arch_id)  # verify exists and tenant access

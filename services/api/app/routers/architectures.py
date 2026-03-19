@@ -46,6 +46,23 @@ async def get_architecture(
     return DataResponse(data=ArchitectureOut.model_validate(arch))
 
 
+@router.get(
+    "/v1/architectures/{arch_id}/nodes",
+    response_model=ListResponse[NodeOut],
+)
+async def list_nodes(
+    arch_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    tenant_id: uuid.UUID = Depends(get_tenant_id),
+):
+    svc = ArchitectureService(db, tenant_id)
+    nodes = await svc.list_nodes(arch_id)
+    return ListResponse(
+        data=[NodeOut.model_validate(n) for n in nodes],
+        meta=PaginationMeta(page=1, page_size=len(nodes), total=len(nodes)),
+    )
+
+
 @router.post(
     "/v1/architectures/{arch_id}/publish",
     response_model=DataResponse[ArchitectureOut],
