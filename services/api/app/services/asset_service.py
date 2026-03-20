@@ -7,12 +7,14 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared_errors import AppException, ConflictException, ErrorCode, NotFoundException
-from shared_models import Asset, Project
+from shared_models import Asset
 
 from app.utils.storage import PARSEABLE_ASSET_TYPES, StorageClient, is_allowed_file
 
+from . import TenantService
 
-class AssetService:
+
+class AssetService(TenantService):
     """Operations for assets, scoped to a single tenant via project ownership."""
 
     def __init__(
@@ -23,27 +25,10 @@ class AssetService:
         storage: StorageClient | None = None,
         max_upload_size_bytes: int = 100 * 1024 * 1024,
     ) -> None:
-        self.db = db
-        self.tenant_id = tenant_id
+        super().__init__(db, tenant_id)
         self.user_id = user_id
         self.storage = storage
         self.max_upload_size_bytes = max_upload_size_bytes
-
-    async def _verify_project(self, project_id: uuid.UUID) -> Project:
-        """Verify project exists and belongs to tenant."""
-        q = select(Project).where(
-            Project.id == project_id,
-            Project.tenant_id == self.tenant_id,
-            Project.status != "deleted",
-        )
-        result = await self.db.execute(q)
-        project = result.scalar_one_or_none()
-        if project is None:
-            raise NotFoundException(
-                error_code=ErrorCode.PROJECT_NOT_FOUND,
-                message="项目不存在",
-            )
-        return project
 
     async def upload(
         self,

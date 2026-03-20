@@ -10,7 +10,9 @@ from sqlalchemy import delete, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared_errors import ErrorCode, NotFoundException
-from shared_models import DocEmbedding, KnowledgeDoc, KnowledgeDocVersion, Project
+from shared_models import DocEmbedding, KnowledgeDoc, KnowledgeDocVersion
+
+from . import TenantService
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +41,7 @@ async def _default_embed_fn(text_input: str) -> list[float]:
         return [0.0] * DEFAULT_DIMENSIONS
 
 
-class EmbeddingService:
+class EmbeddingService(TenantService):
     """Generate document embeddings and perform semantic search."""
 
     def __init__(
@@ -48,21 +50,8 @@ class EmbeddingService:
         tenant_id: uuid.UUID,
         embed_fn: Callable | None = None,
     ) -> None:
-        self.db = db
-        self.tenant_id = tenant_id
+        super().__init__(db, tenant_id)
         self.embed_fn = embed_fn or _default_embed_fn
-
-    async def _verify_project(self, project_id: uuid.UUID) -> Project:
-        q = select(Project).where(
-            Project.id == project_id,
-            Project.tenant_id == self.tenant_id,
-            Project.status != "deleted",
-        )
-        result = await self.db.execute(q)
-        project = result.scalar_one_or_none()
-        if project is None:
-            raise NotFoundException(error_code=ErrorCode.PROJECT_NOT_FOUND, message="项目不存在")
-        return project
 
     async def embed_doc(self, doc_id: uuid.UUID) -> DocEmbedding:
         """Generate and store embedding for a document's latest version."""

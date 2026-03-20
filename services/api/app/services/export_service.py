@@ -11,7 +11,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared_errors import ErrorCode, NotFoundException
-from shared_models import KnowledgeDoc, KnowledgeDocVersion, Project
+from shared_models import KnowledgeDoc, KnowledgeDocVersion
+
+from . import TenantService
 
 
 def _safe_filename(name: str) -> str:
@@ -21,24 +23,8 @@ def _safe_filename(name: str) -> str:
     return name[:200] or "untitled"
 
 
-class ExportService:
+class ExportService(TenantService):
     """Export knowledge documents as Markdown or ZIP."""
-
-    def __init__(self, db: AsyncSession, tenant_id: uuid.UUID) -> None:
-        self.db = db
-        self.tenant_id = tenant_id
-
-    async def _get_project(self, project_id: uuid.UUID) -> Project:
-        q = select(Project).where(
-            Project.id == project_id,
-            Project.tenant_id == self.tenant_id,
-            Project.status != "deleted",
-        )
-        result = await self.db.execute(q)
-        project = result.scalar_one_or_none()
-        if project is None:
-            raise NotFoundException(error_code=ErrorCode.PROJECT_NOT_FOUND, message="项目不存在")
-        return project
 
     async def export_single_doc(self, doc_id: uuid.UUID) -> tuple[str, str]:
         """Export a single doc as Markdown. Returns (filename, content)."""
@@ -47,7 +33,7 @@ class ExportService:
         doc = result.scalar_one_or_none()
         if doc is None:
             raise NotFoundException(error_code=ErrorCode.DOC_NOT_FOUND, message="文档不存在")
-        await self._get_project(doc.project_id)
+        await self._verify_project(doc.project_id)
 
         # Get latest version
         ver_q = select(KnowledgeDocVersion).where(
@@ -61,7 +47,7 @@ class ExportService:
 
     async def export_project_zip(self, project_id: uuid.UUID) -> tuple[str, bytes]:
         """Export all docs in a project as a ZIP. Returns (zip_filename, zip_bytes)."""
-        project = await self._get_project(project_id)
+        project = await self._verify_project(project_id)
 
         docs_q = select(KnowledgeDoc).where(KnowledgeDoc.project_id == project_id)
         docs = (await self.db.execute(docs_q)).scalars().all()
