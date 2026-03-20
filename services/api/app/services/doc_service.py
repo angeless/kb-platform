@@ -9,7 +9,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared_errors import ConflictException, ErrorCode, NotFoundException
-from shared_models import ArchitectureNode, KnowledgeDoc, KnowledgeDocVersion, SourceRef
+from shared_models import Architecture, ArchitectureNode, KnowledgeDoc, KnowledgeDocVersion, SourceRef
 
 from . import TenantService
 
@@ -84,17 +84,28 @@ class DocService(TenantService):
         return list(rows), total
 
     async def assign_node(self, doc_id: uuid.UUID, node_id: uuid.UUID) -> KnowledgeDoc:
-        """Assign a document to an architecture node."""
+        """Assign a document to an architecture node.
+
+        Verifies that the target node belongs to an architecture within
+        the same project as the document (prevents IDOR cross-project assignment).
+        """
         doc = await self.get(doc_id)
 
-        # Verify the target node exists
-        q = select(ArchitectureNode).where(ArchitectureNode.id == node_id)
+        # Verify the target node exists AND belongs to the same project
+        q = (
+            select(ArchitectureNode)
+            .join(Architecture, ArchitectureNode.architecture_id == Architecture.id)
+            .where(
+                ArchitectureNode.id == node_id,
+                Architecture.project_id == doc.project_id,
+            )
+        )
         result = await self.db.execute(q)
         node = result.scalar_one_or_none()
         if node is None:
             raise NotFoundException(
-                error_code=ErrorCode.ARCH_NOT_FOUND,
-                message="架构节点不存在",
+                error_code=ErrorCode.ARCH_NODE_NOT_FOUND,
+                message="节点不存在或不属于当前项目",
             )
 
         doc.node_id = node_id
