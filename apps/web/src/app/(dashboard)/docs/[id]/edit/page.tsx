@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import Link from "next/link";
 import { api, ApiClientError } from "@/lib/api";
 import { MarkdownView } from "@/components/markdown-view";
 
@@ -26,6 +25,9 @@ export default function DocEditPage() {
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
 
+  // Track original content to detect unsaved changes
+  const initialContentRef = useRef("");
+
   useEffect(() => {
     const fetch = async () => {
       try {
@@ -35,7 +37,10 @@ export default function DocEditPage() {
           return;
         }
         const latest = resp.data.versions.sort((a, b) => b.version - a.version)[0];
-        if (latest) setContent(latest.content_md);
+        if (latest) {
+          setContent(latest.content_md);
+          initialContentRef.current = latest.content_md;
+        }
       } catch (e) {
         setError(e instanceof ApiClientError ? e.message : "加载失败");
       } finally {
@@ -44,6 +49,20 @@ export default function DocEditPage() {
     };
     fetch();
   }, [docId]);
+
+  // Warn user before leaving with unsaved changes
+  const isDirty = content !== initialContentRef.current;
+
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (content !== initialContentRef.current) {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [content]);
 
   const handleSave = async () => {
     if (!content.trim() || !reason.trim()) {
@@ -57,6 +76,8 @@ export default function DocEditPage() {
         content_md: content,
         change_reason: reason,
       });
+      // Clear dirty mark so navigation doesn't trigger warning
+      initialContentRef.current = content;
       router.push(`/docs/${docId}`);
     } catch (e) {
       setError(e instanceof ApiClientError ? e.message : "保存失败");
@@ -65,14 +86,21 @@ export default function DocEditPage() {
     }
   };
 
+  const handleNavigateBack = useCallback(() => {
+    if (content !== initialContentRef.current) {
+      if (!window.confirm("有未保存的修改，确定离开吗？")) return;
+    }
+    router.push(`/docs/${docId}`);
+  }, [content, docId, router]);
+
   if (isLoading) return <div className="py-12 text-center text-gray-400">加载中...</div>;
 
   return (
     <div className="mx-auto max-w-4xl">
       <div className="mb-4">
-        <Link href={`/docs/${docId}`} className="text-sm text-primary-600 hover:underline">
+        <button onClick={handleNavigateBack} className="text-sm text-primary-600 hover:underline">
           ← 返回文档
-        </Link>
+        </button>
       </div>
 
       <h1 className="mb-6 text-2xl font-bold text-gray-900">编辑文档</h1>
@@ -130,9 +158,9 @@ export default function DocEditPage() {
         >
           {saving ? "保存中..." : "保存新版本"}
         </button>
-        <Link href={`/docs/${docId}`} className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50">
+        <button onClick={handleNavigateBack} className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50">
           取消
-        </Link>
+        </button>
       </div>
     </div>
   );
