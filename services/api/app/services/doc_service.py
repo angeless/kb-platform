@@ -170,8 +170,8 @@ class DocService(TenantService):
         doc = await self.get(doc_id)
         if doc.status != "draft":
             raise ConflictException(
-                error_code=ErrorCode.DOC_ALREADY_PUBLISHED,
-                message="只有 draft 状态的文档可以编辑",
+                error_code=ErrorCode.DOC_STATUS_INVALID,
+                message="只有草稿状态的文档可以编辑",
             )
         new_ver_num = doc.current_version + 1
         version = KnowledgeDocVersion(
@@ -193,8 +193,8 @@ class DocService(TenantService):
         doc = await self.get(doc_id)
         if doc.status != "reviewing":
             raise ConflictException(
-                error_code=ErrorCode.DOC_ALREADY_PUBLISHED,
-                message="只有 reviewing 状态的文档可以驳回",
+                error_code=ErrorCode.DOC_STATUS_INVALID,
+                message="只有审核中的文档可以驳回",
             )
         doc.status = "draft"
         await self.db.flush()
@@ -206,7 +206,7 @@ class DocService(TenantService):
         doc = await self.get(doc_id)
         if doc.status != "draft":
             raise ConflictException(
-                error_code=ErrorCode.DOC_ALREADY_PUBLISHED,
+                error_code=ErrorCode.DOC_STATUS_INVALID,
                 message="只有草稿状态的文档可以提交审核",
             )
         doc.status = "reviewing"
@@ -219,8 +219,8 @@ class DocService(TenantService):
         doc = await self.get(doc_id)
         if doc.status != "reviewing":
             raise ConflictException(
-                error_code=ErrorCode.DOC_ALREADY_PUBLISHED,
-                message="只有审核中的文档可以发布",
+                error_code=ErrorCode.DOC_STATUS_INVALID,
+                message="文档当前状态不允许发布，必须先进入审核状态",
             )
         doc.status = "published"
         await self.db.flush()
