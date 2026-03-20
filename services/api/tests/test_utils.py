@@ -2,7 +2,13 @@
 
 import pytest
 
-from app.utils.crypto import decrypt, encrypt, mask_api_key
+from app.utils.crypto import (
+    _KDF1_PREFIX,
+    _derive_key,
+    decrypt,
+    encrypt,
+    mask_api_key,
+)
 from app.utils.security import (
     create_access_token,
     decode_access_token,
@@ -32,6 +38,35 @@ class TestCrypto:
         encrypted = encrypt("secret data", secret1)
         with pytest.raises(Exception):
             decrypt(encrypted, secret2)
+
+    def test_new_format_has_kdf1_prefix(self):
+        """New encrypt output must start with b'KDF1' prefix."""
+        secret = "test-secret-key-32-chars-long!!!"
+        encrypted = encrypt("test data", secret)
+        assert encrypted[:4] == _KDF1_PREFIX
+
+    def test_decrypt_legacy_format(self):
+        """Old-format data (no KDF1 prefix) must still be decryptable."""
+        import os
+        from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+        secret = "test-secret-key-32-chars-long!!!"
+        plaintext = "legacy secret"
+        # Manually create old-format encrypted data
+        key = _derive_key(secret)
+        aesgcm = AESGCM(key)
+        nonce = os.urandom(12)
+        ciphertext = aesgcm.encrypt(nonce, plaintext.encode("utf-8"), None)
+        legacy_data = nonce + ciphertext  # No KDF1 prefix
+
+        # New decrypt() should handle it
+        assert decrypt(legacy_data, secret) == plaintext
+
+    def test_decrypt_wrong_key_new_format(self):
+        """Wrong key should fail for new PBKDF2 format."""
+        encrypted = encrypt("secret data", "correct-key-long-enough-32chars!")
+        with pytest.raises(Exception):
+            decrypt(encrypted, "wrong-key-also-long-enough-32ch!")
 
     def test_mask_api_key_default(self):
         assert mask_api_key("sk-abc123xyz789") == "***********z789"
