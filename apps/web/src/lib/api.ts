@@ -16,10 +16,41 @@ export interface ApiResponse<T> {
   meta?: { request_id?: string; page?: number; page_size?: number; total?: number };
 }
 
+let refreshPromise: Promise<string | null> | null = null;
+
 class ApiClient {
   private getToken(): string | null {
     if (typeof window === "undefined") return null;
     return localStorage.getItem("access_token");
+  }
+
+  private async refreshAccessToken(): Promise<string | null> {
+    if (typeof window === "undefined") return null;
+    const refreshToken = localStorage.getItem("refresh_token");
+    if (!refreshToken) return null;
+
+    try {
+      const resp = await fetch(`${API_BASE}/v1/auth/refresh`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refresh_token: refreshToken }),
+      });
+
+      if (!resp.ok) {
+        localStorage.removeItem("access_token");
+        localStorage.removeItem("refresh_token");
+        return null;
+      }
+
+      const body = await resp.json();
+      const newToken: string = body.data?.access_token ?? body.access_token;
+      localStorage.setItem("access_token", newToken);
+      return newToken;
+    } catch {
+      localStorage.removeItem("access_token");
+      localStorage.removeItem("refresh_token");
+      return null;
+    }
   }
 
   async request<T>(path: string, options: RequestInit = {}): Promise<ApiResponse<T>> {
@@ -41,6 +72,37 @@ class ApiClient {
       ...options,
       headers,
     });
+
+    // 401 auto-refresh: skip for auth endpoints to avoid recursive refresh
+    if (resp.status === 401 && !path.startsWith("/v1/auth/")) {
+      if (!refreshPromise) {
+        refreshPromise = this.refreshAccessToken().finally(() => {
+          refreshPromise = null;
+        });
+      }
+
+      const newToken = await refreshPromise;
+
+      if (newToken) {
+        headers["Authorization"] = `Bearer ${newToken}`;
+        const retryResp = await fetch(`${API_BASE}${path}`, {
+          ...options,
+          headers,
+        });
+        const retryBody = await retryResp.json();
+        if (!retryResp.ok) {
+          const err = retryBody as ApiError;
+          throw new ApiClientError(err.message || "请求失败", err.error_code, retryResp.status);
+        }
+        return retryBody as ApiResponse<T>;
+      }
+
+      // Refresh failed — redirect to login
+      if (typeof window !== "undefined") {
+        window.location.href = "/login";
+      }
+      throw new ApiClientError("登录已过期，请重新登录", "TOKEN_EXPIRED", 401);
+    }
 
     const body = await resp.json();
 

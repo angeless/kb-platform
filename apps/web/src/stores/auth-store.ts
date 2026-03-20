@@ -32,11 +32,12 @@ export const useAuthStore = create<AuthState>((set) => ({
   login: async (email, password) => {
     set({ isLoading: true, error: null });
     try {
-      const resp = await api.post<{ access_token: string; user: User }>(
+      const resp = await api.post<{ access_token: string; refresh_token: string; user: User }>(
         "/v1/auth/login",
         { email, password },
       );
       localStorage.setItem("access_token", resp.data.access_token);
+      localStorage.setItem("refresh_token", resp.data.refresh_token);
       set({ user: resp.data.user, isLoading: false });
     } catch (e) {
       const msg = e instanceof ApiClientError ? e.message : "登录失败";
@@ -48,11 +49,12 @@ export const useAuthStore = create<AuthState>((set) => ({
   register: async (tenantName, email, password) => {
     set({ isLoading: true, error: null });
     try {
-      const resp = await api.post<{ access_token: string; user: User }>(
+      const resp = await api.post<{ access_token: string; refresh_token: string; user: User }>(
         "/v1/auth/register",
         { tenant_name: tenantName, email, password },
       );
       localStorage.setItem("access_token", resp.data.access_token);
+      localStorage.setItem("refresh_token", resp.data.refresh_token);
       set({ user: resp.data.user, isLoading: false });
     } catch (e) {
       const msg = e instanceof ApiClientError ? e.message : "注册失败";
@@ -63,6 +65,7 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   logout: () => {
     localStorage.removeItem("access_token");
+    localStorage.removeItem("refresh_token");
     set({ user: null, error: null });
   },
 
