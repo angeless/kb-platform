@@ -57,7 +57,6 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 payload = jwt.decode(
                     auth[7:], settings.jwt_secret,
                     algorithms=[settings.jwt_algorithm],
-                    options={"verify_exp": False},
                 )
                 tid = payload.get("tenant_id")
                 if tid:
