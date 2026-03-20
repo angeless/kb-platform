@@ -79,6 +79,10 @@ class SearchService(TenantService):
         """
         await self._verify_project(project_id)
 
+        query = query.strip()
+        if not query:
+            return [], 0
+
         tsquery_str = _build_tsquery(query)
 
         # Try tsvector search first (fast path with GIN index)

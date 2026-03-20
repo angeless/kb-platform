@@ -109,3 +109,9 @@ class TestBuildTsquery:
 
     def test_whitespace_only(self):
         assert _build_tsquery("   ") == ""
+
+    def test_tab_newline(self):
+        assert _build_tsquery("\t\n") == ""
+
+    def test_mixed_whitespace_and_operators(self):
+        assert _build_tsquery("  & \t | \n ") == ""

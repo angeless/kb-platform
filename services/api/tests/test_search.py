@@ -154,6 +154,34 @@ async def test_search_empty_query_rejected(client: AsyncClient, auth_headers: di
 
 
 @pytest.mark.asyncio
+async def test_search_whitespace_only_returns_empty(client: AsyncClient, auth_headers: dict, search_fixture: dict):
+    """Whitespace-only query should return 200 with empty results (T-37-05)."""
+    resp = await client.post(
+        "/v1/search/text",
+        json={"project_id": str(search_fixture["project_id"]), "query": "   "},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["meta"]["total"] == 0
+    assert data["data"] == []
+
+
+@pytest.mark.asyncio
+async def test_search_tab_newline_returns_empty(client: AsyncClient, auth_headers: dict, search_fixture: dict):
+    """Tab/newline query should return 200 with empty results (T-37-05)."""
+    resp = await client.post(
+        "/v1/search/text",
+        json={"project_id": str(search_fixture["project_id"]), "query": "\t\n"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["meta"]["total"] == 0
+    assert data["data"] == []
+
+
+@pytest.mark.asyncio
 async def test_search_snippet_contains_context(client: AsyncClient, auth_headers: dict, search_fixture: dict):
     """Snippet should contain matched text."""
     resp = await client.post(
