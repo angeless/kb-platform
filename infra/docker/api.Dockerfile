@@ -29,4 +29,8 @@ RUN chmod +x /entrypoint.sh
 
 EXPOSE 8080
 
+# Run as non-root user
+RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser
+USER appuser
+
 ENTRYPOINT ["/entrypoint.sh"]

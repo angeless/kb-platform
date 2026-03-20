@@ -16,4 +16,8 @@ RUN pip install --no-cache-dir -e /app/
 # Copy env file for defaults
 COPY .env.example /app/.env
 
+# Run as non-root user
+RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser
+USER appuser
+
 CMD ["celery", "-A", "orchestrator.celery_app:celery_app", "worker", "--loglevel=info", "--concurrency=2"]

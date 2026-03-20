@@ -13,4 +13,8 @@ RUN pip install --no-cache-dir \
 COPY services/pipeline-worker/ /app/
 RUN pip install --no-cache-dir -e /app/
 
+# Run as non-root user
+RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser
+USER appuser
+
 CMD ["celery", "-A", "worker.celery_app:celery_app", "worker", "--loglevel=info", "--concurrency=2", "-Q", "pipeline"]
