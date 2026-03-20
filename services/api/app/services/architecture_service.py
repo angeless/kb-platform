@@ -183,6 +183,28 @@ class ArchitectureService(TenantService):
                 error_code=ErrorCode.ARCH_NODE_NOT_FOUND,
                 message="架构节点不存在",
             )
+        new_parent_id = node_data.get("parent_id")
+        if new_parent_id is not None:
+            if new_parent_id == node_id:
+                raise ConflictException(
+                    error_code=ErrorCode.ARCH_CYCLE_DETECTED,
+                    message="节点不能将自身设为父节点",
+                )
+            current_id = new_parent_id
+            for _ in range(50):
+                pq = select(ArchitectureNode).where(
+                    ArchitectureNode.id == current_id,
+                    ArchitectureNode.architecture_id == arch_id,
+                )
+                parent_node = (await self.db.execute(pq)).scalar_one_or_none()
+                if parent_node is None or parent_node.parent_id is None:
+                    break
+                if parent_node.parent_id == node_id:
+                    raise ConflictException(
+                        error_code=ErrorCode.ARCH_CYCLE_DETECTED,
+                        message="修改父节点会形成循环引用",
+                    )
+                current_id = parent_node.parent_id
         for key, value in node_data.items():
             if value is not None:
                 setattr(node, key, value)
