@@ -1,0 +1,8 @@
+# Auto-generated from pyproject.toml — third-party deps only (excludes shared-* local packages)
+# pipeline-worker has no explicit dependencies in pyproject.toml,
+# but it imports shared packages which depend on these:
+celery[redis]>=5.3
+sqlalchemy[asyncio]>=2.0
+asyncpg>=0.29
+psycopg2-binary>=2.9
+pydantic-settings>=2.0

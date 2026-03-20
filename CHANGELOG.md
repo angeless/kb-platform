@@ -17,6 +17,15 @@
 - CLAUDE.md 升级为双模式（产品模式 + 开发模式）
 - 文档目录重组：PRD → docs/prd/，安全 → docs/security/，报告 → docs/reports/
 
+## [0.39.5] - 2026-03-20
+
+### 新增
+- 4 个服务的 requirements.lock 文件（精确锁定所有第三方依赖版本）(T-39-05)
+- requirements.in 约束文件（记录依赖来源，支持 `uv pip compile` 重新生成）
+
+### 修改
+- 4 个 Dockerfile 改用 `--no-deps -r requirements.lock` 安装依赖，确保构建可重现 (T-39-05)
+
 ## [0.39.0] - 2026-03-20
 
 ### 新增

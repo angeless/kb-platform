@@ -1,0 +1,6 @@
+# Auto-generated from pyproject.toml — third-party deps only (excludes shared-* local packages)
+celery[redis]>=5.3
+sqlalchemy>=2.0
+psycopg2-binary>=2.9
+httpx>=0.27
+pydantic-settings>=2.0

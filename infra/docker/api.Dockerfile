@@ -7,7 +7,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Install shared packages
+# Install shared packages (local, editable)
 COPY packages/ /packages/
 RUN pip install --no-cache-dir \
     -e /packages/shared-config \
@@ -15,9 +15,13 @@ RUN pip install --no-cache-dir \
     -e /packages/shared-models \
     -e /packages/shared-schemas
 
-# Install API service
+# Install locked third-party dependencies
+COPY services/api/requirements.lock /app/requirements.lock
+RUN pip install --no-cache-dir --no-deps -r /app/requirements.lock
+
+# Install API service (no-deps: all deps already installed above)
 COPY services/api/ /app/
-RUN pip install --no-cache-dir -e /app/
+RUN pip install --no-cache-dir --no-deps -e /app/
 
 # Install Alembic and copy migration files
 RUN pip install --no-cache-dir alembic
