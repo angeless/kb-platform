@@ -16,6 +16,10 @@ from . import TenantService
 
 logger = logging.getLogger(__name__)
 
+# ZIP archive decompression limits (DoS protection)
+MAX_ARCHIVE_TOTAL_BYTES = 500 * 1024 * 1024  # 500MB total decompressed
+MAX_COMPRESSION_RATIO = 100  # skip files with ratio > 100
+
 
 class AssetService(TenantService):
     """Operations for assets, scoped to a single tenant via project ownership."""
@@ -206,6 +210,8 @@ class AssetService(TenantService):
                         message=f"ZIP 文件包含非法路径（路径穿越）: {entry_name}",
                     )
 
+            total_decompressed = 0
+
             for entry_name in entries:
                 # Extract safe filename (basename after normpath)
                 normalized = os.path.normpath(entry_name)
@@ -218,10 +224,36 @@ class AssetService(TenantService):
                     skipped += 1
                     continue
 
+                # --- Size guards (T-37-07) ---
+                info = zf.getinfo(entry_name)
+
+                # Compression ratio check
+                if info.compress_size > 0 and info.file_size / info.compress_size > MAX_COMPRESSION_RATIO:
+                    logger.warning("ZIP entry %s skipped: compression ratio %.1f exceeds limit %d",
+                                   entry_name, info.file_size / info.compress_size, MAX_COMPRESSION_RATIO)
+                    errors.append(f"{entry_name}: 压缩比过高（疑似 ZIP 炸弹），已跳过")
+                    continue
+
+                # Single file size check
+                if info.file_size > self.max_upload_size_bytes:
+                    errors.append(f"{entry_name}: 文件解压后大小超过限制 ({self.max_upload_size_bytes // (1024 * 1024)}MB)，已跳过")
+                    continue
+
+                # Total decompressed size check
+                total_decompressed += info.file_size
+                if total_decompressed > MAX_ARCHIVE_TOTAL_BYTES:
+                    errors.append(f"解压总大小超过限制 ({MAX_ARCHIVE_TOTAL_BYTES // (1024 * 1024)}MB)，剩余文件已跳过")
+                    break
+
                 try:
                     file_content = zf.read(entry_name)
                 except Exception as e:
                     errors.append(f"{entry_name}: {e!s}")
+                    continue
+
+                # Verify actual size matches declared size (defend against crafted ZipInfo)
+                if len(file_content) > self.max_upload_size_bytes:
+                    errors.append(f"{entry_name}: 实际解压大小超过限制，已跳过")
                     continue
 
                 file_hash = hashlib.sha256(file_content).hexdigest()
