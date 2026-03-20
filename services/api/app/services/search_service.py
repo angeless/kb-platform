@@ -1,5 +1,6 @@
 """Search service: full-text search across knowledge documents."""
 
+import re
 import uuid
 
 from sqlalchemy import func, or_, select, text
@@ -36,16 +37,30 @@ def _extract_snippet(text_str: str, query: str, context: int = SNIPPET_CONTEXT) 
     return snippet
 
 
-def _build_tsquery(query: str) -> str:
-    """Build a tsquery string from user input.
+# Characters that are tsquery operators and must be stripped from user input
+_TSQUERY_OPERATOR_RE = re.compile(r"[&|!():<>*]")
 
-    Splits on whitespace, joins with & (AND logic).
-    Each term is used with :* prefix matching for partial matches.
+
+def _sanitize_tsquery_input(query: str) -> str:
+    """Sanitize user input for safe use with plainto_tsquery.
+
+    - Removes tsquery operator characters: & | ! ( ) : < > *
+    - Strips leading/trailing whitespace
+    - Collapses multiple spaces into one
     """
-    terms = query.strip().split()
-    if not terms:
-        return ""
-    return " & ".join(f"{t}:*" for t in terms)
+    cleaned = _TSQUERY_OPERATOR_RE.sub(" ", query)
+    cleaned = " ".join(cleaned.split())  # collapse whitespace
+    return cleaned
+
+
+def _build_tsquery(query: str) -> str:
+    """Sanitize user input and return cleaned text for plainto_tsquery.
+
+    Returns empty string if input contains only operators/whitespace.
+    The returned text is passed to plainto_tsquery('simple', ...) which
+    handles tokenization and AND-joining automatically.
+    """
+    return _sanitize_tsquery_input(query)
 
 
 class SearchService(TenantService):
@@ -86,15 +101,15 @@ class SearchService(TenantService):
         page_size: int,
     ) -> tuple[list[dict], int]:
         """Search using PostgreSQL tsvector + GIN index."""
-        # Use raw SQL for tsvector operations (ts_rank, @@, to_tsquery)
+        # Use raw SQL for tsvector operations (ts_rank, @@, plainto_tsquery)
         count_stmt = text("""
             SELECT count(*)
             FROM knowledge_doc d
             JOIN knowledge_doc_version v ON v.doc_id = d.id AND v.version = d.current_version
             WHERE d.project_id = :project_id
               AND (
-                  d.search_vector @@ to_tsquery('simple', :tsquery)
-                  OR v.search_vector @@ to_tsquery('simple', :tsquery)
+                  d.search_vector @@ plainto_tsquery('simple', :tsquery)
+                  OR v.search_vector @@ plainto_tsquery('simple', :tsquery)
               )
         """)
         total = (await self.db.execute(
@@ -114,15 +129,15 @@ class SearchService(TenantService):
                    v.content_md,
                    v.version,
                    GREATEST(
-                       ts_rank(coalesce(d.search_vector, ''::tsvector), to_tsquery('simple', :tsquery)),
-                       ts_rank(coalesce(v.search_vector, ''::tsvector), to_tsquery('simple', :tsquery))
+                       ts_rank(coalesce(d.search_vector, ''::tsvector), plainto_tsquery('simple', :tsquery)),
+                       ts_rank(coalesce(v.search_vector, ''::tsvector), plainto_tsquery('simple', :tsquery))
                    ) AS rank
             FROM knowledge_doc d
             JOIN knowledge_doc_version v ON v.doc_id = d.id AND v.version = d.current_version
             WHERE d.project_id = :project_id
               AND (
-                  d.search_vector @@ to_tsquery('simple', :tsquery)
-                  OR v.search_vector @@ to_tsquery('simple', :tsquery)
+                  d.search_vector @@ plainto_tsquery('simple', :tsquery)
+                  OR v.search_vector @@ plainto_tsquery('simple', :tsquery)
               )
             ORDER BY rank DESC, d.created_at DESC
             LIMIT :limit OFFSET :offset
