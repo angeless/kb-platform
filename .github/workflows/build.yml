@@ -33,18 +33,38 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: services/api/Dockerfile
+          file: infra/docker/api.Dockerfile
           push: true
           tags: |
             ghcr.io/${{ github.repository }}/api:latest
             ghcr.io/${{ github.repository }}/api:${{ steps.version.outputs.VERSION }}
 
-      - name: Build and push Worker image
+      - name: Build and push Ingestion Worker image
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: services/ingestion-worker/Dockerfile
+          file: infra/docker/ingestion-worker.Dockerfile
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}/worker:latest
-            ghcr.io/${{ github.repository }}/worker:${{ steps.version.outputs.VERSION }}
+            ghcr.io/${{ github.repository }}/ingestion-worker:latest
+            ghcr.io/${{ github.repository }}/ingestion-worker:${{ steps.version.outputs.VERSION }}
+
+      - name: Build and push Pipeline Worker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: infra/docker/pipeline-worker.Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/pipeline-worker:latest
+            ghcr.io/${{ github.repository }}/pipeline-worker:${{ steps.version.outputs.VERSION }}
+
+      - name: Build and push AI Orchestrator image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: infra/docker/ai-orchestrator.Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/ai-orchestrator:latest
+            ghcr.io/${{ github.repository }}/ai-orchestrator:${{ steps.version.outputs.VERSION }}
