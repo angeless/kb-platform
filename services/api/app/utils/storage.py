@@ -95,3 +95,11 @@ class StorageClient:
         )
         logger.info("Uploaded %s to bucket %s", object_key, self.bucket)
         return object_key
+
+    def delete_file(self, object_key: str) -> None:
+        """Delete a file from S3/MinIO. Best-effort: logs warning on failure."""
+        try:
+            self.client.delete_object(Bucket=self.bucket, Key=object_key)
+            logger.info("Deleted %s from bucket %s", object_key, self.bucket)
+        except Exception as e:
+            logger.warning("Failed to delete %s from bucket %s: %s", object_key, self.bucket, e)

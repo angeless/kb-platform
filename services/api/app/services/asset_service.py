@@ -1,6 +1,7 @@
 """Asset service: upload, list, get with tenant isolation."""
 
 import hashlib
+import logging
 import uuid
 
 from sqlalchemy import func, select
@@ -12,6 +13,8 @@ from shared_models import Asset
 from app.utils.storage import PARSEABLE_ASSET_TYPES, StorageClient, is_allowed_file
 
 from . import TenantService
+
+logger = logging.getLogger(__name__)
 
 
 class AssetService(TenantService):
@@ -90,7 +93,13 @@ class AssetService(TenantService):
             uploaded_by=self.user_id,
         )
         self.db.add(asset)
-        await self.db.flush()
+        try:
+            await self.db.flush()
+        except Exception:
+            # DB flush failed — best-effort cleanup of uploaded MinIO file
+            if self.storage is not None:
+                self.storage.delete_file(object_path)
+            raise
         return asset
 
     async def import_url(self, project_id: uuid.UUID, url: str) -> Asset:
@@ -147,7 +156,13 @@ class AssetService(TenantService):
             uploaded_by=self.user_id,
         )
         self.db.add(asset)
-        await self.db.flush()
+        try:
+            await self.db.flush()
+        except Exception:
+            # DB flush failed — best-effort cleanup of uploaded MinIO file
+            if self.storage is not None:
+                self.storage.delete_file(object_path)
+            raise
         return asset
 
     async def import_archive(
