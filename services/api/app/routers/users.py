@@ -66,7 +66,7 @@ async def invite_user(
     _user: User = require_role("tenant_admin"),
 ):
     svc = UserService(db, tenant_id)
-    user = await svc.invite(email=body.email, role=body.role)
+    user = await svc.invite(email=body.email, role=body.role, operator_role=_user.role)
     return DataResponse(data=UserOut.model_validate(user))
 
 
@@ -91,7 +91,7 @@ async def update_user(
     _user: User = require_role("tenant_admin"),
 ):
     svc = UserService(db, tenant_id)
-    user = await svc.update(user_id, role=body.role, status=body.status)
+    user = await svc.update(user_id, operator_role=_user.role, role=body.role, status=body.status)
     return DataResponse(data=UserOut.model_validate(user))
 
 

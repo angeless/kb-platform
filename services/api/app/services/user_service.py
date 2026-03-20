@@ -6,9 +6,10 @@ import uuid
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from shared_errors import ConflictException, ErrorCode, NotFoundException
+from shared_errors import ConflictException, ErrorCode, ForbiddenException, NotFoundException
 from shared_models import User
 
+from app.deps import ROLE_HIERARCHY
 from app.utils.security import hash_password
 
 
@@ -31,8 +32,15 @@ class UserService:
 
         return list(rows), total
 
-    async def invite(self, email: str, role: str = "viewer") -> User:
+    async def invite(self, email: str, role: str = "viewer", operator_role: str = "") -> User:
         """Invite a user by creating a record with a random temporary password."""
+        # Check: operator cannot invite a user with a higher role than their own
+        if operator_role and ROLE_HIERARCHY.get(role, 99) > ROLE_HIERARCHY.get(operator_role, -1):
+            raise ForbiddenException(
+                message="不能邀请角色高于自身的用户",
+                detail={"operator_role": operator_role, "target_role": role},
+            )
+
         # Check duplicate email
         dup_q = select(User).where(User.email == email)
         dup = (await self.db.execute(dup_q)).scalar_one_or_none()
@@ -55,8 +63,16 @@ class UserService:
         await self.db.flush()
         return user
 
-    async def update(self, user_id: uuid.UUID, **kwargs) -> User:
+    async def update(self, user_id: uuid.UUID, operator_role: str = "", **kwargs) -> User:
         """Update user fields (role, status)."""
+        # Check: operator cannot set a role higher than their own
+        target_role = kwargs.get("role")
+        if operator_role and target_role is not None and ROLE_HIERARCHY.get(target_role, 99) > ROLE_HIERARCHY.get(operator_role, -1):
+            raise ForbiddenException(
+                message="不能将用户角色提升到高于自身的级别",
+                detail={"operator_role": operator_role, "target_role": target_role},
+            )
+
         q = select(User).where(
             User.id == user_id,
             User.tenant_id == self.tenant_id,
