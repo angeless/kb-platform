@@ -91,8 +91,14 @@ class UserService:
         await self.db.refresh(user)
         return user
 
-    async def delete(self, user_id: uuid.UUID) -> User:
+    async def delete(self, user_id: uuid.UUID, operator_id: uuid.UUID | None = None) -> User:
         """Soft-delete user by setting status to 'disabled'."""
+        # Rule 1: cannot delete yourself
+        if operator_id is not None and user_id == operator_id:
+            raise ForbiddenException(
+                message="不能删除自己的账号",
+            )
+
         q = select(User).where(
             User.id == user_id,
             User.tenant_id == self.tenant_id,
@@ -104,6 +110,23 @@ class UserService:
                 error_code=ErrorCode.USER_NOT_FOUND,
                 message="用户不存在",
             )
+
+        # Rule 2: cannot delete the last admin of the tenant
+        if user.role in ("tenant_admin", "admin"):
+            admin_count_q = select(func.count()).select_from(
+                select(User).where(
+                    User.tenant_id == self.tenant_id,
+                    User.role.in_(["tenant_admin", "admin"]),
+                    User.status == "active",
+                ).subquery()
+            )
+            admin_count = (await self.db.execute(admin_count_q)).scalar_one()
+            if admin_count <= 1:
+                raise ConflictException(
+                    error_code=ErrorCode.AUTH_INSUFFICIENT_ROLE,
+                    message="不能删除租户唯一管理员",
+                )
+
         user.status = "disabled"
         await self.db.flush()
         await self.db.refresh(user)

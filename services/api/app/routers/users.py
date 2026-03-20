@@ -114,5 +114,5 @@ async def delete_user(
     _user: User = require_role("tenant_admin"),
 ):
     svc = UserService(db, tenant_id)
-    user = await svc.delete(user_id)
+    user = await svc.delete(user_id, operator_id=_user.id)
     return DataResponse(data=UserOut.model_validate(user))
