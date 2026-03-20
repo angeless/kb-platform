@@ -16,52 +16,25 @@ export interface ApiResponse<T> {
   meta?: { request_id?: string; page?: number; page_size?: number; total?: number };
 }
 
-let refreshPromise: Promise<string | null> | null = null;
+let refreshPromise: Promise<boolean> | null = null;
 
 class ApiClient {
-  private getToken(): string | null {
-    if (typeof window === "undefined") return null;
-    return localStorage.getItem("access_token");
-  }
-
-  private async refreshAccessToken(): Promise<string | null> {
-    if (typeof window === "undefined") return null;
-    const refreshToken = localStorage.getItem("refresh_token");
-    if (!refreshToken) return null;
-
+  private async refreshAccessToken(): Promise<boolean> {
     try {
       const resp = await fetch(`${API_BASE}/v1/auth/refresh`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ refresh_token: refreshToken }),
+        credentials: "include",
       });
-
-      if (!resp.ok) {
-        localStorage.removeItem("access_token");
-        localStorage.removeItem("refresh_token");
-        return null;
-      }
-
-      const body = await resp.json();
-      const newToken: string = body.data?.access_token ?? body.access_token;
-      localStorage.setItem("access_token", newToken);
-      return newToken;
+      return resp.ok;
     } catch {
-      localStorage.removeItem("access_token");
-      localStorage.removeItem("refresh_token");
-      return null;
+      return false;
     }
   }
 
   async request<T>(path: string, options: RequestInit = {}): Promise<ApiResponse<T>> {
-    const token = this.getToken();
     const headers: Record<string, string> = {
       ...(options.headers as Record<string, string>),
     };
-
-    if (token) {
-      headers["Authorization"] = `Bearer ${token}`;
-    }
 
     // Don't set Content-Type for FormData (browser sets it with boundary)
     if (!(options.body instanceof FormData)) {
@@ -71,6 +44,7 @@ class ApiClient {
     const resp = await fetch(`${API_BASE}${path}`, {
       ...options,
       headers,
+      credentials: "include",
     });
 
     // 401 auto-refresh: skip for auth endpoints to avoid recursive refresh
@@ -81,13 +55,13 @@ class ApiClient {
         });
       }
 
-      const newToken = await refreshPromise;
+      const success = await refreshPromise;
 
-      if (newToken) {
-        headers["Authorization"] = `Bearer ${newToken}`;
+      if (success) {
         const retryResp = await fetch(`${API_BASE}${path}`, {
           ...options,
           headers,
+          credentials: "include",
         });
         const retryBody = await retryResp.json();
         if (!retryResp.ok) {

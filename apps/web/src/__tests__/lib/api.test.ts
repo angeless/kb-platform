@@ -16,15 +16,12 @@ describe("ApiClientError", () => {
   });
 });
 
-describe("Token auto-refresh", () => {
+describe("Cookie-based auth and token refresh", () => {
   const fetchMock = vi.fn();
   const originalFetch = globalThis.fetch;
 
   beforeEach(() => {
     globalThis.fetch = fetchMock;
-    localStorage.clear();
-    localStorage.setItem("access_token", "expired-token");
-    localStorage.setItem("refresh_token", "valid-refresh");
     fetchMock.mockReset();
   });
 
@@ -32,14 +29,27 @@ describe("Token auto-refresh", () => {
     globalThis.fetch = originalFetch;
   });
 
-  it("retries with new token after 401 and successful refresh", async () => {
+  it("sends credentials: include on all requests", async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ data: { items: [] } }),
+    });
+
+    await api.get("/v1/documents");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [, options] = fetchMock.mock.calls[0];
+    expect(options.credentials).toBe("include");
+  });
+
+  it("retries after 401 and successful cookie-based refresh", async () => {
     // First call: 401
     fetchMock.mockResolvedValueOnce({
       ok: false,
       status: 401,
       json: async () => ({ error_code: "UNAUTHORIZED", message: "Token expired" }),
     });
-    // Refresh call: success
+    // Refresh call: success (backend sets new cookie)
     fetchMock.mockResolvedValueOnce({
       ok: true,
       status: 200,
@@ -54,17 +64,21 @@ describe("Token auto-refresh", () => {
 
     const result = await api.get("/v1/documents");
     expect(result.data).toEqual({ items: [] });
-    expect(localStorage.getItem("access_token")).toBe("new-token");
-    // Verify retry used new token
+
+    // Verify refresh call uses credentials: include
+    const refreshCall = fetchMock.mock.calls[1];
+    expect(refreshCall[0]).toContain("/v1/auth/refresh");
+    expect(refreshCall[1].credentials).toBe("include");
+
+    // Verify retry also uses credentials: include
     const retryCall = fetchMock.mock.calls[2];
-    expect(retryCall[1].headers["Authorization"]).toBe("Bearer new-token");
+    expect(retryCall[1].credentials).toBe("include");
   });
 
-  it("clears tokens and redirects on refresh failure", async () => {
-    const originalLocation = window.location.href;
+  it("redirects to /login on refresh failure", async () => {
     Object.defineProperty(window, "location", {
       writable: true,
-      value: { href: originalLocation },
+      value: { href: "/" },
     });
 
     // First call: 401
@@ -81,8 +95,6 @@ describe("Token auto-refresh", () => {
     });
 
     await expect(api.get("/v1/documents")).rejects.toThrow("登录已过期，请重新登录");
-    expect(localStorage.getItem("access_token")).toBeNull();
-    expect(localStorage.getItem("refresh_token")).toBeNull();
     expect(window.location.href).toBe("/login");
   });
 
@@ -131,29 +143,9 @@ describe("Token auto-refresh", () => {
 
     expect(r1.data).toEqual({ result: "a" });
     expect(r2.data).toEqual({ result: "b" });
-    // Refresh endpoint called only once (calls: 2 original + 1 refresh + 2 retry = 5)
     const refreshCalls = fetchMock.mock.calls.filter(
       (c: [string, RequestInit]) => c[0].includes("/v1/auth/refresh")
     );
     expect(refreshCalls).toHaveLength(1);
-  });
-
-  it("does not attempt refresh when no refresh_token exists", async () => {
-    localStorage.removeItem("refresh_token");
-
-    Object.defineProperty(window, "location", {
-      writable: true,
-      value: { href: "/" },
-    });
-
-    fetchMock.mockResolvedValueOnce({
-      ok: false, status: 401,
-      json: async () => ({ error_code: "UNAUTHORIZED", message: "expired" }),
-    });
-
-    await expect(api.get("/v1/documents")).rejects.toThrow("登录已过期");
-    // Only 1 call — no refresh attempted
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(window.location.href).toBe("/login");
   });
 });

@@ -2,8 +2,9 @@
 
 import uuid
 from collections.abc import AsyncGenerator
+from typing import Optional
 
-from fastapi import Depends, Header
+from fastapi import Cookie, Depends, Header, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -32,15 +33,30 @@ def get_settings_dep() -> Settings:
 
 
 async def get_current_user(
+    request: Request,
     db: AsyncSession = Depends(get_db),
     settings: Settings = Depends(get_settings_dep),
-    authorization: str = Header(...),
+    authorization: Optional[str] = Header(None),
 ) -> User:
-    """Extract and verify JWT from Authorization header, then load user from DB."""
-    if not authorization.startswith("Bearer "):
+    """Extract and verify JWT from Authorization header or httpOnly cookie, then load user from DB.
+
+    Priority: Authorization header > access_token cookie.
+    """
+    token: str | None = None
+
+    # 1. Try Authorization header first
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization[len("Bearer "):]
+    elif authorization:
         raise UnauthorizedException(message="认证头格式错误")
 
-    token = authorization[len("Bearer "):]
+    # 2. Fall back to httpOnly cookie
+    if not token:
+        token = request.cookies.get("access_token")
+
+    if not token:
+        raise UnauthorizedException(message="未提供认证凭据")
+
     try:
         payload = decode_access_token(token, settings.jwt_secret, settings.jwt_algorithm)
     except Exception:

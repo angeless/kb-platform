@@ -1,6 +1,7 @@
 /**
  * Authentication state managed by zustand.
- * Stores JWT token and user info in localStorage + memory.
+ * Tokens are stored in httpOnly cookies (managed by the backend).
+ * This store only holds user info in memory.
  */
 
 import { create } from "zustand";
@@ -20,8 +21,8 @@ interface AuthState {
 
   login: (email: string, password: string) => Promise<void>;
   register: (tenantName: string, email: string, password: string) => Promise<void>;
-  logout: () => void;
-  checkAuth: () => void;
+  logout: () => Promise<void>;
+  checkAuth: () => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -32,13 +33,11 @@ export const useAuthStore = create<AuthState>((set) => ({
   login: async (email, password) => {
     set({ isLoading: true, error: null });
     try {
-      const resp = await api.post<{ access_token: string; refresh_token: string; user: User }>(
-        "/v1/auth/login",
-        { email, password },
-      );
-      localStorage.setItem("access_token", resp.data.access_token);
-      localStorage.setItem("refresh_token", resp.data.refresh_token);
-      set({ user: resp.data.user, isLoading: false });
+      // Backend sets httpOnly cookies; response body still contains tokens for reference
+      await api.post("/v1/auth/login", { email, password });
+      // Fetch user info via /me endpoint (cookie is now set)
+      const meResp = await api.get<User>("/v1/auth/me");
+      set({ user: meResp.data, isLoading: false });
     } catch (e) {
       const msg = e instanceof ApiClientError ? e.message : "登录失败";
       set({ error: msg, isLoading: false });
@@ -49,13 +48,9 @@ export const useAuthStore = create<AuthState>((set) => ({
   register: async (tenantName, email, password) => {
     set({ isLoading: true, error: null });
     try {
-      const resp = await api.post<{ access_token: string; refresh_token: string; user: User }>(
-        "/v1/auth/register",
-        { tenant_name: tenantName, email, password },
-      );
-      localStorage.setItem("access_token", resp.data.access_token);
-      localStorage.setItem("refresh_token", resp.data.refresh_token);
-      set({ user: resp.data.user, isLoading: false });
+      await api.post("/v1/auth/register", { tenant_name: tenantName, email, password });
+      // Register does not return tokens / set cookies — user must login after registration
+      set({ isLoading: false });
     } catch (e) {
       const msg = e instanceof ApiClientError ? e.message : "注册失败";
       set({ error: msg, isLoading: false });
@@ -63,31 +58,20 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
   },
 
-  logout: () => {
-    localStorage.removeItem("access_token");
-    localStorage.removeItem("refresh_token");
+  logout: async () => {
+    try {
+      await api.post("/v1/auth/logout");
+    } catch {
+      // Best-effort: even if the API call fails, clear local state
+    }
     set({ user: null, error: null });
   },
 
-  checkAuth: () => {
-    const token = localStorage.getItem("access_token");
-    if (!token) {
-      set({ user: null });
-      return;
-    }
-    // Decode JWT payload (not for security, just to show user info)
+  checkAuth: async () => {
     try {
-      const payload = JSON.parse(atob(token.split(".")[1]));
-      set({
-        user: {
-          id: payload.user_id,
-          email: payload.email || "",
-          role: payload.role || "",
-          tenant_id: payload.tenant_id,
-        },
-      });
+      const resp = await api.get<User>("/v1/auth/me");
+      set({ user: resp.data });
     } catch {
-      localStorage.removeItem("access_token");
       set({ user: null });
     }
   },
