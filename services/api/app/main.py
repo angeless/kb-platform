@@ -48,10 +48,22 @@ async def lifespan(app: FastAPI):
     logging.shutdown()
 
 
+def _read_version() -> str:
+    """Read version from VERSION file, fallback to 0.0.0."""
+    try:
+        from pathlib import Path
+        version_file = Path(__file__).resolve().parents[3] / "VERSION"
+        if version_file.exists():
+            return version_file.read_text().strip()
+    except Exception:
+        pass
+    return "0.0.0"
+
+
 def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
     setup_logging()
-    app = FastAPI(title="KB Platform API", version="0.35.0", lifespan=lifespan)
+    app = FastAPI(title="KB Platform API", version=_read_version(), lifespan=lifespan)
 
     # Middleware (order matters: first added = outermost)
     app.add_middleware(RequestIdMiddleware)
@@ -66,7 +78,7 @@ def create_app() -> FastAPI:
         allow_origins=origins,
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-        allow_headers=["*"],
+        allow_headers=["Content-Type", "Authorization", "X-Request-ID"],
     )
 
     # Exception handlers

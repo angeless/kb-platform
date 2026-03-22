@@ -8,6 +8,14 @@
 ### 新增 (Added)
 - 自动化开发工作流（dev-workflow-upgrade v1.3）
 
+## [0.41.7] - 2026-03-22
+
+### 安全修复
+- CORS allow_headers 从 `["*"]` 收紧为 `["Content-Type", "Authorization", "X-Request-ID"]` (T-41-07)
+
+### 修改
+- API 版本号从 VERSION 文件动态读取（不再硬编码）(T-41-07)
+
 ## [0.41.6] - 2026-03-22
 
 ### 新增
