@@ -1,0 +1,42 @@
+# Version control
+.git
+.gitignore
+
+# Environment files (keep .env.example)
+.env
+.env.*
+!.env.example
+
+# Node.js
+node_modules
+apps/web/node_modules
+apps/web/.next
+
+# Python cache
+__pycache__
+*.pyc
+.pytest_cache
+
+# macOS
+.DS_Store
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# CI/CD and tooling
+.github
+.claude
+
+# Security audit files
+SECURITY_*
+
+# IDE and editor
+.vscode
+.idea
+*.swp
+*.swo
+
+# Docker compose (not needed inside containers)
+docker-compose*.yml

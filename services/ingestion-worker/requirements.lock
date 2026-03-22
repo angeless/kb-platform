@@ -1,0 +1,87 @@
+amqp==5.3.1
+    # via kombu
+annotated-types==0.7.0
+    # via pydantic
+asyncpg==0.31.0
+    # via -r services/ingestion-worker/requirements.in
+billiard==4.2.4
+    # via celery
+boto3==1.42.72
+    # via -r services/ingestion-worker/requirements.in
+botocore==1.42.72
+    # via
+    #   boto3
+    #   s3transfer
+celery==5.6.2
+    # via -r services/ingestion-worker/requirements.in
+click==8.3.1
+    # via
+    #   celery
+    #   click-didyoumean
+    #   click-plugins
+    #   click-repl
+click-didyoumean==0.3.1
+    # via celery
+click-plugins==1.1.1.2
+    # via celery
+click-repl==0.3.0
+    # via celery
+greenlet==3.3.2
+    # via sqlalchemy
+jmespath==1.1.0
+    # via
+    #   boto3
+    #   botocore
+kombu==5.6.2
+    # via celery
+packaging==26.0
+    # via kombu
+prompt-toolkit==3.0.52
+    # via click-repl
+psycopg2-binary==2.9.11
+    # via -r services/ingestion-worker/requirements.in
+pydantic==2.12.5
+    # via pydantic-settings
+pydantic-core==2.41.5
+    # via pydantic
+pydantic-settings==2.13.1
+    # via -r services/ingestion-worker/requirements.in
+pymupdf==1.27.2.2
+    # via -r services/ingestion-worker/requirements.in
+python-dateutil==2.9.0.post0
+    # via
+    #   botocore
+    #   celery
+python-dotenv==1.2.2
+    # via pydantic-settings
+redis==6.4.0
+    # via kombu
+s3transfer==0.16.0
+    # via boto3
+six==1.17.0
+    # via python-dateutil
+sqlalchemy==2.0.48
+    # via -r services/ingestion-worker/requirements.in
+typing-extensions==4.15.0
+    # via
+    #   pydantic
+    #   pydantic-core
+    #   sqlalchemy
+    #   typing-inspection
+typing-inspection==0.4.2
+    # via
+    #   pydantic
+    #   pydantic-settings
+tzdata==2025.3
+    # via kombu
+tzlocal==5.3.1
+    # via celery
+urllib3==2.6.3
+    # via botocore
+vine==5.1.0
+    # via
+    #   amqp
+    #   celery
+    #   kombu
+wcwidth==0.6.0
+    # via prompt-toolkit

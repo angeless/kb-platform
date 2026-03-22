@@ -1,0 +1,243 @@
+================================================================================
+SECURITY CODE AUDIT SUMMARY
+Project: knowledge_SQL
+Date: 2026-03-19
+Scope: Backend API (FastAPI/Python) + Frontend (Next.js/React)
+================================================================================
+
+CRITICAL FINDINGS: 1
+HIGH FINDINGS: 2
+MEDIUM FINDINGS: 3
+LOW FINDINGS: 0
+INFO FINDINGS: 0
+
+TOTAL: 6 vulnerabilities requiring remediation
+
+================================================================================
+CRITICAL SEVERITY
+================================================================================
+
+[1] IDOR: Cross-Tenant Node Assignment (CWE-639)
+File: services/api/app/services/doc_service.py:86-103
+Issue: assign_node() method does not verify target architecture node belongs
+       to same project/tenant. Allows assigning documents to another tenant's
+       nodes, leaking cross-tenant data via foreign keys.
+Status: REQUIRES IMMEDIATE FIX
+Remediation: Add Architecture.project_id == doc.project_id check before
+             assignment. See SECURITY_REMEDIATION_GUIDE.md Section 1.
+
+================================================================================
+HIGH SEVERITY
+================================================================================
+
+[2] Authentication Bypass: Rate Limiter Accepts Expired Tokens (CWE-613)
+File: services/api/app/middleware/rate_limit.py:50-69
+Issue: Rate limiter extracts tenant_id from JWT tokens with
+       options={"verify_exp": False}. Allows expired tokens to bypass
+       rate limiting and cause DoS against specific tenants.
+Status: REQUIRES FIX
+Remediation: Enable token expiration verification. Fallback to IP-based
+             rate limiting for expired tokens. See SECURITY_REMEDIATION_GUIDE.md
+             Section 2.
+
+[3] DoS: Rate Limiter Fails Open (CWE-693)
+File: services/api/app/middleware/rate_limit.py:78-81, 130-133
+Issue: When Redis is unavailable, rate limiter allows all requests through
+       with no fallback protection. Exposes system to brute force and DoS.
+Status: REQUIRES FIX
+Remediation: Implement in-memory rate limiter fallback or circuit breaker.
+             Fail to fallback instead of failing open. See
+             SECURITY_REMEDIATION_GUIDE.md Section 3.
+
+================================================================================
+MEDIUM SEVERITY
+================================================================================
+
+[4] SSRF: Missing Localhost Alias in Blocklist (CWE-918)
+File: services/api/app/utils/url_fetcher.py:20-29
+Issue: IP blocklist missing 0.0.0.0 (IPv4 any) and :: (IPv6 any) which can
+       be used as localhost aliases to bypass SSRF protection.
+Status: EASY FIX
+Remediation: Add ipaddress.ip_network("0.0.0.0/32") and
+             ipaddress.ip_network("::/128") to _BLOCKED_NETWORKS.
+             See SECURITY_REMEDIATION_GUIDE.md Section 4.
+
+[5] ZIP Bomb: Missing Decompression Size Limits (CWE-409)
+File: services/api/app/services/asset_service.py:153-247
+Issue: import_archive() checks file count and path traversal but not
+       decompressed size. Allows ZIP bomb attacks causing memory/disk
+       exhaustion.
+Status: REQUIRES FIX
+Remediation: Check ZipInfo.file_size before decompression. Enforce limits:
+             500 MB per file, 2 GB total. See SECURITY_REMEDIATION_GUIDE.md
+             Section 5.
+
+[6] Crypto: Weak Key Derivation (CWE-326)
+File: services/api/app/utils/crypto.py:8-13
+Issue: _derive_key() pads with zeros and provides no key stretching.
+       Encrypted API keys vulnerable to brute force. Need PBKDF2 or similar.
+Status: REQUIRES FIX
+Remediation: Replace with PBKDF2 (100k iterations, SHA256). Maintain
+             backward compatibility for existing encrypted data. Add migration
+             script. See SECURITY_REMEDIATION_GUIDE.md Section 6.
+
+================================================================================
+ITEMS VERIFIED - NO ISSUES FOUND
+================================================================================
+
+✓ SQL Injection: All database queries use parameterized queries with
+                 SQLAlchemy and PostgreSQL. No raw SQL concatenation.
+
+✓ JWT Expiry (Authentication): deps.py correctly validates token expiration.
+                                Only rate_limit.py has disabled check.
+
+✓ Path Traversal (ZIP): Uses os.path.normpath() and ".." detection.
+                        Properly implemented.
+
+✓ XSS in Frontend: No dangerouslySetInnerHTML usage in app source code.
+                   Uses ReactMarkdown (safe). No raw HTML rendering.
+
+✓ API Authentication: All protected routes require get_current_user or
+                      get_tenant_id dependency.
+
+✓ Cross-Tenant Isolation: Most services properly filter by tenant_id.
+                          Exception: assign_node() vulnerability noted above.
+
+✓ Sensitive Data Logging: Logging config does not capture request/response
+                          bodies, passwords, or tokens.
+
+✓ WebSocket Authentication: JWT validation occurs before websocket.accept().
+                            Token extraction properly validated.
+
+✓ File Upload Validation: Extension whitelist properly restricts file types.
+                          MIME type checking present.
+
+✓ Password Hashing: Uses bcrypt with proper salt generation (12 rounds).
+                    Constant-time comparison on login (prevents user enumeration).
+
+================================================================================
+ATTACK SURFACE SUMMARY
+================================================================================
+
+Entry Points Evaluated:
+1. Authentication endpoints (/v1/auth/login, /v1/auth/register, /v1/auth/refresh)
+2. Document operations (/v1/docs/*, document assignment)
+3. Asset upload endpoints (/v1/assets/upload, /v1/assets/import-*)
+4. Search endpoints (/v1/search/*)
+5. WebSocket endpoints (/v1/ws/jobs/*)
+6. Rate limiting middleware (all endpoints)
+7. URL fetching (import-url feature)
+8. Encryption (model provider API keys)
+9. Frontend markdown rendering
+
+Risk Distribution:
+- Backend: 6 vulnerabilities
+- Frontend: 0 vulnerabilities
+- Infrastructure: 0 (out of scope)
+- Dependencies: 0 (use dependabot)
+
+================================================================================
+REMEDIATION PRIORITY & TIMELINE
+================================================================================
+
+PHASE 1 (CRITICAL - Deploy within 48 hours):
+  - Fix IDOR in node assignment (1 hour)
+  - Total: ~1 hour
+
+PHASE 2 (HIGH - Deploy within 1 week):
+  - Fix rate limiter expired token acceptance (30 minutes)
+  - Fix rate limiter fail-open behavior (2 hours)
+  - Total: ~2.5 hours
+
+PHASE 3 (MEDIUM - Deploy within 2 weeks):
+  - Add SSRF blocklist entries (15 minutes)
+  - Fix ZIP bomb protection (1 hour)
+  - Fix weak key derivation + migration (2 hours)
+  - Total: ~3.25 hours
+
+ESTIMATED TOTAL REMEDIATION TIME: 6.5 hours of development + testing
+
+================================================================================
+DOCUMENTATION PROVIDED
+================================================================================
+
+1. SECURITY_AUDIT_2026-03-19.md
+   - Detailed finding descriptions
+   - Proof of concept for each vulnerability
+   - Impact analysis
+   - Recommended fixes with code examples
+
+2. SECURITY_REMEDIATION_GUIDE.md
+   - Step-by-step fix procedures
+   - Code snippets ready to implement
+   - Unit test examples
+   - Deployment instructions
+
+3. SECURITY_AUDIT_SUMMARY.txt (this file)
+   - Executive overview
+   - Quick reference table
+   - Priority timeline
+
+================================================================================
+FOLLOW-UP RECOMMENDATIONS
+================================================================================
+
+1. Establish Security Review Process
+   - Code review checklist for security issues
+   - Mandatory security review before merging to main
+   - Quarterly security audit
+
+2. Automation
+   - Add SAST (static analysis) to CI/CD pipeline
+   - Use Semgrep, Bandit, or similar for Python
+   - Use ESLint security plugins for TypeScript/React
+
+3. Testing
+   - Add security-focused test suite
+   - Run penetration testing (quarterly)
+   - Implement OWASP Top 10 test cases
+
+4. Monitoring
+   - Alert on failed rate limiting (Redis downtime)
+   - Monitor for ZIP bomb attempts
+   - Log all cross-tenant access attempts (for audit)
+
+5. Training
+   - Security training for team members
+   - OWASP Top 10 overview
+   - Code review standards for security
+
+================================================================================
+NEXT STEPS
+================================================================================
+
+1. Review SECURITY_AUDIT_2026-03-19.md with development team
+2. Assign developers to each vulnerability (estimated 1.5 hours each on average)
+3. Follow remediation timeline (critical first, then high, then medium)
+4. Run test suites before deployment
+5. Deploy fixes to staging, verify, then production
+6. Schedule follow-up audit in 3 months
+7. Implement SAST in CI/CD pipeline
+
+================================================================================
+AUDITOR NOTES
+================================================================================
+
+This codebase demonstrates good security fundamentals:
+- Proper use of parameterized queries
+- Tenant isolation at service layer
+- Bcrypt password hashing
+- Role-based access control
+- JSON logging without sensitive data leakage
+
+The identified vulnerabilities are relatively low-complexity to fix and do not
+indicate systemic security issues. With the provided remediation guide, all
+issues should be resolvable within 1-2 developer weeks.
+
+No evidence of intentional backdoors or security-defeating practices observed.
+
+================================================================================
+Report Generated: 2026-03-19
+Audit Version: 1.0
+Status: COMPLETE - Ready for review and remediation
+================================================================================

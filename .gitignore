@@ -32,3 +32,13 @@ Thumbs.db
 
 # Alembic
 alembic/versions/__pycache__/
+
+# Node.js / Next.js
+node_modules/
+.next/
+out/
+next-env.d.ts
+.tsbuildinfo
+
+# Governance temp files
+docs/.gate-failures.json
