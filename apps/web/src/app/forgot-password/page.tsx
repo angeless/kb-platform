@@ -46,9 +46,9 @@ export default function ForgotPasswordPage() {
       <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
         <div className="w-full max-w-md">
           <div className="rounded-xl border border-gray-200 bg-white p-8 shadow-sm">
-            <h2 className="mb-4 text-xl font-semibold text-gray-900">邮件已发送</h2>
+            <h2 className="mb-4 text-xl font-semibold text-gray-900">已提交申请</h2>
             <p className="mb-6 text-sm text-gray-600">
-              如果该邮箱已注册，您将收到一封包含重置链接的邮件。请检查您的收件箱。
+              密码重置功能暂未开放自助服务，请联系团队管理员帮您重置密码。
             </p>
 
             {resetToken && (
@@ -89,7 +89,7 @@ export default function ForgotPasswordPage() {
         <div className="rounded-xl border border-gray-200 bg-white p-8 shadow-sm">
           <h2 className="mb-2 text-xl font-semibold">忘记密码</h2>
           <p className="mb-6 text-sm text-gray-500">
-            输入您的邮箱地址，我们将发送重置链接。
+            输入您的邮箱地址，提交后将由管理员协助重置密码。
           </p>
 
           {error && (
@@ -117,7 +117,7 @@ export default function ForgotPasswordPage() {
               disabled={isLoading}
               className="w-full rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50"
             >
-              {isLoading ? "发送中..." : "发送重置链接"}
+              {isLoading ? "提交中..." : "提交重置申请"}
             </button>
           </form>
 
@@ -129,5 +129,8 @@ export default function ForgotPasswordPage() {
         </div>
       </div>
     </div>
+  );
+}
+div>
   );
 }

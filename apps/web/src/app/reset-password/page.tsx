@@ -98,7 +98,7 @@ export default function ResetPasswordPage() {
 
           {!token && (
             <div className="mb-4 rounded-lg bg-yellow-50 p-3 text-sm text-yellow-700">
-              缺少重置 token。请通过邮件中的链接访问此页面。
+              缺少重置 token。请通过管理员提供的链接访问此页面。
             </div>
           )}
 
