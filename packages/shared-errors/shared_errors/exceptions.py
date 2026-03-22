@@ -1,6 +1,7 @@
 """Custom exceptions and FastAPI exception handlers."""
 
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from .codes import ErrorCode
@@ -67,13 +68,25 @@ def register_exception_handlers(app: FastAPI) -> None:
             },
         )
 
+    @app.exception_handler(RequestValidationError)
+    async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+        return JSONResponse(
+            status_code=422,
+            content={
+                "error_code": ErrorCode.VALIDATION_ERROR,
+                "message": "提交的信息有误，请检查后重试",
+                "detail": {},
+                "meta": {"request_id": getattr(request.state, "request_id", None)},
+            },
+        )
+
     @app.exception_handler(Exception)
     async def generic_exception_handler(request: Request, exc: Exception) -> JSONResponse:
         return JSONResponse(
             status_code=500,
             content={
                 "error_code": ErrorCode.SYSTEM_INTERNAL_ERROR,
-                "message": "内部服务器错误",
+                "message": "系统开了个小差，请稍后重试",
                 "detail": {},
                 "meta": {"request_id": getattr(request.state, "request_id", None)},
             },
