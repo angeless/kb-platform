@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/stores/auth-store";
 import { Sidebar } from "@/components/sidebar";
 import { Topbar } from "@/components/topbar";
+import { MobileNav } from "@/components/mobile-nav";
 import { SessionGuard } from "@/components/session-guard";
 import { ToastContainer } from "@/components/error-toast";
 import { SkeletonList } from "@/components/skeleton-card";
@@ -43,10 +44,12 @@ export default function DashboardLayout({
   return (
     <SessionGuard>
       <div className="flex h-screen overflow-hidden">
-        <Sidebar />
+        <MobileNav>
+          <Sidebar />
+        </MobileNav>
         <div className="flex flex-1 flex-col overflow-hidden">
           <Topbar />
-          <main className="flex-1 overflow-y-auto bg-gray-50 p-6">
+          <main className="flex-1 overflow-y-auto bg-gray-50 p-4 md:p-6">
             {children}
           </main>
         </div>

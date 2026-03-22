@@ -8,6 +8,17 @@
 ### 新增 (Added)
 - 自动化开发工作流（dev-workflow-upgrade v1.3）
 
+## [0.41.6] - 2026-03-22
+
+### 新增
+- 移动端汉堡菜单导航 mobile-nav.tsx (T-41-06)
+- 状态徽章 aria-label 支持
+- confirm-dialog aria 属性 (role=dialog, aria-modal)
+
+### 修改
+- dashboard layout 移动端响应式（侧边栏可折叠、主内容区全宽）
+- 搜索页面移动端适配（按钮自适应）
+
 ## [0.41.5] - 2026-03-22
 
 ### 新增

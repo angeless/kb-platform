@@ -27,6 +27,7 @@ interface StatusBadgeProps {
 }
 
 export function StatusBadge({ status, className }: StatusBadgeProps) {
+  const label = STATUS_LABELS[status] || status;
   return (
     <span
       className={cn(
@@ -34,8 +35,9 @@ export function StatusBadge({ status, className }: StatusBadgeProps) {
         statusStyles[status] || "bg-gray-100 text-gray-600",
         className,
       )}
+      aria-label={`状态：${label}`}
     >
-      {STATUS_LABELS[status] || status}
+      {label}
     </span>
   );
 }
