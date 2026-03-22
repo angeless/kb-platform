@@ -4,12 +4,9 @@ import { useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { api, ApiClientError } from "@/lib/api";
+import { DOC_TYPE_LABELS } from "@/lib/label-maps";
+import { renderHighlight } from "@/lib/highlight";
 import { StatusBadge } from "@/components/status-badge";
-
-const DOC_TYPE_LABELS: Record<string, string> = {
-  topic: "主题", glossary: "术语", procedure: "流程", reference: "参考",
-  concept: "概念", tutorial: "教程", faq: "常见问题",
-};
 
 interface TextHit {
   doc_id: string;
@@ -234,10 +231,9 @@ export default function SearchPage() {
                         </span>
                       </div>
                       {hit.snippet && (
-                        <p
-                          className="mt-2 text-sm text-gray-600 [&_mark]:rounded-sm [&_mark]:bg-yellow-200 [&_mark]:px-0.5"
-                          dangerouslySetInnerHTML={{ __html: hit.snippet }}
-                        />
+                        <p className="mt-2 text-sm text-gray-600">
+                          {renderHighlight(hit.snippet)}
+                        </p>
                       )}
                     </Link>
                   );
@@ -264,12 +260,11 @@ export default function SearchPage() {
                         {DOC_TYPE_LABELS[hit.doc_type] || hit.doc_type} · v{hit.version}
                       </span>
                     </div>
-                    <p
-                      className="mt-2 text-sm text-gray-600 [&_mark]:rounded-sm [&_mark]:bg-yellow-200 [&_mark]:px-0.5"
-                      dangerouslySetInnerHTML={{ __html: hit.snippet }}
-                    />
+                    <p className="mt-2 text-sm text-gray-600">
+                      {renderHighlight(hit.snippet)}
+                    </p>
                     <span className="mt-1 text-xs text-gray-400">
-                      匹配字段：{hit.matched_field === "title" ? "标题" : "内容"}
+                      匹配位置：{hit.matched_field === "title" ? "标题" : "正文"}
                     </span>
                   </Link>
                 ))}
