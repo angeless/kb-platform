@@ -184,6 +184,80 @@ class SearchService(TenantService):
 
         return results, total
 
+    async def hybrid_search(
+        self,
+        project_id: uuid.UUID,
+        query: str,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> tuple[list[dict], int]:
+        """Hybrid search: combine keyword (tsvector) and semantic (pgvector) results.
+
+        Returns (results, total_count). Falls back to keyword-only if no embeddings exist.
+        """
+        await self._verify_project(project_id)
+
+        query = query.strip()
+        if not query:
+            return [], 0
+
+        # Run keyword search
+        keyword_results, keyword_total = await self.text_search(project_id, query, page=1, page_size=50)
+
+        # Try semantic search (may return empty if no embeddings)
+        semantic_results: list[dict] = []
+        try:
+            from . import TenantService
+            from .embedding_service import EmbeddingService
+            embed_svc = EmbeddingService(self.db, self.tenant_id)
+            semantic_results = await embed_svc.semantic_search(project_id, query, top_k=50)
+        except Exception:
+            pass  # No embeddings or pgvector not available — fallback to keyword only
+
+        # Merge and deduplicate by doc_id
+        merged: dict[str, dict] = {}
+
+        for item in keyword_results:
+            doc_id = str(item["doc_id"])
+            # Normalize tsvector rank (already 0-1 from ts_rank, but cap at 1.0)
+            score = min(1.0, item.get("rank", 0.5))
+            merged[doc_id] = {
+                "doc_id": item["doc_id"],
+                "title": item["title"],
+                "doc_type": item["doc_type"],
+                "status": item["status"],
+                "snippet": item.get("snippet", ""),
+                "score": score,
+                "match_type": "keyword",
+            }
+
+        for item in semantic_results:
+            doc_id = str(item["doc_id"])
+            sem_score = item.get("score", 0.0)
+            if doc_id in merged:
+                # Appears in both — take higher score, mark as dual match
+                merged[doc_id]["score"] = max(merged[doc_id]["score"], sem_score)
+                merged[doc_id]["match_type"] = "keyword+semantic"
+            else:
+                merged[doc_id] = {
+                    "doc_id": item["doc_id"],
+                    "title": item["title"],
+                    "doc_type": item["doc_type"],
+                    "status": item["status"],
+                    "snippet": "",
+                    "score": sem_score,
+                    "match_type": "semantic",
+                }
+
+        # Sort by score descending
+        all_results = sorted(merged.values(), key=lambda x: x["score"], reverse=True)
+        total = len(all_results)
+
+        # Paginate
+        start = (page - 1) * page_size
+        end = start + page_size
+        return all_results[start:end], total
+
     async def _ilike_search(
         self,
         project_id: uuid.UUID,

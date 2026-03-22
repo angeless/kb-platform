@@ -3,10 +3,15 @@
 import asyncio
 import json
 import logging
+import uuid
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared_config.settings import get_settings
+from shared_models import Project
+from app.deps import get_db
 from app.utils.security import decode_access_token
 
 logger = logging.getLogger(__name__)
@@ -18,6 +23,7 @@ async def ws_job_status(websocket: WebSocket, project_id: str):
     """Subscribe to real-time job status events for a project.
 
     Authentication: pass JWT as query parameter `token`.
+    Tenant isolation: verifies project_id belongs to the JWT's tenant.
     Events are published by workers via Redis Pub/Sub.
     """
     # Authenticate via query parameter
@@ -37,6 +43,27 @@ async def ws_job_status(websocket: WebSocket, project_id: str):
     if not tenant_id:
         await websocket.close(code=4001, reason="令牌缺少租户信息")
         return
+
+    # Tenant isolation: verify project belongs to this tenant
+    try:
+        project_uuid = uuid.UUID(project_id)
+        tenant_uuid = uuid.UUID(tenant_id)
+    except ValueError:
+        await websocket.close(code=4003, reason="项目ID格式无效")
+        return
+
+    # Use a dedicated DB session for the WebSocket connection
+    from shared_models.database import async_session_factory
+    async with async_session_factory() as db:
+        result = await db.execute(
+            select(Project.id).where(
+                Project.id == project_uuid,
+                Project.tenant_id == tenant_uuid,
+            )
+        )
+        if result.scalar_one_or_none() is None:
+            await websocket.close(code=4003, reason="项目不存在或无权访问")
+            return
 
     await websocket.accept()
 

@@ -69,6 +69,8 @@ async def upload_asset(
         storage=storage,
         max_upload_size_bytes=settings.max_upload_size_mb * 1024 * 1024,
     )
+    # Read file content — for files under max_upload_size_mb this is acceptable.
+    # TODO(T-41-07): For very large files, consider streaming to MinIO directly.
     file_content = await file.read()
     asset = await svc.upload(
         project_id=project_id,

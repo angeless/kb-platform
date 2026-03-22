@@ -9,6 +9,7 @@ from .job import Job
 from .model_config import ModelProvider, ModelRoute
 from .audit import AuditLog
 from .embedding import DocEmbedding
+from .refresh_token import RefreshToken
 from .database import engine, async_session_factory, sync_session_factory, get_db_session
 
 __all__ = [
@@ -21,5 +22,6 @@ __all__ = [
     "ModelProvider", "ModelRoute",
     "AuditLog",
     "DocEmbedding",
+    "RefreshToken",
     "engine", "async_session_factory", "sync_session_factory", "get_db_session",
 ]

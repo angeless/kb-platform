@@ -69,7 +69,7 @@ export default function RegisterPage() {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-700">
-                组织名称
+                团队名称
               </label>
               <input
                 type="text"

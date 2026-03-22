@@ -50,7 +50,53 @@ class ErrorCode(StrEnum):
     # User
     USER_NOT_FOUND = "USER_NOT_FOUND"
 
+    # Search
+    SEARCH_QUERY_TOO_SHORT = "SEARCH_QUERY_TOO_SHORT"
+    QA_MODEL_NOT_CONFIGURED = "QA_MODEL_NOT_CONFIGURED"
+
+    # Validation
+    VALIDATION_ERROR = "VALIDATION_ERROR"
+
     # System
     SYSTEM_INTERNAL_ERROR = "SYSTEM_INTERNAL_ERROR"
     SYSTEM_RATE_LIMITED = "SYSTEM_RATE_LIMITED"
     SYSTEM_SSRF_BLOCKED = "SYSTEM_SSRF_BLOCKED"
+
+
+# Error code → user-friendly Chinese message mapping
+ERROR_MESSAGES: dict[str, str] = {
+    ErrorCode.AUTH_INVALID_CREDENTIALS: "邮箱或密码不正确",
+    ErrorCode.AUTH_TOKEN_EXPIRED: "登录已过期，请重新登录",
+    ErrorCode.AUTH_TOKEN_INVALID: "身份验证失败，请重新登录",
+    ErrorCode.AUTH_INSUFFICIENT_ROLE: "您没有权限执行此操作",
+    ErrorCode.AUTH_EMAIL_ALREADY_EXISTS: "该邮箱已被注册",
+    ErrorCode.AUTH_REFRESH_TOKEN_INVALID: "登录已失效，请重新登录",
+    ErrorCode.AUTH_RESET_TOKEN_INVALID: "重置链接已失效，请重新申请",
+    ErrorCode.PROJECT_NOT_FOUND: "项目不存在或已被删除",
+    ErrorCode.PROJECT_NAME_DUPLICATE: "项目名称已存在，请换一个",
+    ErrorCode.ASSET_NOT_FOUND: "文件不存在或已被删除",
+    ErrorCode.ASSET_DUPLICATE_HASH: "该文件已上传过，无需重复上传",
+    ErrorCode.ASSET_TYPE_NOT_ALLOWED: "不支持该文件格式",
+    ErrorCode.ASSET_TOO_LARGE: "文件大小超出限制",
+    ErrorCode.ARCH_NOT_FOUND: "知识架构不存在",
+    ErrorCode.ARCH_NODE_NOT_FOUND: "分类节点不存在",
+    ErrorCode.ARCH_ALREADY_PUBLISHED: "该架构已发布，无法再次发布",
+    ErrorCode.ARCH_CYCLE_DETECTED: "检测到循环引用，请调整节点关系",
+    ErrorCode.DOC_NOT_FOUND: "文档不存在或已被删除",
+    ErrorCode.DOC_ALREADY_PUBLISHED: "该文档已发布",
+    ErrorCode.DOC_STATUS_INVALID: "文档当前状态不允许此操作",
+    ErrorCode.JOB_NOT_FOUND: "任务不存在",
+    ErrorCode.JOB_ALREADY_RUNNING: "该任务正在运行中，请等待完成",
+    ErrorCode.CONFLICT_NOT_FOUND: "冲突记录不存在",
+    ErrorCode.CONFLICT_ALREADY_RESOLVED: "该冲突已解决",
+    ErrorCode.MODEL_PROVIDER_NOT_FOUND: "模型服务未配置",
+    ErrorCode.MODEL_ROUTE_NOT_FOUND: "未找到匹配的模型路由",
+    ErrorCode.MODEL_PROVIDER_UNREACHABLE: "AI 服务暂时不可用，请稍后重试",
+    ErrorCode.USER_NOT_FOUND: "用户不存在",
+    ErrorCode.SEARCH_QUERY_TOO_SHORT: "请输入至少 2 个字的搜索内容",
+    ErrorCode.QA_MODEL_NOT_CONFIGURED: "AI 问答功能需要先配置模型服务",
+    ErrorCode.VALIDATION_ERROR: "提交的信息有误，请检查后重试",
+    ErrorCode.SYSTEM_INTERNAL_ERROR: "系统开了个小差，请稍后重试",
+    ErrorCode.SYSTEM_RATE_LIMITED: "操作太频繁，请稍后再试",
+    ErrorCode.SYSTEM_SSRF_BLOCKED: "该地址不允许访问",
+}

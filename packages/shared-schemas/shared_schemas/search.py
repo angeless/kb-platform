@@ -41,3 +41,21 @@ class SemanticHit(BaseModel):
     doc_type: str
     status: str
     score: float = Field(description="Cosine similarity score (0-1)")
+
+
+class HybridSearchRequest(BaseModel):
+    project_id: UUID
+    query: str = Field(..., min_length=2, max_length=500)
+    page: int = Field(default=1, ge=1)
+    page_size: int = Field(default=20, ge=1, le=50)
+
+
+class HybridSearchHit(BaseModel):
+    """A hybrid search result with combined score and match type."""
+    doc_id: UUID
+    title: str
+    doc_type: str
+    status: str
+    snippet: str
+    score: float = Field(description="Normalized score (0-1)")
+    match_type: str = Field(description="keyword, semantic, or keyword+semantic")

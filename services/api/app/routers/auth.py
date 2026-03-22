@@ -180,12 +180,22 @@ async def reset_password(
     "/logout",
     status_code=204,
     summary="User logout",
-    description="Clears authentication cookies.",
+    description="Revokes the current refresh token and clears authentication cookies.",
     responses={
-        204: {"description": "Logged out, cookies cleared"},
+        204: {"description": "Logged out, token revoked, cookies cleared"},
     },
 )
-async def logout(settings: Settings = Depends(get_settings_dep)):
+async def logout(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings_dep),
+):
+    # Revoke refresh token in DB (best-effort: if no token found, still clear cookies)
+    refresh_token = request.cookies.get("refresh_token")
+    if refresh_token:
+        svc = AuthService(db, settings)
+        await svc.revoke_refresh_token(refresh_token)
+
     secure = _is_secure(settings)
     response = JSONResponse(content=None, status_code=204)
     response.delete_cookie(key="access_token", path="/", secure=secure, samesite="lax")

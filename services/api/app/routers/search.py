@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared_schemas.common import DataResponse, ErrorDetail, ListResponse, PaginationMeta
-from shared_schemas.search import SearchHit, SemanticHit, SemanticSearchRequest, TextSearchRequest
+from shared_schemas.search import HybridSearchHit, HybridSearchRequest, SearchHit, SemanticHit, SemanticSearchRequest, TextSearchRequest
 
 from app.deps import get_db, get_tenant_id
 from app.services.embedding_service import EmbeddingService
@@ -78,6 +78,39 @@ async def semantic_search(
         top_k=body.top_k,
     )
     return DataResponse(data=[SemanticHit(**r) for r in results])
+
+
+@router.post(
+    "/hybrid",
+    response_model=ListResponse[HybridSearchHit],
+    summary="Hybrid search (keyword + semantic)",
+    description="Combines full-text and vector search results, deduplicates, and ranks by relevance.",
+    responses={
+        200: {"description": "Hybrid search results returned"},
+        **_RESP_AUTH,
+        422: {"description": "Validation error"},
+    },
+)
+async def hybrid_search(
+    body: HybridSearchRequest,
+    db: AsyncSession = Depends(get_db),
+    tenant_id: uuid.UUID = Depends(get_tenant_id),
+):
+    svc = SearchService(db, tenant_id)
+    results, total = await svc.hybrid_search(
+        project_id=body.project_id,
+        query=body.query,
+        page=body.page,
+        page_size=body.page_size,
+    )
+    return ListResponse(
+        data=[HybridSearchHit(**r) for r in results],
+        meta=PaginationMeta(
+            page=body.page,
+            page_size=body.page_size,
+            total=total,
+        ),
+    )
 
 
 @router.post(

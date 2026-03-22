@@ -3,6 +3,8 @@
  * All requests go through this module for consistent auth and error handling.
  */
 
+import { getUserMessage } from "./error-messages";
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export interface ApiError {
@@ -41,11 +43,16 @@ class ApiClient {
       headers["Content-Type"] = "application/json";
     }
 
-    const resp = await fetch(`${API_BASE}${path}`, {
-      ...options,
-      headers,
-      credentials: "include",
-    });
+    let resp: Response;
+    try {
+      resp = await fetch(`${API_BASE}${path}`, {
+        ...options,
+        headers,
+        credentials: "include",
+      });
+    } catch {
+      throw new ApiClientError("网络连接失败，请检查网络后重试", "NETWORK_ERROR", 0);
+    }
 
     // 401 auto-refresh: skip for auth endpoints to avoid recursive refresh
     if (resp.status === 401 && !path.startsWith("/v1/auth/")) {
@@ -66,14 +73,14 @@ class ApiClient {
         const retryBody = await retryResp.json();
         if (!retryResp.ok) {
           const err = retryBody as ApiError;
-          throw new ApiClientError(err.message || "请求失败", err.error_code, retryResp.status);
+          throw new ApiClientError(getUserMessage(err.error_code, err.message), err.error_code, retryResp.status);
         }
         return retryBody as ApiResponse<T>;
       }
 
-      // Refresh failed — redirect to login
+      // Refresh failed — dispatch event for SessionGuard to handle
       if (typeof window !== "undefined") {
-        window.location.href = "/login";
+        window.dispatchEvent(new Event("session-expired"));
       }
       throw new ApiClientError("登录已过期，请重新登录", "TOKEN_EXPIRED", 401);
     }
@@ -82,7 +89,7 @@ class ApiClient {
 
     if (!resp.ok) {
       const err = body as ApiError;
-      throw new ApiClientError(err.message || "请求失败", err.error_code, resp.status);
+      throw new ApiClientError(getUserMessage(err.error_code, err.message), err.error_code, resp.status);
     }
 
     return body as ApiResponse<T>;
@@ -170,15 +177,15 @@ export function uploadWithProgress(
           resolve(body as ApiResponse<unknown>);
         } else {
           const err = body as ApiError;
-          reject(new ApiClientError(err.message || "上传失败", err.error_code, xhr.status));
+          reject(new ApiClientError(getUserMessage(err.error_code, err.message), err.error_code, xhr.status));
         }
       } catch {
-        reject(new ApiClientError("解析响应失败", "PARSE_ERROR", xhr.status));
+        reject(new ApiClientError(getUserMessage("PARSE_ERROR"), "PARSE_ERROR", xhr.status));
       }
     };
 
     xhr.onerror = () => {
-      reject(new ApiClientError("网络错误", "NETWORK_ERROR", 0));
+      reject(new ApiClientError(getUserMessage("NETWORK_ERROR"), "NETWORK_ERROR", 0));
     };
 
     xhr.open("POST", url);
