@@ -135,7 +135,13 @@ class SearchService(TenantService):
                    GREATEST(
                        ts_rank(coalesce(d.search_vector, ''::tsvector), plainto_tsquery('simple', :tsquery)),
                        ts_rank(coalesce(v.search_vector, ''::tsvector), plainto_tsquery('simple', :tsquery))
-                   ) AS rank
+                   ) AS rank,
+                   ts_headline(
+                       'simple',
+                       coalesce(v.content_md, ''),
+                       plainto_tsquery('simple', :tsquery),
+                       'StartSel=<mark>, StopSel=</mark>, MaxWords=60, MinWords=20, MaxFragments=1'
+                   ) AS highlighted_snippet
             FROM knowledge_doc d
             JOIN knowledge_doc_version v ON v.doc_id = d.id AND v.version = d.current_version
             WHERE d.project_id = :project_id
@@ -156,13 +162,13 @@ class SearchService(TenantService):
         results = []
         for row in rows:
             title_matches = query.lower() in row.title.lower()
-            content_md = row.content_md or ""
             if title_matches:
                 matched_field = "title"
                 snippet = row.title
             else:
                 matched_field = "content_md"
-                snippet = _extract_snippet(content_md, query)
+                # Use DB-generated highlighted snippet (<mark> tags) from ts_headline
+                snippet = row.highlighted_snippet or _extract_snippet(row.content_md or "", query)
 
             results.append({
                 "doc_id": row.doc_id,

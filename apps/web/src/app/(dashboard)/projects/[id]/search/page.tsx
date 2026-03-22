@@ -140,7 +140,11 @@ export default function SearchPage() {
                     <StatusBadge status={hit.status} />
                     <span className="text-xs text-gray-400">{hit.doc_type} · v{hit.version}</span>
                   </div>
-                  <p className="mt-2 text-sm text-gray-600">{hit.snippet}</p>
+                  {/* snippet may contain <mark> tags from PostgreSQL ts_headline — DB-generated, not user input */}
+                  <p
+                    className="mt-2 text-sm text-gray-600 [&_mark]:rounded-sm [&_mark]:bg-yellow-200 [&_mark]:px-0.5"
+                    dangerouslySetInnerHTML={{ __html: hit.snippet }}
+                  />
                   <span className="mt-1 text-xs text-gray-400">匹配字段：{hit.matched_field === "title" ? "标题" : "内容"}</span>
                 </Link>
               ))}

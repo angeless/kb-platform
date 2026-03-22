@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useState } from "react";
-import { api, ApiClientError } from "@/lib/api";
+import { useCallback, useRef, useState } from "react";
+import { ApiClientError, uploadWithProgress } from "@/lib/api";
 
 interface FileUploadProps {
   projectId: string;
@@ -10,18 +10,27 @@ interface FileUploadProps {
 
 interface UploadItem {
   file: File;
-  status: "pending" | "uploading" | "done" | "error";
+  status: "pending" | "uploading" | "done" | "error" | "cancelled";
+  progress: number;
   message?: string;
 }
 
 export function FileUpload({ projectId, onUploadComplete }: FileUploadProps) {
   const [items, setItems] = useState<UploadItem[]>([]);
   const [isDragOver, setIsDragOver] = useState(false);
+  const abortControllers = useRef<Map<number, AbortController>>(new Map());
+
+  const updateItem = (index: number, update: Partial<UploadItem>) => {
+    setItems((prev) =>
+      prev.map((item, i) => (i === index ? { ...item, ...update } : item)),
+    );
+  };
 
   const uploadFile = async (file: File, index: number) => {
-    setItems((prev) =>
-      prev.map((item, i) => (i === index ? { ...item, status: "uploading" } : item)),
-    );
+    const controller = new AbortController();
+    abortControllers.current.set(index, controller);
+
+    updateItem(index, { status: "uploading", progress: 0 });
 
     const formData = new FormData();
     formData.append("file", file);
@@ -29,20 +38,27 @@ export function FileUpload({ projectId, onUploadComplete }: FileUploadProps) {
     formData.append("asset_type", guessType(file.name));
 
     try {
-      await api.request("/v1/assets/upload", {
-        method: "POST",
-        body: formData,
+      await uploadWithProgress("/v1/assets/upload", formData, {
+        onProgress: (percent) => updateItem(index, { progress: percent }),
+        signal: controller.signal,
       });
-      setItems((prev) =>
-        prev.map((item, i) => (i === index ? { ...item, status: "done" } : item)),
-      );
+      updateItem(index, { status: "done", progress: 100 });
     } catch (e) {
-      const msg = e instanceof ApiClientError ? e.message : "上传失败";
-      setItems((prev) =>
-        prev.map((item, i) =>
-          i === index ? { ...item, status: "error", message: msg } : item,
-        ),
-      );
+      if (e instanceof ApiClientError && e.errorCode === "UPLOAD_CANCELLED") {
+        updateItem(index, { status: "cancelled", message: "已取消" });
+      } else {
+        const msg = e instanceof ApiClientError ? e.message : "上传失败";
+        updateItem(index, { status: "error", message: msg });
+      }
+    } finally {
+      abortControllers.current.delete(index);
+    }
+  };
+
+  const cancelUpload = (index: number) => {
+    const controller = abortControllers.current.get(index);
+    if (controller) {
+      controller.abort();
     }
   };
 
@@ -51,6 +67,7 @@ export function FileUpload({ projectId, onUploadComplete }: FileUploadProps) {
       const newItems: UploadItem[] = Array.from(files).map((file) => ({
         file,
         status: "pending" as const,
+        progress: 0,
       }));
       setItems((prev) => [...prev, ...newItems]);
 
@@ -107,29 +124,46 @@ export function FileUpload({ projectId, onUploadComplete }: FileUploadProps) {
       </div>
 
       {items.length > 0 && (
-        <ul className="space-y-1">
+        <ul className="space-y-2">
           {items.map((item, i) => (
-            <li key={i} className="flex items-center justify-between rounded-lg bg-white px-3 py-2 text-sm">
-              <span className="truncate text-gray-700">{item.file.name}</span>
-              <span
-                className={
-                  item.status === "done"
-                    ? "text-green-600"
-                    : item.status === "error"
-                      ? "text-red-500"
-                      : item.status === "uploading"
-                        ? "text-primary-600"
-                        : "text-gray-400"
-                }
-              >
-                {item.status === "done"
-                  ? "✓ 完成"
-                  : item.status === "error"
-                    ? item.message || "失败"
-                    : item.status === "uploading"
-                      ? "上传中..."
-                      : "等待中"}
-              </span>
+            <li key={i} className="rounded-lg bg-white px-3 py-2 text-sm">
+              <div className="flex items-center justify-between">
+                <span className="truncate text-gray-700">{item.file.name}</span>
+                <div className="flex items-center gap-2">
+                  {item.status === "uploading" && (
+                    <>
+                      <span className="text-primary-600">{item.progress}%</span>
+                      <button
+                        onClick={() => cancelUpload(i)}
+                        className="text-xs text-gray-400 hover:text-red-500"
+                        title="取消上传"
+                      >
+                        ✕
+                      </button>
+                    </>
+                  )}
+                  {item.status === "done" && (
+                    <span className="text-green-600">✓ 完成</span>
+                  )}
+                  {item.status === "error" && (
+                    <span className="text-red-500">✕ {item.message || "失败"}</span>
+                  )}
+                  {item.status === "cancelled" && (
+                    <span className="text-gray-400">已取消</span>
+                  )}
+                  {item.status === "pending" && (
+                    <span className="text-gray-400">等待中</span>
+                  )}
+                </div>
+              </div>
+              {item.status === "uploading" && (
+                <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-gray-200">
+                  <div
+                    className="h-full rounded-full bg-primary-500 transition-all duration-300"
+                    style={{ width: `${item.progress}%` }}
+                  />
+                </div>
+              )}
             </li>
           ))}
         </ul>

@@ -129,4 +129,62 @@ export class ApiClientError extends Error {
   }
 }
 
+export interface UploadProgressOptions {
+  onProgress?: (percent: number) => void;
+  signal?: AbortSignal;
+}
+
+/**
+ * Upload a file with real-time progress tracking using XMLHttpRequest.
+ * Fetch API doesn't support upload progress events, so XHR is used here.
+ */
+export function uploadWithProgress(
+  path: string,
+  formData: FormData,
+  options: UploadProgressOptions = {},
+): Promise<ApiResponse<unknown>> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    const url = `${API_BASE}${path}`;
+
+    // Abort support
+    if (options.signal) {
+      options.signal.addEventListener("abort", () => {
+        xhr.abort();
+        reject(new ApiClientError("上传已取消", "UPLOAD_CANCELLED", 0));
+      });
+    }
+
+    // Progress tracking
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && options.onProgress) {
+        const percent = Math.round((e.loaded / e.total) * 100);
+        options.onProgress(percent);
+      }
+    };
+
+    xhr.onload = () => {
+      try {
+        const body = JSON.parse(xhr.responseText);
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(body as ApiResponse<unknown>);
+        } else {
+          const err = body as ApiError;
+          reject(new ApiClientError(err.message || "上传失败", err.error_code, xhr.status));
+        }
+      } catch {
+        reject(new ApiClientError("解析响应失败", "PARSE_ERROR", xhr.status));
+      }
+    };
+
+    xhr.onerror = () => {
+      reject(new ApiClientError("网络错误", "NETWORK_ERROR", 0));
+    };
+
+    xhr.open("POST", url);
+    xhr.withCredentials = true;
+    xhr.send(formData);
+  });
+}
+
 export const api = new ApiClient();

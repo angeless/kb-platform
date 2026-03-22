@@ -7,6 +7,28 @@
 
 ### 新增 (Added)
 - 自动化开发工作流（dev-workflow-upgrade v1.3）
+
+## [0.40.3] - 2026-03-22
+
+### 修改
+- 搜索结果高亮：后端使用 PostgreSQL ts_headline 生成带 mark 标记的摘要 (T-40-03)
+- 前端搜索页面渲染高亮 snippet，匹配关键词黄色背景显示
+
+## [0.40.2] - 2026-03-21
+
+### 修改
+- 文件上传组件：新增实时进度条显示（XHR `upload.onprogress`）(T-40-02)
+- 支持取消上传（AbortController + xhr.abort）
+- api.ts 新增 `uploadWithProgress()` 方法
+
+## [0.40.1] - 2026-03-21
+
+### 新增
+- 忘记密码流程：`POST /v1/auth/forgot-password` + `POST /v1/auth/reset-password` (T-40-01)
+- User 模型新增 `reset_token` 和 `reset_token_expires_at` 字段
+- 前端忘记密码页面和重置密码页面
+- 登录页面添加"忘记密码？"链接
+- Alembic 迁移：`e4f5a6b7c8d9_add_password_reset_fields`
 - 技术规范四件套（architecture.md, dev-governance.md, coding-standards.md, testing-strategy.md）
 - UI 设计规范（交互式 HTML，12 个章节，双主题）
 - CI 整合检查脚本 scripts/ci_verify.sh

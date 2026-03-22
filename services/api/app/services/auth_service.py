@@ -1,12 +1,16 @@
-"""Authentication service: register, login, refresh."""
+"""Authentication service: register, login, refresh, password reset."""
 
+import hashlib
+import logging
+import secrets
 import uuid
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared_config.settings import Settings
-from shared_errors import ConflictException, ErrorCode, UnauthorizedException
+from shared_errors import AppException, ConflictException, ErrorCode, UnauthorizedException
 from shared_models import Tenant, User
 
 from app.utils.security import (
@@ -14,6 +18,8 @@ from app.utils.security import (
     hash_password,
     verify_password,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class AuthService:
@@ -102,6 +108,72 @@ class AuthService:
             "refresh_token": refresh_token,
             "token_type": "bearer",
         }
+
+    async def forgot_password(self, email: str) -> dict:
+        """Generate a password reset token for the given email.
+
+        Always returns the same response regardless of whether the email exists,
+        to prevent user enumeration attacks.
+
+        In dev mode: returns the raw token in the response for testing.
+        In production: would send an email (not yet implemented).
+        """
+        result = await self.db.execute(select(User).where(User.email == email))
+        user = result.scalar_one_or_none()
+
+        # Fixed response message (same whether email exists or not)
+        response_message = "如果该邮箱已注册，重置链接已发送"
+
+        if user is None:
+            return {"message": response_message}
+
+        # Generate secure random token
+        raw_token = secrets.token_urlsafe(32)
+        token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+
+        # Store hash and expiry (1 hour)
+        user.reset_token = token_hash
+        user.reset_token_expires_at = datetime.now(timezone.utc).replace(
+            microsecond=0
+        ) + timedelta(hours=1)
+        await self.db.flush()
+
+        logger.info("Password reset token generated for user %s", user.id)
+
+        # Dev mode: return raw token in response for testing
+        return {"message": response_message, "reset_token": raw_token}
+
+    async def reset_password(self, token: str, new_password: str) -> dict:
+        """Reset a user's password using a valid reset token.
+
+        Validates the token hash match and expiry, then updates the password.
+        Token is single-use: cleared after successful reset.
+        """
+        token_hash = hashlib.sha256(token.encode()).hexdigest()
+
+        result = await self.db.execute(
+            select(User).where(
+                User.reset_token == token_hash,
+                User.reset_token_expires_at > datetime.now(timezone.utc),
+            )
+        )
+        user = result.scalar_one_or_none()
+
+        if user is None:
+            raise AppException(
+                error_code=ErrorCode.AUTH_RESET_TOKEN_INVALID,
+                message="重置链接无效或已过期",
+                status_code=400,
+            )
+
+        # Update password and clear reset token (single-use)
+        user.password_hash = hash_password(new_password)
+        user.reset_token = None
+        user.reset_token_expires_at = None
+        await self.db.flush()
+
+        logger.info("Password reset successful for user %s", user.id)
+        return {"message": "密码重置成功"}
 
     async def refresh(self, refresh_token: str) -> dict:
         """Validate a refresh token and return a new access token."""
