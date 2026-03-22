@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from shared_config.settings import Settings
 from shared_errors import UnauthorizedException
 from shared_models import User
-from shared_schemas.auth import LoginRequest, RefreshRequest, RegisterRequest
+from shared_schemas.auth import ForgotPasswordRequest, LoginRequest, RefreshRequest, RegisterRequest, ResetPasswordRequest
 from shared_schemas.common import DataResponse, ErrorDetail
 
 from app.deps import get_current_user, get_db, get_settings_dep
@@ -133,6 +133,47 @@ async def refresh(
     response = JSONResponse(content={"data": result})
     _set_token_cookies(response, result["access_token"], None, settings)
     return response
+
+
+@router.post(
+    "/forgot-password",
+    response_model=DataResponse,
+    summary="Request password reset",
+    description="Generates a password reset token. Always returns 200 regardless of email existence (prevents user enumeration).",
+    responses={
+        200: {"description": "Reset request processed"},
+        422: {"description": "Validation error"},
+    },
+)
+async def forgot_password(
+    body: ForgotPasswordRequest,
+    db: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings_dep),
+):
+    svc = AuthService(db, settings)
+    result = await svc.forgot_password(body.email)
+    return DataResponse(data=result)
+
+
+@router.post(
+    "/reset-password",
+    response_model=DataResponse,
+    summary="Reset password with token",
+    description="Resets the user's password using a valid reset token. Token is single-use and expires after 1 hour.",
+    responses={
+        200: {"description": "Password reset successful"},
+        400: {"description": "Invalid or expired reset token", "model": ErrorDetail},
+        422: {"description": "Validation error"},
+    },
+)
+async def reset_password(
+    body: ResetPasswordRequest,
+    db: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings_dep),
+):
+    svc = AuthService(db, settings)
+    result = await svc.reset_password(body.token, body.new_password)
+    return DataResponse(data=result)
 
 
 @router.post(

@@ -7,6 +7,15 @@
 
 ### 新增 (Added)
 - 自动化开发工作流（dev-workflow-upgrade v1.3）
+
+## [0.40.1] - 2026-03-21
+
+### 新增
+- 忘记密码流程：`POST /v1/auth/forgot-password` + `POST /v1/auth/reset-password` (T-40-01)
+- User 模型新增 `reset_token` 和 `reset_token_expires_at` 字段
+- 前端忘记密码页面和重置密码页面
+- 登录页面添加"忘记密码？"链接
+- Alembic 迁移：`e4f5a6b7c8d9_add_password_reset_fields`
 - 技术规范四件套（architecture.md, dev-governance.md, coding-standards.md, testing-strategy.md）
 - UI 设计规范（交互式 HTML，12 个章节，双主题）
 - CI 整合检查脚本 scripts/ci_verify.sh
