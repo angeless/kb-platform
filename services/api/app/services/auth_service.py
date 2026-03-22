@@ -10,8 +10,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared_config.settings import Settings
+from sqlalchemy import update
+
 from shared_errors import AppException, ConflictException, ErrorCode, UnauthorizedException
-from shared_models import Tenant, User
+from shared_models import Tenant, User, RefreshToken
 
 from app.utils.security import (
     create_access_token,
@@ -103,6 +105,16 @@ class AuthService:
             expires_minutes=self.settings.refresh_token_expire_days * 24 * 60,
         )
 
+        # Store refresh token hash in DB for revocation support
+        token_hash = hashlib.sha256(refresh_token.encode()).hexdigest()
+        rt_record = RefreshToken(
+            user_id=user.id,
+            token_hash=token_hash,
+            expires_at=datetime.now(timezone.utc) + timedelta(days=self.settings.refresh_token_expire_days),
+        )
+        self.db.add(rt_record)
+        await self.db.flush()
+
         return {
             "access_token": access_token,
             "refresh_token": refresh_token,
@@ -170,13 +182,19 @@ class AuthService:
         user.password_hash = hash_password(new_password)
         user.reset_token = None
         user.reset_token_expires_at = None
+
+        # Revoke all refresh tokens for this user (password changed)
+        await self.revoke_all_user_tokens(user.id)
         await self.db.flush()
 
         logger.info("Password reset successful for user %s", user.id)
         return {"message": "密码重置成功"}
 
     async def refresh(self, refresh_token: str) -> dict:
-        """Validate a refresh token and return a new access token."""
+        """Validate a refresh token and return a new access token.
+
+        Checks both JWT validity AND database record (not revoked, not expired).
+        """
         from app.utils.security import decode_access_token
 
         try:
@@ -197,6 +215,22 @@ class AuthService:
                 message="令牌类型错误（非刷新令牌）",
             )
 
+        # Check DB record: token must exist, not be revoked, and not expired
+        token_hash = hashlib.sha256(refresh_token.encode()).hexdigest()
+        result = await self.db.execute(
+            select(RefreshToken).where(
+                RefreshToken.token_hash == token_hash,
+                RefreshToken.revoked == False,  # noqa: E712
+                RefreshToken.expires_at > datetime.now(timezone.utc),
+            )
+        )
+        rt_record = result.scalar_one_or_none()
+        if rt_record is None:
+            raise UnauthorizedException(
+                error_code=ErrorCode.AUTH_REFRESH_TOKEN_INVALID,
+                message="刷新令牌已吊销或不存在",
+            )
+
         token_data = {
             "sub": payload["sub"],
             "tenant_id": payload["tenant_id"],
@@ -214,3 +248,22 @@ class AuthService:
             "access_token": access_token,
             "token_type": "bearer",
         }
+
+    async def revoke_refresh_token(self, refresh_token: str) -> None:
+        """Revoke a specific refresh token (used on logout)."""
+        token_hash = hashlib.sha256(refresh_token.encode()).hexdigest()
+        await self.db.execute(
+            update(RefreshToken)
+            .where(RefreshToken.token_hash == token_hash)
+            .values(revoked=True)
+        )
+        await self.db.flush()
+
+    async def revoke_all_user_tokens(self, user_id: uuid.UUID) -> None:
+        """Revoke all refresh tokens for a user (used on password change)."""
+        await self.db.execute(
+            update(RefreshToken)
+            .where(RefreshToken.user_id == user_id, RefreshToken.revoked == False)  # noqa: E712
+            .values(revoked=True)
+        )
+        await self.db.flush()

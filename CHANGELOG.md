@@ -8,6 +8,17 @@
 ### 新增 (Added)
 - 自动化开发工作流（dev-workflow-upgrade v1.3）
 
+## [0.41.1] - 2026-03-22
+
+### 安全修复
+- WebSocket 租户隔离：连接前校验 project_id 归属，跨租户访问返回 4003 (T-41-01/S-01)
+- Refresh Token 数据库记录：登录写入 hash、refresh 时校验 DB、logout 时吊销 (T-41-01/S-02)
+- 修改密码时批量吊销所有 refresh token
+
+### 新增
+- `refresh_token` 数据库表（user_id, token_hash, expires_at, revoked）
+- Alembic 迁移：`f5a6b7c8d9e0_add_refresh_token_table`
+
 ## [0.40.3] - 2026-03-22
 
 ### 修改
