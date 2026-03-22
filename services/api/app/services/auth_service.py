@@ -152,8 +152,10 @@ class AuthService:
 
         logger.info("Password reset token generated for user %s", user.id)
 
-        # Dev mode: return raw token in response for testing
-        return {"message": response_message, "reset_token": raw_token}
+        # Only return raw token in development mode (for testing without email service)
+        if self.settings.environment == "development":
+            return {"message": response_message, "reset_token": raw_token}
+        return {"message": response_message}
 
     async def reset_password(self, token: str, new_password: str) -> dict:
         """Reset a user's password using a valid reset token.

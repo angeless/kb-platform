@@ -132,12 +132,16 @@ class QAService:
         url = (config["base_url"] or "https://api.openai.com/v1").rstrip("/") + "/chat/completions"
         api_key = config["api_key"]
 
-        # Decrypt API key if needed
+        # Decrypt API key if it's encrypted (bytes-like)
         try:
-            from app.utils.crypto import decrypt_value
-            api_key = decrypt_value(api_key)
+            from app.utils.crypto import decrypt
+            from shared_config.settings import get_settings
+            if isinstance(api_key, (bytes, memoryview)):
+                api_key = decrypt(bytes(api_key), get_settings().encryption_key)
+            elif isinstance(api_key, str) and api_key.startswith("KDF1"):
+                api_key = decrypt(api_key.encode("latin-1"), get_settings().encryption_key)
         except Exception:
-            pass  # Already decrypted or plain text in dev mode
+            pass  # Already plain text (dev mode or unencrypted)
 
         messages = [
             {"role": "system", "content": SYSTEM_PROMPT},

@@ -41,7 +41,7 @@ export default function RegisterPage() {
 
     try {
       await register(tenantName, email, password);
-      router.push("/projects");
+      router.push("/login?registered=true");
     } catch {
       // error is set in store
     }

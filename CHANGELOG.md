@@ -8,6 +8,17 @@
 ### 新增 (Added)
 - 自动化开发工作流（dev-workflow-upgrade v1.3）
 
+## [0.42.1] - 2026-03-22
+
+### 安全修复
+- reset_token 仅在 development 环境返回，production 不再泄露明文 (C-04)
+- QA decrypt 调用修复 (H-06)
+
+### 修复
+- forgot-password 页面语法错误 (C-01)
+- 注册后跳转到 /login 并显示成功提示 (C-02)
+- Dashboard 认证守卫竞态：添加 isCheckingAuth 状态 (C-03)
+
 ## [0.41.8] - 2026-03-22
 
 ### 安全修复

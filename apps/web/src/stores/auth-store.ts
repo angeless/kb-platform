@@ -17,6 +17,7 @@ interface User {
 interface AuthState {
   user: User | null;
   isLoading: boolean;
+  isCheckingAuth: boolean;
   error: string | null;
 
   login: (email: string, password: string) => Promise<void>;
@@ -28,6 +29,7 @@ interface AuthState {
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   isLoading: false,
+  isCheckingAuth: true,
   error: null,
 
   login: async (email, password) => {
@@ -68,11 +70,12 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   checkAuth: async () => {
+    set({ isCheckingAuth: true });
     try {
       const resp = await api.get<User>("/v1/auth/me");
-      set({ user: resp.data });
+      set({ user: resp.data, isCheckingAuth: false });
     } catch {
-      set({ user: null });
+      set({ user: null, isCheckingAuth: false });
     }
   },
 }));

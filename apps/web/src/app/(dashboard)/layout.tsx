@@ -16,22 +16,19 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const router = useRouter();
-  const { user, checkAuth } = useAuthStore();
+  const { user, isCheckingAuth, checkAuth } = useAuthStore();
 
   useEffect(() => {
     checkAuth();
   }, [checkAuth]);
 
   useEffect(() => {
-    if (user === null && typeof window !== "undefined") {
-      const token = localStorage.getItem("access_token");
-      if (!token) {
-        router.replace("/login");
-      }
+    if (!isCheckingAuth && user === null) {
+      router.replace("/login");
     }
-  }, [user, router]);
+  }, [isCheckingAuth, user, router]);
 
-  if (!user) {
+  if (isCheckingAuth || !user) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gray-50">
         <div className="w-full max-w-2xl px-6">
