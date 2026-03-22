@@ -115,6 +115,10 @@ class AssetService(TenantService):
         """
         await self._verify_project(project_id)
 
+        # Validate URL against SSRF (DNS resolution check)
+        from app.utils.url_validator import validate_import_url
+        validate_import_url(url)
+
         # Use URL fetcher to download content
         from app.utils.url_fetcher import fetch_url
         content, content_type = await fetch_url(url)

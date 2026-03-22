@@ -8,6 +8,19 @@
 ### 新增 (Added)
 - 自动化开发工作流（dev-workflow-upgrade v1.3）
 
+## [0.42.2] - 2026-03-22
+
+### 安全修复
+- SSRF 防护增强：新增 DNS 解析检查，阻止 DNS rebinding 攻击 (H-01/T-42-02)
+- CSRF 中间件：变更请求必须携带 X-Requested-With 头 (H-02/T-42-02)
+- MinIO 凭证参数化：移除所有硬编码 minioadmin (H-07/T-42-02)
+- Redis 密码保护：启用 requirepass + settings.py redis_password (H-09/T-42-02)
+
+### 新增
+- url_validator.py：独立 URL 验证器（含 DNS 解析 SSRF 检查）
+- csrf.py：CSRF 中间件
+- test_url_validator.py：SSRF 防护测试
+
 ## [0.42.1] - 2026-03-22
 
 ### 安全修复

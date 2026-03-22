@@ -11,6 +11,7 @@ from shared_config.settings import get_settings
 from shared_errors import register_exception_handlers
 
 from .logging_config import setup_logging
+from .middleware.csrf import CsrfMiddleware
 from .middleware.metrics import MetricsMiddleware
 from .middleware.rate_limit import RateLimitMiddleware
 from .middleware.request_id import RequestIdMiddleware
@@ -69,6 +70,7 @@ def create_app() -> FastAPI:
     app.add_middleware(RequestIdMiddleware)
     app.add_middleware(MetricsMiddleware)
     app.add_middleware(RateLimitMiddleware)
+    app.add_middleware(CsrfMiddleware)
 
     # CORS middleware (outermost — added last so it wraps everything)
     settings = get_settings()
