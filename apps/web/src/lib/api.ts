@@ -78,9 +78,9 @@ class ApiClient {
         return retryBody as ApiResponse<T>;
       }
 
-      // Refresh failed — redirect to login
+      // Refresh failed — dispatch event for SessionGuard to handle
       if (typeof window !== "undefined") {
-        window.location.href = "/login";
+        window.dispatchEvent(new Event("session-expired"));
       }
       throw new ApiClientError("登录已过期，请重新登录", "TOKEN_EXPIRED", 401);
     }

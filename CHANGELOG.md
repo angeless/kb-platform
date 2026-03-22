@@ -8,6 +8,20 @@
 ### 新增 (Added)
 - 自动化开发工作流（dev-workflow-upgrade v1.3）
 
+## [0.41.5] - 2026-03-22
+
+### 新增
+- 全局 404 页面（中文友好提示 + 返回首页按钮）(T-41-05)
+- 骨架屏加载组件 skeleton-card.tsx（替代"加载中..."纯文本）
+- 错误恢复组件 error-retry.tsx（带重试按钮）
+- 确认弹窗组件 confirm-dialog.tsx（退出登录等场景）
+- 会话过期守卫 session-guard.tsx（过期后弹窗提示而非硬跳转）
+- Toast 容器注入到 dashboard layout
+
+### 修改
+- dashboard layout 使用骨架屏替代纯文本加载
+- api.ts 401 过期改为 dispatch session-expired 事件
+
 ## [0.41.4] - 2026-03-22
 
 ### 安全修复
