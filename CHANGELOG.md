@@ -8,6 +8,13 @@
 ### 新增 (Added)
 - 自动化开发工作流（dev-workflow-upgrade v1.3）
 
+## [0.40.2] - 2026-03-21
+
+### 修改
+- 文件上传组件：新增实时进度条显示（XHR `upload.onprogress`）(T-40-02)
+- 支持取消上传（AbortController + xhr.abort）
+- api.ts 新增 `uploadWithProgress()` 方法
+
 ## [0.40.1] - 2026-03-21
 
 ### 新增
