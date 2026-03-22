@@ -8,6 +8,16 @@
 ### 新增 (Added)
 - 自动化开发工作流（dev-workflow-upgrade v1.3）
 
+## [0.41.8] - 2026-03-22
+
+### 安全修复
+- docker-compose 移除所有硬编码默认密码，改为 `${VAR:?msg}` 强制注入 (T-41-08)
+
+### 新增
+- web.Dockerfile 前端生产构建容器（Node.js 20, 非 root 运行）(T-41-08)
+- docker-compose 新增 web 前端服务定义
+- .env.example 标注必填变量
+
 ## [0.41.7] - 2026-03-22
 
 ### 安全修复
