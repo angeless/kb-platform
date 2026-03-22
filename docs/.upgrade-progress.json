@@ -1,18 +1,53 @@
 {
-  "upgrade_version": "1.3",
+  "upgrade_version": "1.4",
   "project_name": "KB Platform",
   "snapshot_commit": "0c228f86b5b2c94abbe11119ee68ae9a291490d7",
   "started_at": "2026-03-20T04:46:37+08:00",
-  "last_updated": "2026-03-20T06:40:00+08:00",
+  "last_updated": "2026-03-22T10:00:00+08:00",
   "current_stage": 7,
   "git_available": true,
   "stages": {
-    "1": { "status": "completed", "commit": "a2cc4e7", "completed_at": "2026-03-20T04:55:00+08:00", "summary": "项目分析与环境确认" },
-    "2": { "status": "completed", "commit": "5e34dce", "completed_at": "2026-03-20T05:10:00+08:00", "summary": "CLAUDE.md 生成" },
-    "3": { "status": "completed", "commit": "b45b343", "completed_at": "2026-03-20T05:50:00+08:00", "summary": "四大技术规范生成 (22 files)" },
-    "4": { "status": "completed", "commit": "57825dd", "completed_at": "2026-03-20T06:25:00+08:00", "summary": "UI 规范生成 (interactive HTML)" },
-    "5": { "status": "completed", "commit": "568c635", "completed_at": "2026-03-20T06:30:00+08:00", "summary": "测试基础设施 (ci_verify.sh + smoke tests)" },
-    "6": { "status": "completed", "commit": "0e89645", "completed_at": "2026-03-20T06:35:00+08:00", "summary": "CHANGELOG + TODO_NEXT + 进度追踪" },
-    "7": { "status": "completed", "commit": null, "completed_at": "2026-03-20T06:40:00+08:00", "summary": "E2E 验证通过 (43/43 checks)" }
+    "1": {
+      "status": "completed",
+      "commit": "a2cc4e7",
+      "completed_at": "2026-03-20T04:55:00+08:00",
+      "summary": "项目分析与环境确认"
+    },
+    "2": {
+      "status": "completed",
+      "commit": "5e34dce",
+      "completed_at": "2026-03-20T05:10:00+08:00",
+      "summary": "CLAUDE.md 生成"
+    },
+    "3": {
+      "status": "completed",
+      "commit": "b45b343",
+      "completed_at": "2026-03-20T05:50:00+08:00",
+      "summary": "四大技术规范生成 (22 files)"
+    },
+    "4": {
+      "status": "completed",
+      "commit": "57825dd",
+      "completed_at": "2026-03-20T06:25:00+08:00",
+      "summary": "UI 规范生成 (interactive HTML)"
+    },
+    "5": {
+      "status": "completed",
+      "commit": "568c635",
+      "completed_at": "2026-03-20T06:30:00+08:00",
+      "summary": "测试基础设施 (ci_verify.sh + smoke tests)"
+    },
+    "6": {
+      "status": "completed",
+      "commit": "0e89645",
+      "completed_at": "2026-03-20T06:35:00+08:00",
+      "summary": "CHANGELOG + TODO_NEXT + 进度追踪"
+    },
+    "7": {
+      "status": "completed",
+      "commit": null,
+      "completed_at": "2026-03-20T06:40:00+08:00",
+      "summary": "E2E 验证通过 (43/43 checks)"
+    }
   }
 }
