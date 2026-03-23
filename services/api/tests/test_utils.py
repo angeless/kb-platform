@@ -39,11 +39,12 @@ class TestCrypto:
         with pytest.raises(Exception):
             decrypt(encrypted, secret2)
 
-    def test_new_format_has_kdf1_prefix(self):
-        """New encrypt output must start with b'KDF1' prefix."""
+    def test_new_format_has_kdf2_prefix(self):
+        """New encrypt output must start with b'KDF2' prefix (random salt, M-05)."""
+        from app.utils.crypto import _KDF2_PREFIX
         secret = "test-secret-key-32-chars-long!!!"
         encrypted = encrypt("test data", secret)
-        assert encrypted[:4] == _KDF1_PREFIX
+        assert encrypted[:4] == _KDF2_PREFIX
 
     def test_decrypt_legacy_format(self):
         """Old-format data (no KDF1 prefix) must still be decryptable."""

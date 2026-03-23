@@ -8,6 +8,20 @@
 ### 新增 (Added)
 - 自动化开发工作流（dev-workflow-upgrade v1.3）
 
+## [0.42.3] - 2026-03-22
+
+### 安全修复
+- Embedding upsert 原子化：delete+insert 改为 `INSERT ON CONFLICT DO UPDATE` (H-05/T-42-03)
+- 账户登录锁定：连续 5 次失败锁定 15 分钟，Redis 计数器 (H-08/T-42-03)
+- ZIP bomb 防护增强：目录深度限制 5 层，文件数上限 200 (M-04/T-42-03)
+- Crypto salt 随机化：KDF2 格式使用 os.urandom(16) salt (M-05/T-42-03)
+- Docker 端口收紧：PostgreSQL/Redis/MinIO-API 端口不再暴露到宿主机 (M-09/T-42-03)
+
+### 新增
+- test_login_lockout.py：登录锁定测试（6 个用例）
+- test_crypto_salt.py：随机 salt + 三格式向后兼容测试（6 个用例）
+- AUTH_ACCOUNT_LOCKED 错误码
+
 ## [0.42.2] - 2026-03-22
 
 ### 安全修复

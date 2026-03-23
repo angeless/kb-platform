@@ -6,7 +6,8 @@ import logging
 import uuid
 from typing import Callable
 
-from sqlalchemy import delete, select, text
+from sqlalchemy import select, text
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared_errors import ErrorCode, NotFoundException
@@ -70,24 +71,37 @@ class EmbeddingService(TenantService):
         content = f"{doc.title}\n\n{ver.content_md}" if ver else doc.title
         embedding = await self.embed_fn(content)
 
-        # Upsert: delete existing then insert
-        await self.db.execute(
-            delete(DocEmbedding).where(DocEmbedding.doc_id == doc_id)
-        )
-        record = DocEmbedding(
-            id=uuid.uuid4(),
-            doc_id=doc_id,
-            project_id=doc.project_id,
-            version=doc.current_version,
-            embedding=embedding,
-            model_name=DEFAULT_MODEL,
-            dimensions=len(embedding),
-        )
-        # Write to pgvector column as well (dual-write during migration)
+        # Atomic upsert via INSERT ON CONFLICT DO UPDATE (H-05)
+        values = {
+            "id": uuid.uuid4(),
+            "doc_id": doc_id,
+            "project_id": doc.project_id,
+            "version": doc.current_version,
+            "embedding": embedding,
+            "model_name": DEFAULT_MODEL,
+            "dimensions": len(embedding),
+        }
         if hasattr(DocEmbedding, "embedding_vec") and DocEmbedding.embedding_vec is not None:
-            record.embedding_vec = embedding
-        self.db.add(record)
+            values["embedding_vec"] = embedding
+
+        stmt = pg_insert(DocEmbedding).values(**values)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["doc_id"],
+            set_={
+                "version": stmt.excluded.version,
+                "embedding": stmt.excluded.embedding,
+                "model_name": stmt.excluded.model_name,
+                "dimensions": stmt.excluded.dimensions,
+                **({"embedding_vec": stmt.excluded.embedding_vec}
+                   if "embedding_vec" in values else {}),
+            },
+        )
+        await self.db.execute(stmt)
         await self.db.flush()
+
+        # Return the upserted record
+        q = select(DocEmbedding).where(DocEmbedding.doc_id == doc_id)
+        record = (await self.db.execute(q)).scalar_one()
         return record
 
     async def semantic_search(

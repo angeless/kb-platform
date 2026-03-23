@@ -7,8 +7,9 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
 
-# New-format prefix: identifies data encrypted with PBKDF2-derived key
-_KDF1_PREFIX = b"KDF1"
+# Format prefixes for versioned encryption
+_KDF1_PREFIX = b"KDF1"  # PBKDF2 with deterministic salt (legacy v1)
+_KDF2_PREFIX = b"KDF2"  # PBKDF2 with random salt (current v2, M-05)
 _PBKDF2_ITERATIONS = 100_000
 
 
@@ -24,9 +25,9 @@ def _derive_key(secret: str) -> bytes:
 
 
 def _derive_key_pbkdf2(secret: str) -> bytes:
-    """Derive a 32-byte key using PBKDF2-HMAC-SHA256.
+    """Derive a 32-byte key using PBKDF2-HMAC-SHA256 with deterministic salt.
 
-    Uses a fixed salt derived from the secret's SHA-256 hash (first 16 bytes).
+    Legacy v1 — kept for decrypting KDF1-format data only.
     """
     salt = hashlib.sha256(secret.encode("utf-8")).digest()[:16]
     kdf = PBKDF2HMAC(
@@ -38,26 +39,46 @@ def _derive_key_pbkdf2(secret: str) -> bytes:
     return kdf.derive(secret.encode("utf-8"))
 
 
-def encrypt(plaintext: str, secret: str) -> bytes:
-    """Encrypt plaintext using AES-256-GCM with PBKDF2-derived key.
+def _derive_key_pbkdf2_random(secret: str, salt: bytes) -> bytes:
+    """Derive a 32-byte key using PBKDF2-HMAC-SHA256 with caller-provided salt."""
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=salt,
+        iterations=_PBKDF2_ITERATIONS,
+    )
+    return kdf.derive(secret.encode("utf-8"))
 
-    Returns KDF1(4B) + nonce(12B) + ciphertext.
+
+def encrypt(plaintext: str, secret: str) -> bytes:
+    """Encrypt plaintext using AES-256-GCM with PBKDF2-derived key and random salt.
+
+    Returns KDF2(4B) + salt(16B) + nonce(12B) + ciphertext.
     """
-    key = _derive_key_pbkdf2(secret)
+    salt = os.urandom(16)
+    key = _derive_key_pbkdf2_random(secret, salt)
     aesgcm = AESGCM(key)
     nonce = os.urandom(12)
     ciphertext = aesgcm.encrypt(nonce, plaintext.encode("utf-8"), None)
-    return _KDF1_PREFIX + nonce + ciphertext
+    return _KDF2_PREFIX + salt + nonce + ciphertext
 
 
 def decrypt(data: bytes, secret: str) -> str:
     """Decrypt AES-256-GCM data back to plaintext.
 
-    Supports both new format (KDF1 prefix + PBKDF2 key) and
-    legacy format (direct nonce + ciphertext with padded key).
+    Supports three formats (newest first):
+    - KDF2: random salt — KDF2(4B) + salt(16B) + nonce(12B) + ciphertext
+    - KDF1: deterministic salt — KDF1(4B) + nonce(12B) + ciphertext
+    - Legacy: padded key — nonce(12B) + ciphertext
     """
-    if data[:4] == _KDF1_PREFIX:
-        # New format: KDF1(4B) + nonce(12B) + ciphertext
+    if data[:4] == _KDF2_PREFIX:
+        # v2 format: KDF2(4B) + salt(16B) + nonce(12B) + ciphertext
+        salt = data[4:20]
+        key = _derive_key_pbkdf2_random(secret, salt)
+        nonce = data[20:32]
+        ciphertext = data[32:]
+    elif data[:4] == _KDF1_PREFIX:
+        # v1 format: KDF1(4B) + nonce(12B) + ciphertext
         key = _derive_key_pbkdf2(secret)
         nonce = data[4:16]
         ciphertext = data[16:]

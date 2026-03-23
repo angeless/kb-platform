@@ -19,6 +19,8 @@ logger = logging.getLogger(__name__)
 # ZIP archive decompression limits (DoS protection)
 MAX_ARCHIVE_TOTAL_BYTES = 500 * 1024 * 1024  # 500MB total decompressed
 MAX_COMPRESSION_RATIO = 100  # skip files with ratio > 100
+MAX_ARCHIVE_FILES = 200  # max files in archive (M-04)
+MAX_ARCHIVE_DEPTH = 5  # max directory nesting depth (M-04)
 
 
 class AssetService(TenantService):
@@ -195,15 +197,24 @@ class AssetService(TenantService):
         imported = 0
         skipped = 0
         errors: list[str] = []
-        max_files = 100
 
         with zipfile.ZipFile(io.BytesIO(archive_content), "r") as zf:
             entries = [e for e in zf.namelist() if not e.endswith("/")]  # skip directories
-            if len(entries) > max_files:
+            if len(entries) > MAX_ARCHIVE_FILES:
                 raise AppException(
                     error_code=ErrorCode.ASSET_TOO_LARGE,
-                    message=f"压缩包内文件数超过限制 ({max_files})",
+                    message=f"压缩包内文件数超过限制 ({MAX_ARCHIVE_FILES})",
                 )
+
+            # Directory depth check (M-04)
+            from pathlib import PurePosixPath
+            for entry_name in entries:
+                depth = len(PurePosixPath(entry_name).parts)
+                if depth > MAX_ARCHIVE_DEPTH:
+                    raise AppException(
+                        error_code=ErrorCode.ASSET_TOO_LARGE,
+                        message=f"压缩包目录嵌套层数超过限制 ({MAX_ARCHIVE_DEPTH} 层): {entry_name}",
+                    )
 
             # Security: check ALL entries for path traversal before processing any
             for entry_name in entries:
