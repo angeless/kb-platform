@@ -1,3 +1,11 @@
+# DEPRECATED — 本文件已废弃，请勿使用
+
+> 废弃日期: 2026-03-22
+> 废弃原因: v1.7 升级，内容已合入 dev-governance-part0-automation.md
+> 迁入文件: docs/tech-specs/dev-governance-part0-automation.md
+
+# （以下为历史内容，仅供参考）
+
 # 第零部分补充：v1.6 新增规则
 
 > **本文件是 dev-governance-part0-automation.md 的 v1.6 增量补充。**
