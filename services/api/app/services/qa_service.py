@@ -3,6 +3,7 @@
 import json
 import logging
 import uuid
+from collections.abc import AsyncGenerator
 
 import httpx
 from sqlalchemy import select
@@ -105,6 +106,103 @@ class QAService:
             "sources": sources,
             "related_questions": answer_data.get("related_questions", []),
         }
+
+    async def ask_stream(self, project_id: uuid.UUID, question: str, top_k: int = 5) -> AsyncGenerator[str, None]:
+        """Stream answer via SSE. Yields 'data: ...\n\n' formatted events."""
+        # Step 1: Retrieve relevant documents
+        search_svc = SearchService(self.db, self.tenant_id)
+        results, total = await search_svc.hybrid_search(project_id, question, page=1, page_size=top_k)
+
+        if not results:
+            yield f"data: {json.dumps({'type': 'chunk', 'content': '知识库中暂未找到相关内容，请尝试使用不同的关键词搜索。'})}\n\n"
+            yield f"data: {json.dumps({'type': 'done', 'sources': [], 'related_questions': []})}\n\n"
+            return
+
+        # Step 2: Get LLM config
+        model_config = await self._get_qa_model_config()
+        if model_config is None:
+            yield f"data: {json.dumps({'type': 'error', 'message': 'AI 问答功能需要先配置模型服务'})}\n\n"
+            return
+
+        # Step 3: Build context and sources
+        context_parts = []
+        sources = []
+        for i, doc in enumerate(results, 1):
+            snippet = doc.get("snippet", "")
+            title = doc.get("title", "未命名文档")
+            context_parts.append(f"### 来源 {i}: {title}\n{snippet}")
+            sources.append({
+                "doc_id": doc["doc_id"],
+                "title": title,
+                "snippet": snippet[:200] if snippet else "",
+                "relevance": round(doc.get("score", 0), 4),
+            })
+
+        # Send sources early so frontend can render them immediately
+        yield f"data: {json.dumps({'type': 'sources', 'sources': sources})}\n\n"
+
+        context = "\n\n".join(context_parts)
+        user_prompt = f"## 知识库内容\n{context}\n\n## 用户问题\n{question}"
+
+        # Step 4: Stream LLM response
+        try:
+            async for chunk in self._call_llm_stream(model_config, user_prompt):
+                yield f"data: {json.dumps({'type': 'chunk', 'content': chunk})}\n\n"
+        except Exception as e:
+            logger.warning("LLM stream failed: %s", e)
+            yield f"data: {json.dumps({'type': 'error', 'message': 'AI 服务暂时不可用，请稍后重试'})}\n\n"
+            return
+
+        yield f"data: {json.dumps({'type': 'done'})}\n\n"
+
+    async def _call_llm_stream(self, config: dict, user_prompt: str) -> AsyncGenerator[str, None]:
+        """Stream LLM response via OpenAI-compatible streaming API."""
+        url = (config["base_url"] or "https://api.openai.com/v1").rstrip("/") + "/chat/completions"
+        api_key = config["api_key"]
+
+        try:
+            from app.utils.crypto import decrypt
+            from shared_config.settings import get_settings
+            if isinstance(api_key, (bytes, memoryview)):
+                api_key = decrypt(bytes(api_key), get_settings().encryption_key)
+            elif isinstance(api_key, str) and api_key.startswith("KDF1"):
+                api_key = decrypt(api_key.encode("latin-1"), get_settings().encryption_key)
+        except Exception:
+            pass
+
+        messages = [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": user_prompt},
+        ]
+
+        async with httpx.AsyncClient(timeout=60) as client:
+            async with client.stream(
+                "POST",
+                url,
+                headers={"Authorization": f"Bearer {api_key}"},
+                json={
+                    "model": config["model"],
+                    "messages": messages,
+                    "temperature": 0.3,
+                    "max_tokens": 4096,
+                    "stream": True,
+                },
+            ) as resp:
+                resp.raise_for_status()
+                async for line in resp.aiter_lines():
+                    if not line.startswith("data: "):
+                        continue
+                    payload = line[6:]
+                    if payload == "[DONE]":
+                        break
+                    try:
+                        data = json.loads(payload)
+                        delta = data["choices"][0].get("delta", {})
+                        content = delta.get("content", "")
+                        if content:
+                            yield content
+                    except (json.JSONDecodeError, KeyError, IndexError):
+                        continue
 
     async def _get_qa_model_config(self) -> dict | None:
         """Get LLM configuration for QA task from ModelRoute."""

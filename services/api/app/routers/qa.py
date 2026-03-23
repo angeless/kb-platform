@@ -1,6 +1,7 @@
 """QA router: AI-powered question answering over knowledge base."""
 
 from fastapi import APIRouter, Depends
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared_config.settings import Settings
@@ -16,9 +17,8 @@ router = APIRouter(prefix="/v1/qa", tags=["qa"])
 
 @router.post(
     "/ask",
-    response_model=DataResponse,
     summary="Ask a question about the knowledge base",
-    description="Uses RAG (Retrieval-Augmented Generation) to answer questions based on project documents.",
+    description="Uses RAG (Retrieval-Augmented Generation) to answer questions. Set stream=true for SSE streaming.",
     responses={
         200: {"description": "Answer generated with sources and related questions"},
         400: {"description": "Model not configured or query too short", "model": ErrorDetail},
@@ -33,5 +33,13 @@ async def ask(
     settings: Settings = Depends(get_settings_dep),
 ):
     svc = QAService(db, current_user.tenant_id, settings)
+
+    if body.stream:
+        return StreamingResponse(
+            svc.ask_stream(body.project_id, body.question, body.top_k),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
+
     result = await svc.ask(body.project_id, body.question, body.top_k)
     return DataResponse(data=result)

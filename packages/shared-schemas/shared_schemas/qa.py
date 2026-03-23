@@ -9,6 +9,7 @@ class QARequest(BaseModel):
     project_id: uuid.UUID
     question: str = Field(..., min_length=5, max_length=2000)
     top_k: int = Field(default=5, ge=1, le=20)
+    stream: bool = Field(default=False, description="Enable SSE streaming response")
 
 
 class QASource(BaseModel):
