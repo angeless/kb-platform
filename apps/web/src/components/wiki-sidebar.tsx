@@ -1,9 +1,16 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { api } from "@/lib/api";
+
+interface SearchHit {
+  doc_id: string;
+  title: string;
+  snippet: string;
+  score: number;
+}
 
 interface ArchNode {
   id: string;
@@ -167,9 +174,11 @@ export function WikiSidebar({ projectId, collapsed, onToggle }: WikiSidebarProps
   const [tree, setTree] = useState<TreeItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<SearchHit[] | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>(null);
 
-  // Extract current doc id from URL
   const currentDocId = pathname.match(/\/wiki\/([^/]+)/)?.[1] || null;
 
   const toggleExpand = useCallback((id: string) => {
@@ -181,10 +190,36 @@ export function WikiSidebar({ projectId, collapsed, onToggle }: WikiSidebarProps
     });
   }, []);
 
+  // Unified search: debounce 400ms, call backend hybrid search
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+
+    if (!searchQuery.trim()) {
+      setSearchResults(null);
+      setIsSearching(false);
+      return;
+    }
+
+    setIsSearching(true);
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const resp = await api.get<SearchHit[]>(
+          `/v1/search/hybrid?project_id=${projectId}&query=${encodeURIComponent(searchQuery)}&page_size=15`,
+        );
+        setSearchResults(resp.data);
+      } catch {
+        setSearchResults([]);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 400);
+
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [searchQuery, projectId]);
+
   useEffect(() => {
     const load = async () => {
       try {
-        // Load architecture
         const archResp = await api.get<{ id: string; status: string }[]>(
           `/v1/projects/${projectId}/architectures`,
         );
@@ -193,7 +228,6 @@ export function WikiSidebar({ projectId, collapsed, onToggle }: WikiSidebarProps
 
         if (!published) { setIsLoading(false); return; }
 
-        // Load nodes and docs in parallel
         const [nodesResp, docsResp] = await Promise.all([
           api.get<ArchNode[]>(`/v1/architectures/${published.id}/nodes`),
           api.get<DocItem[]>(`/v1/docs?project_id=${projectId}&page=1&page_size=200`),
@@ -203,7 +237,6 @@ export function WikiSidebar({ projectId, collapsed, onToggle }: WikiSidebarProps
         attachDocs(nodeTree, docsResp.data);
         setTree(nodeTree);
 
-        // Auto-expand first level
         const topIds = new Set(nodesResp.data.filter((n) => !n.parent_id).map((n) => n.id));
         setExpandedIds(topIds);
       } catch {
@@ -255,21 +288,60 @@ export function WikiSidebar({ projectId, collapsed, onToggle }: WikiSidebarProps
           )}
         </div>
 
-        {/* Search box */}
-        <div className="mt-3">
+        {/* Unified search box */}
+        <div className="relative mt-3">
+          <svg className="absolute left-2.5 top-2 h-3.5 w-3.5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="搜索知识库..."
-            className="w-full rounded-md border border-slate-700 bg-slate-800 px-3 py-1.5 text-sm text-white placeholder-slate-500 focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500"
+            className="w-full rounded-md border border-slate-700 bg-slate-800 py-1.5 pl-8 pr-3 text-sm text-white placeholder-slate-500 focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500"
           />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery("")}
+              className="absolute right-2 top-1.5 rounded p-0.5 text-slate-500 hover:text-white"
+            >
+              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Navigation tree */}
+      {/* Content area: search results OR navigation tree */}
       <nav className="flex-1 overflow-y-auto px-2 py-2">
-        {isLoading ? (
+        {searchResults !== null ? (
+          /* Search results mode */
+          <div>
+            <div className="mb-2 px-3 text-xs text-slate-500">
+              {isSearching ? "搜索中..." : `${searchResults.length} 条结果`}
+            </div>
+            {searchResults.map((hit) => (
+              <Link
+                key={hit.doc_id}
+                href={`/projects/${projectId}/wiki/${hit.doc_id}`}
+                className={`block rounded-md px-3 py-2 transition-colors ${
+                  currentDocId === hit.doc_id
+                    ? "bg-teal-600 text-white"
+                    : "hover:bg-slate-800"
+                }`}
+              >
+                <div className="text-sm font-medium text-slate-200">{hit.title}</div>
+                {hit.snippet && (
+                  <div className="mt-0.5 text-xs text-slate-500 line-clamp-2">{hit.snippet}</div>
+                )}
+              </Link>
+            ))}
+            {!isSearching && searchResults.length === 0 && (
+              <div className="px-3 py-4 text-xs text-slate-500">未找到相关内容</div>
+            )}
+          </div>
+        ) : isLoading ? (
           <div className="px-3 py-4 text-xs text-slate-500">加载架构树...</div>
         ) : tree.length === 0 ? (
           <div className="px-3 py-4 text-xs text-slate-500">
@@ -279,6 +351,7 @@ export function WikiSidebar({ projectId, collapsed, onToggle }: WikiSidebarProps
             </Link>
           </div>
         ) : (
+          /* Navigation tree mode */
           tree.map((item) => (
             <NavItem
               key={item.node.id}
@@ -287,25 +360,12 @@ export function WikiSidebar({ projectId, collapsed, onToggle }: WikiSidebarProps
               depth={0}
               expandedIds={expandedIds}
               toggleExpand={toggleExpand}
-              searchQuery={searchQuery}
+              searchQuery=""
               currentDocId={currentDocId}
             />
           ))
         )}
       </nav>
-
-      {/* Footer with search page link */}
-      <div className="border-t border-slate-800 px-4 py-3">
-        <Link
-          href={`/projects/${projectId}/wiki/search`}
-          className="flex items-center gap-2 text-xs text-slate-500 hover:text-teal-400"
-        >
-          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
-          高级搜索（语义 + 全文）
-        </Link>
-      </div>
     </aside>
   );
 }
