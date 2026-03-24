@@ -40,7 +40,7 @@ def classify_chunks(
             chunks.append({"chunk_id": str(c.id), "content": c.content_text[:2000]})
 
     if not chunks:
-        return {"new": [], "supplement": [], "correction": [], "conflict": []}
+        return {"new": [], "supplement": [], "correction": [], "conflict": [], "restructure": []}
 
     # Call AI Orchestrator via Celery
     try:
@@ -68,6 +68,7 @@ def classify_chunks(
         "supplement": [],
         "correction": [],
         "conflict": [],
+        "restructure": [],
     }
 
 
@@ -77,15 +78,17 @@ def _build_classification_from_chunks(chunks: list[dict], response: dict) -> dic
     supplement_count = response.get("supplement", 0)
     correction_count = response.get("correction", 0)
     conflict_count = response.get("conflict", 0)
+    restructure_count = response.get("restructure", 0)
 
-    total = new_count + supplement_count + correction_count + conflict_count
+    total = new_count + supplement_count + correction_count + conflict_count + restructure_count
     if total == 0:
-        return {"new": [c["chunk_id"] for c in chunks], "supplement": [], "correction": [], "conflict": []}
+        return {"new": [c["chunk_id"] for c in chunks], "supplement": [], "correction": [], "conflict": [], "restructure": []}
 
-    result: dict[str, list[str]] = {"new": [], "supplement": [], "correction": [], "conflict": []}
+    result: dict[str, list[str]] = {"new": [], "supplement": [], "correction": [], "conflict": [], "restructure": []}
     idx = 0
     for category, count in [("new", new_count), ("supplement", supplement_count),
-                             ("correction", correction_count), ("conflict", conflict_count)]:
+                             ("correction", correction_count), ("conflict", conflict_count),
+                             ("restructure", restructure_count)]:
         for _ in range(count):
             if idx < len(chunks):
                 result[category].append(chunks[idx]["chunk_id"])

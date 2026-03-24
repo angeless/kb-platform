@@ -5,6 +5,7 @@ from .project import Project
 from .asset import Asset, AssetChunk
 from .architecture import Architecture, ArchitectureNode
 from .knowledge import KnowledgeDoc, KnowledgeDocVersion, SourceRef, ConflictRecord
+from .cross_reference import CrossReference
 from .job import Job
 from .model_config import ModelProvider, ModelRoute
 from .audit import AuditLog
@@ -18,6 +19,7 @@ __all__ = [
     "Asset", "AssetChunk",
     "Architecture", "ArchitectureNode",
     "KnowledgeDoc", "KnowledgeDocVersion", "SourceRef", "ConflictRecord",
+    "CrossReference",
     "Job",
     "ModelProvider", "ModelRoute",
     "AuditLog",

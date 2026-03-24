@@ -8,6 +8,22 @@
 ### 新增 (Added)
 - 自动化开发工作流（dev-workflow-upgrade v1.3）
 
+## [0.42.7] - 2026-03-24
+
+### 新增
+- 增量分类新增 RESTRUCTURE 类型：节点过载(>15篇)或跨域(>3节点)时触发结构变更建议 (T-42-07-A/B)
+- 跨库索引系统：cross_reference 表 + Model + CRUD API (T-42-07-C/D/E/F)
+  - `POST /v1/cross-refs` 创建引用
+  - `GET /v1/cross-refs/doc/:id` 获取文档引用
+  - `DELETE /v1/cross-refs/:id` 删除引用
+  - `POST /v1/cross-refs/auto-suggest` 基于关键词自动建议引用
+- 多库路由服务：`POST /v1/projects/route` 根据关键词返回 top-3 候选项目 (T-42-07-H/I)
+- Project 模型新增 description 和 profile_keywords 字段 (T-42-07-G)
+- Wiki 文档页展示跨库引用（同库链接 + 跨库标注项目名）(T-42-07-J)
+
+### 变更
+- 增量分类 prompt 增加 RESTRUCTURE 分类和 restructure_suggestion 输出字段
+
 ## [0.42.6] - 2026-03-23
 
 ### 新增

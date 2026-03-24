@@ -44,6 +44,26 @@ interface SearchHit {
   score: number;
 }
 
+interface CrossRef {
+  id: string;
+  source_doc_id: string;
+  target_doc_id: string;
+  relation_type: string;
+  confidence: number;
+  source_title: string | null;
+  target_title: string | null;
+  target_project_id: string | null;
+  target_project_name: string | null;
+}
+
+const RELATION_LABELS: Record<string, string> = {
+  related: "相关",
+  depends_on: "依赖",
+  extends: "扩展",
+  contradicts: "矛盾",
+  supersedes: "替代",
+};
+
 export default function WikiDocPage() {
   const params = useParams();
   const projectId = params.id as string;
@@ -53,6 +73,7 @@ export default function WikiDocPage() {
   const [doc, setDoc] = useState<DocDetail | null>(null);
   const [nodes, setNodes] = useState<ArchNode[]>([]);
   const [related, setRelated] = useState<SearchHit[]>([]);
+  const [crossRefs, setCrossRefs] = useState<CrossRef[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -73,7 +94,7 @@ export default function WikiDocPage() {
           setNodes(nodesResp.data);
         }
 
-        // Load related docs (non-critical)
+        // Load related docs + cross refs (non-critical)
         try {
           const searchResp = await api.get<SearchHit[]>(
             `/v1/search/hybrid?project_id=${projectId}&query=${encodeURIComponent(docResp.data.title)}&page_size=6`,
@@ -81,6 +102,13 @@ export default function WikiDocPage() {
           setRelated(searchResp.data.filter((h) => h.doc_id !== docId).slice(0, 5));
         } catch {
           // Related docs is non-critical
+        }
+
+        try {
+          const refsResp = await api.get<CrossRef[]>(`/v1/cross-refs/doc/${docId}`);
+          setCrossRefs(refsResp.data);
+        } catch {
+          // Cross refs is non-critical
         }
       } catch (e) {
         setError(e instanceof ApiClientError ? e.message : "加载失败");
@@ -140,6 +168,47 @@ export default function WikiDocPage() {
                   </Link>
                 </li>
               ))}
+            </ul>
+          </section>
+        )}
+
+        {/* Cross-references */}
+        {crossRefs.length > 0 && (
+          <section className="mt-8">
+            <h2 className="mb-3 text-lg font-semibold text-gray-800">关联文档</h2>
+            <ul className="divide-y divide-gray-100 rounded-xl border border-gray-200 bg-white">
+              {crossRefs.map((ref) => {
+                const isSource = ref.source_doc_id === docId;
+                const linkedDocId = isSource ? ref.target_doc_id : ref.source_doc_id;
+                const linkedTitle = isSource ? ref.target_title : ref.source_title;
+                const isCrossProject = ref.target_project_id && ref.target_project_id !== projectId;
+                return (
+                  <li key={ref.id}>
+                    <Link
+                      href={isCrossProject
+                        ? `/projects/${ref.target_project_id}/wiki/${linkedDocId}`
+                        : `/projects/${projectId}/wiki/${linkedDocId}`
+                      }
+                      className="flex items-center justify-between px-4 py-3 hover:bg-gray-50"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">
+                          {RELATION_LABELS[ref.relation_type] || ref.relation_type}
+                        </span>
+                        <span className="text-sm text-gray-700">{linkedTitle}</span>
+                        {isCrossProject && (
+                          <span className="rounded bg-blue-50 px-1.5 py-0.5 text-xs text-blue-600">
+                            {ref.target_project_name}
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-xs text-gray-400">
+                        {Math.round(ref.confidence * 100)}%
+                      </span>
+                    </Link>
+                  </li>
+                );
+              })}
             </ul>
           </section>
         )}

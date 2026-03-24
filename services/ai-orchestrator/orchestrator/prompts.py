@@ -233,10 +233,11 @@ USER_PROMPT_CLASSIFY_TEMPLATE = """以下是一个知识系统中已有的知识
   "classifications": [
     {{
       "chunk_index": 0,
-      "relation_type": "new|supplement|correction|conflict",
-      "target_doc_id": "已有文档ID（supplement/correction时必填，new/conflict时为null）",
+      "relation_type": "new|supplement|correction|conflict|restructure",
+      "target_doc_id": "已有文档ID（supplement/correction时必填，其他为null）",
       "reason": "判断理由",
-      "conflict_description": "冲突描述（仅conflict时必填，其他为null）"
+      "conflict_description": "冲突描述（仅conflict时必填，其他为null）",
+      "restructure_suggestion": "结构变更建议（仅restructure时必填，其他为null）"
     }}
   ]
 }}
@@ -245,7 +246,13 @@ relation_type 说明：
 - new：已有知识中没有对应主题，需要新建文档
 - supplement：已有主题但缺少这些细节，需要补充到已有文档
 - correction：新资料证明已有知识过期或有误，需要修正已有文档
-- conflict：新旧资料互相矛盾且无法自动判断，需要人工确认"""
+- conflict：新旧资料互相矛盾且无法自动判断，需要人工确认
+- restructure：节点文档数过多(>15篇)或内容跨域(>3节点相关)，建议结构变更
+
+触发 restructure 的条件：
+1. 目标节点已有 > 15 篇文档（节点过载）
+2. 新内容与 3 个以上不同节点都高度相关（跨域内容）
+输出 restructure 时需补充 restructure_suggestion 字段说明建议"""
 
 
 def build_classify_prompt(
