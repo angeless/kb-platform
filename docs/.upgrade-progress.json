@@ -1,9 +1,9 @@
 {
-  "upgrade_version": "1.7",
+  "upgrade_version": "1.10",
   "project_name": "KB Platform",
   "snapshot_commit": "0c228f86b5b2c94abbe11119ee68ae9a291490d7",
   "started_at": "2026-03-20T04:46:37+08:00",
-  "last_updated": "2026-03-22T21:50:00+08:00",
+  "last_updated": "2026-03-23T20:20:00+08:00",
   "current_stage": 7,
   "git_available": true,
   "stages": {
@@ -82,6 +82,18 @@
         "废弃 dev-governance-part0-supplement-v1.5.md 和 v1.6.md",
         "升级标记文件机制（docs/.upgrade-in-progress）启用",
         "hooks.json C5 已内置升级绕过条件"
+      ]
+    },
+    {
+      "from": "1.7",
+      "to": "1.10",
+      "date": "2026-03-23",
+      "changes": [
+        "v1.8: 新增 dev-governance-part7-quality-methods.md（TDD/系统化调试/代码审查/Worktree/并行 Agent/完成前验证）",
+        "v1.8: 更新 dev-governance.md 索引添加 part6(a/b/c) + part7",
+        "v1.9: plan-audit 和 ui-spec 技能可通过 plugin 调用（无项目文件变更）",
+        "v1.10: gate-failures.json 迁移为 {failures:[], history:[]} 格式",
+        "v1.10: bug-catalog 技能可通过 plugin 调用（无项目文件变更）"
       ]
     }
   ]

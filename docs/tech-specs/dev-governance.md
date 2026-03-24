@@ -26,6 +26,10 @@
 | 3 | [dev-governance-part3-guides.md](dev-governance-part3-guides.md) | §3.1–§3.8 | 操作指南与模板：实施计划模板、增量开发指南、测试指南、审计报告模板、测试报告模板、收尾指南、衍生建议指南、常见错误清单 |
 | 4 | [dev-governance-part4-files.md](dev-governance-part4-files.md) | §4.1–§4.6 | 过程文件管理：审计记录、测试报告、开发计划、实施计划、审计请求（跨 Session）、决策记录（ADR） |
 | 5 | [dev-governance-part5-handover.md](dev-governance-part5-handover.md) | §5.1–§5.5 | 多 Agent 接力协议：信息来源、开始/结束标准流程、禁止假设、跨 Session 审计协作 |
+| 6a | [dev-governance-part6-audit.md](dev-governance-part6-audit.md) | §6.1–§6.2 | 版本交叉审计：审计流程总览、三阶段审计结构 |
+| 6b | [dev-governance-part6-audit-prompts.md](dev-governance-part6-audit-prompts.md) | §6.3 | 子 Agent 审计标准：规格合规、质量工程、完整性与 UX |
+| 6c | [dev-governance-part6-audit-integrator.md](dev-governance-part6-audit-integrator.md) | §6.4–§6.5 | 整合 Agent 规范：报告聚合、风险分级、修复追踪 |
+| 7 | [dev-governance-part7-quality-methods.md](dev-governance-part7-quality-methods.md) | §7.1–§7.7 | 质量工程方法论：TDD、系统化调试、代码审查、Worktree 隔离、并行子 Agent、完成前验证 |
 | 附录 | [dev-governance-appendix.md](dev-governance-appendix.md) | 铁律引用 + 附录 | 修改边界铁律（引用 §0.5）、四文档关系说明 |
 
 ---
