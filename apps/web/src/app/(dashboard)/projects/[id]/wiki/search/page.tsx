@@ -42,21 +42,18 @@ export default function WikiSearchPage() {
   };
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-6">
-      <div className="mb-6">
-        <Link href={`/projects/${projectId}/wiki`} className="text-sm text-gray-500 hover:text-gray-700">
-          ← 返回 Wiki
-        </Link>
-      </div>
-
-      <h1 className="mb-6 text-2xl font-bold text-gray-900">Wiki 搜索</h1>
+    <div className="mx-auto max-w-3xl px-6 py-8">
+      <h1 className="mb-2 text-2xl font-bold text-gray-900">高级搜索</h1>
+      <p className="mb-6 text-sm text-gray-500">
+        使用语义 + 全文混合搜索在知识库中查找内容。
+      </p>
 
       <form onSubmit={handleSearch} className="mb-8 flex gap-2">
         <input
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="搜索知识库..."
+          placeholder="输入搜索关键词或自然语言问题..."
           className="flex-1 rounded-lg border border-gray-300 px-4 py-2.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
         />
         <button
@@ -75,12 +72,12 @@ export default function WikiSearchPage() {
       )}
 
       {results.length > 0 && (
-        <ul className="divide-y divide-gray-100 rounded-xl border border-gray-200 bg-white">
+        <ul className="divide-y divide-gray-100 rounded-xl border border-gray-200 bg-white shadow-sm">
           {results.map((hit) => (
             <li key={hit.doc_id}>
               <Link
                 href={`/projects/${projectId}/wiki/${hit.doc_id}`}
-                className="block px-4 py-3 hover:bg-gray-50"
+                className="block px-5 py-3.5 hover:bg-gray-50"
               >
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium text-gray-800">{hit.title}</span>

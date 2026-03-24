@@ -73,7 +73,7 @@ export default function WikiDocPage() {
           setNodes(nodesResp.data);
         }
 
-        // Load related docs via search using doc title
+        // Load related docs (non-critical)
         try {
           const searchResp = await api.get<SearchHit[]>(
             `/v1/search/hybrid?project_id=${projectId}&query=${encodeURIComponent(docResp.data.title)}&page_size=6`,
@@ -97,7 +97,7 @@ export default function WikiDocPage() {
   const currentVer = doc.versions.find((v) => v.version === doc.current_version);
 
   return (
-    <div className="flex gap-6 px-4 py-6">
+    <div className="flex gap-6 px-6 py-6">
       {/* Main content */}
       <article className="min-w-0 flex-1">
         <WikiBreadcrumb nodes={nodes} nodeId={doc.node_id} projectId={projectId} />
@@ -145,8 +145,8 @@ export default function WikiDocPage() {
         )}
       </article>
 
-      {/* TOC sidebar — hidden on mobile */}
-      <aside className="hidden w-56 shrink-0 lg:block">
+      {/* TOC sidebar — hidden on mobile and tablet */}
+      <aside className="hidden w-56 shrink-0 xl:block">
         <div className="sticky top-6">
           <WikiToc contentRef={contentRef} />
         </div>
