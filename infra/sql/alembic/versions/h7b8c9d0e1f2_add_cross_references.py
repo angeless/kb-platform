@@ -36,11 +36,13 @@ def upgrade() -> None:
 
     # Project profile fields for multi-library routing
     op.add_column("project", sa.Column("profile_keywords", JSONB, nullable=True))
+    op.add_column("project", sa.Column("profile_embedding", JSONB, nullable=True))
     op.add_column("project", sa.Column("description", sa.Text, nullable=True))
 
 
 def downgrade() -> None:
     op.drop_column("project", "description")
+    op.drop_column("project", "profile_embedding")
     op.drop_column("project", "profile_keywords")
     op.drop_index("ix_cross_ref_tenant")
     op.drop_index("ix_cross_ref_target")

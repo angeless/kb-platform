@@ -146,7 +146,7 @@ async def delete_project(
     "/route",
     response_model=ListResponse,
     summary="Route content to best-matching projects",
-    description="Given content keywords, returns top-3 candidate projects ranked by relevance.",
+    description="Layer 2 routing: embedding similarity + keyword overlap. Returns top-3 candidates with action (auto_route/recommend/low_confidence).",
     responses={
         200: {"description": "Routing candidates returned"},
         **_RESP_AUTH,
@@ -158,11 +158,11 @@ async def route_content(
     tenant_id: uuid.UUID = Depends(get_tenant_id),
 ):
     from app.services.project_router_service import ProjectRouterService
-    keywords = body.get("keywords", [])
-    exclude_id = body.get("exclude_project_id")
     svc = ProjectRouterService(db, tenant_id)
+    exclude_id = body.get("exclude_project_id")
     candidates = await svc.route(
-        content_keywords=keywords,
+        content_embedding=body.get("embedding"),
+        content_keywords=body.get("keywords"),
         exclude_project_id=uuid.UUID(exclude_id) if exclude_id else None,
     )
     return ListResponse(

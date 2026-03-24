@@ -1,11 +1,12 @@
 """Cross-reference service: CRUD + auto-suggest for document links."""
 
 import uuid
+from typing import Any
 
-from sqlalchemy import select, delete, and_
+from sqlalchemy import select, delete, and_, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from shared_models import CrossReference, KnowledgeDoc, DocEmbedding, Project
+from shared_models import CrossReference, KnowledgeDoc, KnowledgeDocVersion, SourceRef, DocEmbedding, Project
 
 
 class CrossRefService:
@@ -86,14 +87,73 @@ class CrossRefService:
         return result.rowcount > 0
 
     async def auto_suggest(self, doc_id: uuid.UUID, max_results: int = 5) -> list[dict]:
-        """Suggest cross-references based on shared source refs and keyword overlap."""
+        """Suggest cross-references using 3 strategies per plan:
+        1. Embedding similarity > 0.75
+        2. Keyword intersection >= 3
+        3. Shared source material (asset_chunk_id overlap)
+        """
         doc = await self.db.get(KnowledgeDoc, doc_id)
         if not doc:
             return []
 
-        # Strategy: find docs with overlapping keywords
-        candidates = []
+        # Collect already-linked doc ids to exclude
+        existing_links = await self.db.execute(
+            select(CrossReference.target_doc_id).where(
+                CrossReference.source_doc_id == doc_id,
+                CrossReference.tenant_id == self.tenant_id,
+            )
+        )
+        linked_ids = {row[0] for row in existing_links.all()}
+        linked_ids.add(doc_id)  # exclude self
+
+        seen: dict[str, dict] = {}  # target_doc_id -> best candidate
+
+        def _add_candidate(target_id: str, title: str, confidence: float, reason: str) -> None:
+            if uuid.UUID(target_id) in linked_ids:
+                return
+            if target_id not in seen or seen[target_id]["confidence"] < confidence:
+                seen[target_id] = {
+                    "target_doc_id": target_id,
+                    "target_title": title,
+                    "relation_type": "related",
+                    "confidence": round(confidence, 3),
+                    "reason": reason,
+                }
+
+        # --- Strategy 1: Embedding similarity > 0.75 ---
+        doc_emb = await self.db.execute(
+            select(DocEmbedding).where(DocEmbedding.doc_id == doc_id)
+        )
+        doc_emb_row = doc_emb.scalar_one_or_none()
+        if doc_emb_row and doc_emb_row.embedding:
+            source_vec = doc_emb_row.embedding
+            all_embs = await self.db.execute(
+                select(DocEmbedding).where(
+                    DocEmbedding.project_id.in_(
+                        select(KnowledgeDoc.project_id).where(
+                            KnowledgeDoc.tenant_id == self.tenant_id
+                        )
+                    ),
+                    DocEmbedding.doc_id != doc_id,
+                )
+            )
+            for emb in all_embs.scalars().all():
+                if not emb.embedding:
+                    continue
+                sim = _cosine_similarity(source_vec, emb.embedding)
+                if sim > 0.75:
+                    target_doc = await self.db.get(KnowledgeDoc, emb.doc_id)
+                    if target_doc:
+                        _add_candidate(
+                            str(emb.doc_id),
+                            target_doc.title,
+                            sim,
+                            f"语义相似度: {sim:.2f}",
+                        )
+
+        # --- Strategy 2: Keyword intersection >= 3 ---
         if doc.keywords:
+            doc_kw_set = set(doc.keywords)
             all_docs = await self.db.execute(
                 select(KnowledgeDoc).where(
                     KnowledgeDoc.tenant_id == self.tenant_id,
@@ -104,26 +164,133 @@ class CrossRefService:
             for other in all_docs.scalars().all():
                 if not other.keywords:
                     continue
-                overlap = set(doc.keywords) & set(other.keywords)
-                if len(overlap) >= 2:
-                    # Check not already linked
-                    existing = await self.db.execute(
-                        select(CrossReference.id).where(
-                            and_(
-                                CrossReference.source_doc_id == doc_id,
-                                CrossReference.target_doc_id == other.id,
-                            )
-                        )
+                overlap = doc_kw_set & set(other.keywords)
+                if len(overlap) >= 3:
+                    _add_candidate(
+                        str(other.id),
+                        other.title,
+                        min(len(overlap) / 5.0, 1.0),
+                        f"共享关键词({len(overlap)}): {', '.join(list(overlap)[:3])}",
                     )
-                    if existing.scalar_one_or_none() is None:
-                        candidates.append({
-                            "target_doc_id": str(other.id),
-                            "target_title": other.title,
-                            "relation_type": "related",
-                            "confidence": min(len(overlap) / 5.0, 1.0),
-                            "reason": f"共享关键词: {', '.join(list(overlap)[:3])}",
-                        })
 
-        # Sort by confidence descending
-        candidates.sort(key=lambda x: x["confidence"], reverse=True)
+        # --- Strategy 3: Shared source material ---
+        # Find asset_chunk_ids referenced by this doc's latest version
+        latest_ver = await self.db.execute(
+            select(KnowledgeDocVersion).where(
+                KnowledgeDocVersion.doc_id == doc_id
+            ).order_by(KnowledgeDocVersion.version.desc()).limit(1)
+        )
+        ver = latest_ver.scalar_one_or_none()
+        if ver:
+            source_chunks = await self.db.execute(
+                select(SourceRef.asset_chunk_id).where(
+                    SourceRef.doc_version_id == ver.id
+                )
+            )
+            my_chunk_ids = {row[0] for row in source_chunks.all()}
+            if my_chunk_ids:
+                # Find other doc versions that reference the same chunks
+                shared_refs = await self.db.execute(
+                    select(SourceRef.doc_version_id, SourceRef.asset_chunk_id).where(
+                        SourceRef.asset_chunk_id.in_(my_chunk_ids),
+                        SourceRef.doc_version_id != ver.id,
+                    )
+                )
+                # Group by doc_version_id -> count shared chunks
+                version_overlap: dict[uuid.UUID, int] = {}
+                for row in shared_refs.all():
+                    version_overlap[row[0]] = version_overlap.get(row[0], 0) + 1
+
+                for ver_id, count in version_overlap.items():
+                    other_ver = await self.db.get(KnowledgeDocVersion, ver_id)
+                    if not other_ver:
+                        continue
+                    other_doc = await self.db.get(KnowledgeDoc, other_ver.doc_id)
+                    if not other_doc or other_doc.tenant_id != self.tenant_id:
+                        continue
+                    _add_candidate(
+                        str(other_doc.id),
+                        other_doc.title,
+                        min(count / len(my_chunk_ids), 1.0),
+                        f"共享来源素材: {count} 个片段",
+                    )
+
+        # Sort by confidence descending, return top N
+        candidates = sorted(seen.values(), key=lambda x: x["confidence"], reverse=True)
         return candidates[:max_results]
+
+    async def get_project_graph(self, project_id: uuid.UUID) -> dict:
+        """Get cross-reference graph data for a project.
+
+        Returns nodes (docs) and edges (cross-refs) for visualization.
+        """
+        # Get all docs in the project
+        docs_result = await self.db.execute(
+            select(KnowledgeDoc).where(
+                KnowledgeDoc.project_id == project_id,
+                KnowledgeDoc.tenant_id == self.tenant_id,
+            )
+        )
+        docs = docs_result.scalars().all()
+        doc_ids = {d.id for d in docs}
+
+        nodes = [
+            {"id": str(d.id), "title": d.title, "doc_type": d.doc_type, "status": d.status}
+            for d in docs
+        ]
+
+        # Get all cross-refs where source or target is in this project
+        refs_result = await self.db.execute(
+            select(CrossReference).where(
+                CrossReference.tenant_id == self.tenant_id,
+                or_(
+                    CrossReference.source_doc_id.in_(doc_ids),
+                    CrossReference.target_doc_id.in_(doc_ids),
+                ),
+            )
+        )
+        refs = refs_result.scalars().all()
+
+        # Add external nodes (docs from other projects referenced)
+        external_ids = set()
+        for ref in refs:
+            if ref.source_doc_id not in doc_ids:
+                external_ids.add(ref.source_doc_id)
+            if ref.target_doc_id not in doc_ids:
+                external_ids.add(ref.target_doc_id)
+
+        for ext_id in external_ids:
+            ext_doc = await self.db.get(KnowledgeDoc, ext_id)
+            if ext_doc:
+                ext_project = await self.db.get(Project, ext_doc.project_id)
+                nodes.append({
+                    "id": str(ext_doc.id),
+                    "title": ext_doc.title,
+                    "doc_type": ext_doc.doc_type,
+                    "status": ext_doc.status,
+                    "external_project": ext_project.name if ext_project else None,
+                })
+
+        edges = [
+            {
+                "source": str(ref.source_doc_id),
+                "target": str(ref.target_doc_id),
+                "relation_type": ref.relation_type,
+                "confidence": ref.confidence,
+            }
+            for ref in refs
+        ]
+
+        return {"nodes": nodes, "edges": edges}
+
+
+def _cosine_similarity(a: list, b: list) -> float:
+    """Compute cosine similarity between two vectors."""
+    if len(a) != len(b) or not a:
+        return 0.0
+    dot = sum(x * y for x, y in zip(a, b))
+    norm_a = sum(x * x for x in a) ** 0.5
+    norm_b = sum(x * x for x in b) ** 0.5
+    if norm_a == 0 or norm_b == 0:
+        return 0.0
+    return dot / (norm_a * norm_b)

@@ -82,6 +82,23 @@ async def delete_cross_ref(
     return DataResponse(data={"deleted": deleted})
 
 
+@router.get(
+    "/project/{project_id}/graph",
+    response_model=DataResponse[dict],
+    summary="Get cross-reference graph for a project",
+    description="Returns nodes (docs) and edges (cross-refs) for visualization.",
+    responses={200: {"description": "Graph data returned"}, **_RESP_AUTH},
+)
+async def get_cross_ref_graph(
+    project_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    tenant_id: uuid.UUID = Depends(get_tenant_id),
+):
+    svc = CrossRefService(db, tenant_id)
+    graph = await svc.get_project_graph(project_id)
+    return DataResponse(data=graph)
+
+
 @router.post(
     "/auto-suggest",
     response_model=ListResponse[dict],

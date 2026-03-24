@@ -23,6 +23,7 @@ class Project(Base):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
     profile_keywords: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    profile_embedding: Mapped[list | None] = mapped_column(JSONB, nullable=True)
 
     # Relationships
     tenant = relationship("Tenant", back_populates="projects")
