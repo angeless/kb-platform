@@ -20,6 +20,76 @@ interface BatchResult {
   failed: { id: string; reason: string }[];
 }
 
+interface ArchMeta {
+  classification_dimension?: string;
+  dimension_rationale?: string;
+  coverage_score?: number;
+  uncovered_chunks?: string[];
+}
+
+const DIMENSION_LABELS: Record<string, string> = {
+  topic: "按主题",
+  process: "按流程",
+  audience: "按受众",
+  chronological: "按时间",
+  hybrid: "混合",
+};
+
+function MeceInfoCard({ projectId }: { projectId: string }) {
+  const [meta, setMeta] = useState<ArchMeta | null>(null);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const resp = await api.get<{ id: string; levels_json: ArchMeta | null }[]>(
+          `/v1/projects/${projectId}/architectures`,
+        );
+        const arch = resp.data[0];
+        if (arch?.levels_json && typeof arch.levels_json === "object") {
+          setMeta(arch.levels_json as ArchMeta);
+        }
+      } catch {
+        // Non-critical
+      }
+    };
+    load();
+  }, [projectId]);
+
+  if (!meta || !meta.classification_dimension) return null;
+
+  const score = meta.coverage_score ?? 0;
+  const scoreColor = score >= 80 ? "text-green-600" : score >= 60 ? "text-yellow-600" : "text-red-600";
+
+  return (
+    <div className="mb-6 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+      <h3 className="mb-3 text-sm font-semibold text-gray-700">架构质量 (MECE)</h3>
+      <div className="grid grid-cols-2 gap-4 text-sm lg:grid-cols-4">
+        <div>
+          <div className="text-xs text-gray-400">分类维度</div>
+          <div className="font-medium text-gray-800">
+            {DIMENSION_LABELS[meta.classification_dimension] || meta.classification_dimension}
+          </div>
+        </div>
+        <div>
+          <div className="text-xs text-gray-400">覆盖度</div>
+          <div className={`font-bold ${scoreColor}`}>{score}%</div>
+        </div>
+        {meta.dimension_rationale && (
+          <div className="col-span-2">
+            <div className="text-xs text-gray-400">选择依据</div>
+            <div className="text-gray-600">{meta.dimension_rationale}</div>
+          </div>
+        )}
+      </div>
+      {meta.uncovered_chunks && meta.uncovered_chunks.length > 0 && (
+        <div className="mt-3 rounded-lg bg-yellow-50 px-3 py-2 text-xs text-yellow-700">
+          未覆盖内容: {meta.uncovered_chunks.join("、")}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ReviewQueuePage() {
   const params = useParams();
   const projectId = params.id as string;
@@ -115,6 +185,9 @@ export default function ReviewQueuePage() {
       </div>
 
       <h1 className="mb-6 text-2xl font-bold text-gray-900">审核管理</h1>
+
+      {/* MECE Architecture Quality Card */}
+      <MeceInfoCard projectId={projectId} />
 
       {/* Tabs */}
       <div className="mb-4 flex gap-1 border-b border-gray-200">

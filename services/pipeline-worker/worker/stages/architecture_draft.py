@@ -15,6 +15,82 @@ from ..celery_app import celery_app
 
 logger = logging.getLogger(__name__)
 
+MAX_ARCH_DEPTH = 5
+
+
+def validate_architecture(db: Session, arch_id: uuid.UUID) -> dict:
+    """Validate architecture quality after generation.
+
+    Checks:
+    1. Node depth ≤ MAX_ARCH_DEPTH
+    2. No duplicate node names at the same level
+    3. No orphan nodes (no children and no docs)
+    4. Coverage score present in metadata
+
+    Returns:
+        {"passed": bool, "warnings": [...]}
+    """
+    nodes = db.execute(
+        select(ArchitectureNode).where(
+            ArchitectureNode.architecture_id == arch_id
+        )
+    ).scalars().all()
+
+    warnings: list[str] = []
+
+    if not nodes:
+        return {"passed": True, "warnings": ["架构无节点（使用了回退方案）"]}
+
+    # Build parent map
+    node_map = {n.id: n for n in nodes}
+    children_map: dict[uuid.UUID | None, list] = {}
+    for n in nodes:
+        children_map.setdefault(n.parent_id, []).append(n)
+
+    # 1. Depth check
+    def get_depth(node_id: uuid.UUID, current: int = 1) -> int:
+        kids = children_map.get(node_id, [])
+        if not kids:
+            return current
+        return max(get_depth(k.id, current + 1) for k in kids)
+
+    roots = [n for n in nodes if n.parent_id is None]
+    max_depth = max((get_depth(r.id) for r in roots), default=0)
+    if max_depth > MAX_ARCH_DEPTH:
+        warnings.append(f"架构深度 {max_depth} 超过上限 {MAX_ARCH_DEPTH}")
+
+    # 2. Duplicate names at same parent
+    for parent_id, siblings in children_map.items():
+        names = [s.node_name for s in siblings]
+        dupes = [n for n in set(names) if names.count(n) > 1]
+        if dupes:
+            warnings.append(f"同级节点名称重复: {', '.join(dupes)}")
+
+    # 3. Orphan check (leaf nodes — no children)
+    leaf_ids = {n.id for n in nodes if n.id not in children_map}
+    if leaf_ids:
+        from shared_models import KnowledgeDoc
+        docs_with_nodes = db.execute(
+            select(KnowledgeDoc.node_id).where(
+                KnowledgeDoc.node_id.in_(leaf_ids)
+            )
+        ).scalars().all()
+        nodes_with_docs = set(docs_with_nodes)
+        orphans = leaf_ids - nodes_with_docs
+        if len(orphans) > len(nodes) * 0.5:
+            warnings.append(f"{len(orphans)}/{len(nodes)} 个叶子节点无文档（架构可能过于细分）")
+
+    # 4. Coverage metadata
+    arch = db.execute(
+        select(Architecture).where(Architecture.id == arch_id)
+    ).scalar_one_or_none()
+    if arch and isinstance(arch.levels_json, dict):
+        score = arch.levels_json.get("coverage_score", 0)
+        if score < 60:
+            warnings.append(f"覆盖度评分偏低: {score}%（建议 ≥ 60%）")
+
+    return {"passed": len(warnings) == 0, "warnings": warnings}
+
 
 def generate_architecture_draft(
     db: Session,

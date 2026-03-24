@@ -100,6 +100,12 @@ def run_pipeline(self, project_id: str, job_id: str, asset_ids: list[str], user_
         current_stage = "architecture_draft"
         _publish_event(pid, jid, current_stage, "running")
         arch_id = generate_architecture_draft(db, pid, classification)
+
+        # Architecture quality gate
+        from .stages.architecture_draft import validate_architecture
+        arch_qc = validate_architecture(db, arch_id)
+        if arch_qc["warnings"]:
+            logger.warning("Architecture quality warnings: %s", arch_qc["warnings"])
         _publish_event(pid, jid, current_stage, "completed")
 
         # --- Stage 5: Document Generation ---

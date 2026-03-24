@@ -8,6 +8,19 @@
 ### 新增 (Added)
 - 自动化开发工作流（dev-workflow-upgrade v1.3）
 
+## [0.42.6] - 2026-03-23
+
+### 新增
+- 架构提议 MECE 原则：LLM 输出包含分类维度声明和覆盖度评分 (T-42-06-A)
+- 架构质量门禁：深度限制 5 层、同级重名检测、叶子节点稀疏警告 (T-42-06-C)
+- 文档生成元数据：每篇文档自动提取 keywords 和 knowledge_type (T-42-06-D/F)
+- 审核页 MECE 信息卡：展示分类维度、覆盖度评分、未覆盖内容 (T-42-06-G)
+
+### 变更
+- 架构提议 prompt 增加 MECE 约束和分类维度选择指引 (T-42-06-A)
+- Architecture.levels_json 扩展为包含 MECE 元数据的结构 (T-42-06-B)
+- knowledge_doc 表新增 keywords (JSONB) 和 knowledge_type (VARCHAR) 列 (T-42-06-E)
+
 ## [0.42.5] - 2026-03-23
 
 ### 新增
