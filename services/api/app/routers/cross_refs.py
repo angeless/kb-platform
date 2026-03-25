@@ -30,7 +30,7 @@ async def create_cross_ref(
     body: CrossRefCreate,
     db: AsyncSession = Depends(get_db),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
-    user: User = Depends(require_role("editor")),
+    _user: User = require_role("editor"),
 ):
     svc = CrossRefService(db, tenant_id)
     ref = await svc.create(
@@ -74,7 +74,7 @@ async def delete_cross_ref(
     ref_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
-    user: User = Depends(require_role("editor")),
+    _user: User = require_role("editor"),
 ):
     svc = CrossRefService(db, tenant_id)
     deleted = await svc.delete(ref_id)
