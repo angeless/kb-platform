@@ -1,0 +1,11 @@
+# KB Platform — Suggested crontab entries
+# Install: crontab -e (then paste these lines)
+
+# Database backup — daily at 3:00 AM
+0 3 * * * /opt/kb-platform/infra/scripts/backup-db.sh >> /var/log/kb-backup-db.log 2>&1
+
+# MinIO backup — daily at 4:00 AM
+0 4 * * * /opt/kb-platform/infra/scripts/backup-minio.sh >> /var/log/kb-backup-minio.log 2>&1
+
+# Certbot renewal check — twice daily (certbot only renews if needed)
+0 0,12 * * * docker compose -f /opt/kb-platform/docker-compose.yml -f /opt/kb-platform/infra/docker/docker-compose.production.yml exec certbot certbot renew --quiet

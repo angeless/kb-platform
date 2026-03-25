@@ -8,6 +8,16 @@
 ### 新增 (Added)
 - 自动化开发工作流（dev-workflow-upgrade v1.3）
 
+## [0.42.8] - 2026-03-24
+
+### 新增
+- Nginx 反向代理配置：HTTPS 终端、WebSocket 代理、静态资源缓存、安全头 (T-42-08-A)
+- HTTPS 证书方案：自签脚本 + Let's Encrypt certbot 自动续签 (T-42-08-B)
+- 生产 Docker Compose：资源限制、日志限制、restart policy、certbot 服务 (T-42-08-C)
+- 备份脚本：PostgreSQL pg_dump + MinIO mirror + 恢复脚本 + crontab 模板 (T-42-08-D)
+- 监控集成：Prometheus 采集 + Grafana 预置仪表盘（请求率/错误率/P95/连接数）(T-42-08-E)
+- 一键部署脚本 deploy.sh：前置检查 + 构建 + 迁移 + 启动 + 健康检查 (T-42-08-F)
+
 ## [0.42.7] - 2026-03-24
 
 ### 新增
