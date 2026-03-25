@@ -50,8 +50,9 @@ async def readyz(db: AsyncSession = Depends(get_db)):
         result = await db.execute(text("SELECT version_num FROM alembic_version LIMIT 1"))
         row = result.first()
         alembic_version = row[0] if row else "none"
-    except Exception:
-        alembic_version = "unknown"
+    except Exception as e:
+        logger.warning("Alembic version check failed: %s", e)
+        alembic_version = "check_failed"
 
     return {"status": "ok", "alembic_version": alembic_version}
 
