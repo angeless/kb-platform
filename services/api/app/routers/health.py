@@ -60,7 +60,10 @@ async def readyz(db: AsyncSession = Depends(get_db)):
     "/_version",
     summary="Application version",
     description="Returns the current application version from the VERSION file.",
-    responses={200: {"description": "Version returned"}},
+    responses={
+        200: {"description": "Version returned"},
+        500: {"description": "Internal server error"},
+    },
 )
 async def version():
     """Return current application version."""

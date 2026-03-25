@@ -24,6 +24,7 @@ _RESP_AUTH = {
     "",
     response_model=DataResponse[CrossRefOut],
     summary="Create a cross-reference between two documents",
+    description="Links two knowledge documents with a typed relation (related, depends_on, extends, contradicts, supersedes).",
     responses={200: {"description": "Cross-reference created"}, **_RESP_AUTH},
 )
 async def create_cross_ref(
@@ -49,6 +50,7 @@ async def create_cross_ref(
     "/doc/{doc_id}",
     response_model=ListResponse[CrossRefOut],
     summary="Get all cross-references for a document",
+    description="Returns all cross-references where the document is either source or target, enriched with titles and project info.",
     responses={200: {"description": "Cross-references returned"}, **_RESP_AUTH},
 )
 async def get_doc_cross_refs(
@@ -68,6 +70,7 @@ async def get_doc_cross_refs(
     "/{ref_id}",
     response_model=DataResponse[dict],
     summary="Delete a cross-reference",
+    description="Removes a cross-reference link between two documents. Requires editor role.",
     responses={200: {"description": "Cross-reference deleted"}, **_RESP_AUTH},
 )
 async def delete_cross_ref(
@@ -103,6 +106,7 @@ async def get_cross_ref_graph(
     "/auto-suggest",
     response_model=ListResponse[dict],
     summary="Auto-suggest cross-references for a document",
+    description="Suggests related documents using 3 strategies: embedding similarity >0.75, keyword intersection >=3, and shared source material.",
     responses={200: {"description": "Suggestions returned"}, **_RESP_AUTH},
 )
 async def auto_suggest_cross_refs(
