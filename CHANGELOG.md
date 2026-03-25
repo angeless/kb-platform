@@ -8,6 +8,16 @@
 ### 新增 (Added)
 - 自动化开发工作流（dev-workflow-upgrade v1.3）
 
+## [0.42.11] - 2026-03-24
+
+### 安全修复
+- WebSocket JWT 认证改用 httpOnly cookie，不再通过 URL query 传递 (H-03/T-42-11-A)
+- Export 端点添加频率限制：10 次/分钟/用户 (M-07/T-42-11-D)
+
+### 性能优化
+- Embedding JSONB 回退搜索：消除 N+1 查询，批量获取文档；限制内存 500 条 (H-04/T-42-11-B)
+- Settings 单例缓存：get_settings() 添加 @lru_cache (M-06/T-42-11-C)
+
 ## [0.42.9] - 2026-03-24
 
 ### 新增

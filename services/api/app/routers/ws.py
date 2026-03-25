@@ -22,12 +22,12 @@ router = APIRouter(tags=["websocket"])
 async def ws_job_status(websocket: WebSocket, project_id: str):
     """Subscribe to real-time job status events for a project.
 
-    Authentication: pass JWT as query parameter `token`.
+    Authentication: JWT from httpOnly cookie (secure, not exposed in URL/logs).
     Tenant isolation: verifies project_id belongs to the JWT's tenant.
     Events are published by workers via Redis Pub/Sub.
     """
-    # Authenticate via query parameter
-    token = websocket.query_params.get("token")
+    # Authenticate via httpOnly cookie (H-03 fix: no longer via URL query param)
+    token = websocket.cookies.get("access_token")
     if not token:
         await websocket.close(code=4001, reason="缺少认证令牌")
         return
