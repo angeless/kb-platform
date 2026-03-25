@@ -1,16 +1,11 @@
 # TODO_NEXT
 
-## 下一步任务
+## Next
 
-- **版本**: v0.42.9
-- **任务编号**: T-42-09
-- **任务名称**: 发布就绪 — 邮件骨架 + 生产配置 + 用户引导 + 运维文档
-- **当前阶段**: Phase 1
-- **依赖**: T-42-08 (已完成)
-- **开发计划**: docs/dev-plans/dev-plan-v0.42.md
+- v0.42.10 T-42-10 Online Acceptance
+- Phase 1
+- Plan: docs/dev-plans/dev-plan-v0.42.md
 
-## 上次完成
+## Last
 
-- **版本**: v0.42.8
-- **任务**: T-42-08 部署工具链
-- **状态**: Done
+- v0.42.9 T-42-09 Done

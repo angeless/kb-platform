@@ -42,9 +42,35 @@ async def healthz():
     },
 )
 async def readyz(db: AsyncSession = Depends(get_db)):
-    """Readiness probe — checks database connectivity."""
+    """Readiness probe — checks database connectivity + Alembic migration version."""
     await db.execute(text("SELECT 1"))
-    return {"status": "ok"}
+
+    # Check Alembic migration version
+    try:
+        result = await db.execute(text("SELECT version_num FROM alembic_version LIMIT 1"))
+        row = result.first()
+        alembic_version = row[0] if row else "none"
+    except Exception:
+        alembic_version = "unknown"
+
+    return {"status": "ok", "alembic_version": alembic_version}
+
+
+@router.get(
+    "/_version",
+    summary="Application version",
+    description="Returns the current application version from the VERSION file.",
+    responses={200: {"description": "Version returned"}},
+)
+async def version():
+    """Return current application version."""
+    import pathlib
+    version_file = pathlib.Path(__file__).resolve().parents[4] / "VERSION"
+    try:
+        ver = version_file.read_text().strip()
+    except FileNotFoundError:
+        ver = "unknown"
+    return {"version": ver}
 
 
 @router.get(

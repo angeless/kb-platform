@@ -83,6 +83,14 @@ class Settings(BaseSettings):
     # Logging
     log_level: str = "INFO"
 
+    # SMTP (email)
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from: str = "noreply@kb-platform.com"
+    smtp_tls: bool = True
+
     # CORS
     cors_origins: str = "http://localhost:3000,http://localhost:3001"
 

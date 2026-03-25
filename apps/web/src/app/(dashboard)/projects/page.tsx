@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { ApiClientError } from "@/lib/api";
 import { useProjects, useCreateProject } from "@/hooks/useProjects";
+import { OnboardingGuide } from "@/components/onboarding-guide";
 
 export default function ProjectsPage() {
   const { data, isLoading, error } = useProjects();
@@ -41,6 +42,7 @@ export default function ProjectsPage() {
 
   return (
     <div>
+      {projects.length === 0 && !isLoading && <OnboardingGuide />}
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">项目列表</h1>
