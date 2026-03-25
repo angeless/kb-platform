@@ -189,6 +189,13 @@ async def _check_minio() -> dict:
 )
 async def health_ready(db: AsyncSession = Depends(get_db)):
     """Deep health check — checks PostgreSQL, Redis, and MinIO connectivity."""
+    import pathlib
+    version_file = pathlib.Path(__file__).resolve().parents[4] / "VERSION"
+    try:
+        ver = version_file.read_text().strip()
+    except FileNotFoundError:
+        ver = "unknown"
+
     pg_result, redis_result, minio_result = await asyncio.gather(
         _check_postgres(db),
         _check_redis(),
@@ -205,7 +212,7 @@ async def health_ready(db: AsyncSession = Depends(get_db)):
 
     body = {
         "status": overall,
-        "version": "0.35.0",
+        "version": ver,
         "checks": {
             "postgres": pg_result,
             "redis": redis_result,

@@ -7,6 +7,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _DEFAULT_JWT_SECRET = "change-me-in-production"
 _DEFAULT_ENCRYPTION_KEY = "change-me-32-byte-key-for-aes256"
+_DEFAULT_POSTGRES_PASSWORD = "postgres"
+_DEFAULT_MINIO_KEY = "minioadmin"
 
 
 class Settings(BaseSettings):
@@ -117,6 +119,16 @@ class Settings(BaseSettings):
             if len(self.encryption_key) < 32:
                 raise ValueError(
                     "encryption_key must be at least 32 characters in production."
+                )
+            if self.postgres_password == _DEFAULT_POSTGRES_PASSWORD:
+                raise ValueError(
+                    "postgres_password must not use default 'postgres' in production. "
+                    "Set POSTGRES_PASSWORD environment variable."
+                )
+            if self.s3_access_key == _DEFAULT_MINIO_KEY or self.s3_secret_key == _DEFAULT_MINIO_KEY:
+                raise ValueError(
+                    "s3_access_key/s3_secret_key must not use default 'minioadmin' in production. "
+                    "Set S3_ACCESS_KEY and S3_SECRET_KEY environment variables."
                 )
         return self
 
