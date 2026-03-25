@@ -42,6 +42,7 @@
 7. CHANGELOG.md                            ← 变更日志（了解已完成的工作）
 8. docs/dev-plans/                         ← 开发计划文档（了解当前要做什么）
 9. docs/versions/                          ← 审计记录与测试报告
+10. docs/MEMORY.md                         ← 跨会话交接持久化（如存在则必读）
 ```
 
 ---

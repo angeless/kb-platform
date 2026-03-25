@@ -1,9 +1,9 @@
 {
-  "upgrade_version": "1.10",
+  "upgrade_version": "1.14",
   "project_name": "KB Platform",
   "snapshot_commit": "0c228f86b5b2c94abbe11119ee68ae9a291490d7",
   "started_at": "2026-03-20T04:46:37+08:00",
-  "last_updated": "2026-03-23T20:20:00+08:00",
+  "last_updated": "2026-03-24T12:00:00+08:00",
   "current_stage": 7,
   "git_available": true,
   "stages": {
@@ -94,6 +94,18 @@
         "v1.9: plan-audit 和 ui-spec 技能可通过 plugin 调用（无项目文件变更）",
         "v1.10: gate-failures.json 迁移为 {failures:[], history:[]} 格式",
         "v1.10: bug-catalog 技能可通过 plugin 调用（无项目文件变更）"
+      ]
+    },
+    {
+      "from": "1.10",
+      "to": "1.14",
+      "date": "2026-03-24",
+      "changes": [
+        "v1.11: Gate B Wiki/PRD双向验证 + MEMORY.md交接持久化",
+        "v1.12: 铁律#21禁止静默降级 + 铁律#22逐条验收 + Phase4降级检测",
+        "v1.14: 合并为统一版本基线",
+        "CLAUDE.md 新增 docs/MEMORY.md 加载指令",
+        "part0 新增铁律#21/#22 到 §0.5"
       ]
     }
   ]
