@@ -50,6 +50,12 @@ def parse_asset(self, asset_id: str, job_id: str) -> dict:
     job_uuid = uuid.UUID(job_id)
 
     with _get_sync_session() as session:
+        # M-10 idempotency: skip if job already completed/failed
+        job = session.execute(select(Job).where(Job.id == job_uuid)).scalar_one_or_none()
+        if job and job.status in ("completed", "failed"):
+            logger.warning("Job %s already %s, skipping duplicate execution", job_id, job.status)
+            return {"status": "skipped", "reason": f"Job already {job.status}"}
+
         # Load asset
         asset = session.execute(
             select(Asset).where(Asset.id == asset_uuid)

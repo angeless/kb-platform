@@ -8,6 +8,17 @@
 ### 新增 (Added)
 - 自动化开发工作流（dev-workflow-upgrade v1.3）
 
+## [0.42.12] - 2026-03-24
+
+### 安全修复
+- 前端上传校验：文件类型白名单 + 大小限制 100MB (M-02/T-42-12-A)
+- Alembic downgrade 数据保护：drop_table 改为 rename_table_backup (M-14/T-42-12-D)
+- 邮箱唯一性改为租户隔离：UNIQUE(email, tenant_id) 替代全局 UNIQUE (M-15/T-42-12-E)
+
+### 稳定性
+- Celery 任务幂等性：重复投递已完成/失败的 job 自动跳过 (M-10/T-42-12-B)
+- Dashboard 全局 ErrorBoundary：所有列表页组件内部报错显示友好提示 (M-12/T-42-12-C)
+
 ## [0.42.11] - 2026-03-24
 
 ### 安全修复

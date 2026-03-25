@@ -9,6 +9,7 @@ import { MobileNav } from "@/components/mobile-nav";
 import { SessionGuard } from "@/components/session-guard";
 import { ToastContainer } from "@/components/error-toast";
 import { SkeletonList } from "@/components/skeleton-card";
+import { ErrorBoundary } from "@/components/error-boundary";
 
 export default function DashboardLayout({
   children,
@@ -47,7 +48,9 @@ export default function DashboardLayout({
         <div className="flex flex-1 flex-col overflow-hidden">
           <Topbar />
           <main className="flex-1 overflow-y-auto bg-gray-50 p-4 md:p-6">
-            {children}
+            <ErrorBoundary>
+              {children}
+            </ErrorBoundary>
           </main>
         </div>
       </div>

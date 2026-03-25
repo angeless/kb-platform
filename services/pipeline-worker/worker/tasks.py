@@ -79,8 +79,14 @@ def run_pipeline(self, project_id: str, job_id: str, asset_ids: list[str], user_
     current_stage = ""
 
     try:
-        # Update job status
+        # M-10 idempotency: skip if job already completed/failed
         job = db.execute(select(Job).where(Job.id == jid)).scalar_one_or_none()
+        if job and job.status in ("completed", "failed"):
+            logger.warning("Pipeline job %s already %s, skipping", job_id, job.status)
+            db.close()
+            return {"status": "skipped", "reason": f"Job already {job.status}"}
+
+        # Update job status
         if job:
             job.status = "running"
             db.commit()

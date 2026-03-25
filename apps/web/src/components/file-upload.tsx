@@ -15,6 +15,28 @@ interface UploadItem {
   message?: string;
 }
 
+// M-02 fix: allowed file types and max size
+const ALLOWED_EXTENSIONS = new Set([
+  "pdf", "txt", "md", "docx", "doc", "csv", "json", "html", "xml",
+  "zip", "rar", "7z", "tar",
+  "png", "jpg", "jpeg", "gif", "webp",
+  "mp3", "wav", "m4a", "flac",
+  "mp4", "avi", "mov",
+]);
+const MAX_UPLOAD_SIZE_MB = 100;
+const MAX_UPLOAD_SIZE_BYTES = MAX_UPLOAD_SIZE_MB * 1024 * 1024;
+
+function validateFile(file: File): string | null {
+  const ext = file.name.split(".").pop()?.toLowerCase() || "";
+  if (!ALLOWED_EXTENSIONS.has(ext)) {
+    return `不支持的文件类型: .${ext}`;
+  }
+  if (file.size > MAX_UPLOAD_SIZE_BYTES) {
+    return `文件大小超出限制 (${MAX_UPLOAD_SIZE_MB}MB)`;
+  }
+  return null;
+}
+
 export function FileUpload({ projectId, onUploadComplete }: FileUploadProps) {
   const [items, setItems] = useState<UploadItem[]>([]);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -64,15 +86,20 @@ export function FileUpload({ projectId, onUploadComplete }: FileUploadProps) {
 
   const handleFiles = useCallback(
     async (files: FileList | File[]) => {
-      const newItems: UploadItem[] = Array.from(files).map((file) => ({
-        file,
-        status: "pending" as const,
-        progress: 0,
-      }));
+      const newItems: UploadItem[] = Array.from(files).map((file) => {
+        const error = validateFile(file);
+        return {
+          file,
+          status: error ? ("error" as const) : ("pending" as const),
+          progress: 0,
+          message: error || undefined,
+        };
+      });
       setItems((prev) => [...prev, ...newItems]);
 
       const startIndex = items.length;
       for (let i = 0; i < newItems.length; i++) {
+        if (newItems[i].status === "error") continue;
         await uploadFile(newItems[i].file, startIndex + i);
       }
       onUploadComplete();

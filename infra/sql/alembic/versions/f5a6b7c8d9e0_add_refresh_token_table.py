@@ -34,4 +34,4 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.drop_index("ix_refresh_token_user_id", table_name="refresh_token")
     op.drop_index("ix_refresh_token_hash", table_name="refresh_token")
-    op.drop_table("refresh_token")
+    op.rename_table("refresh_token", "refresh_token_backup")  # M-14: preserve data on downgrade

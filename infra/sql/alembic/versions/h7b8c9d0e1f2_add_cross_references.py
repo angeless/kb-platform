@@ -47,4 +47,4 @@ def downgrade() -> None:
     op.drop_index("ix_cross_ref_tenant")
     op.drop_index("ix_cross_ref_target")
     op.drop_index("ix_cross_ref_source")
-    op.drop_table("cross_reference")
+    op.rename_table("cross_reference", "cross_reference_backup")  # M-14: preserve data on downgrade
