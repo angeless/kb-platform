@@ -100,4 +100,7 @@ async def auth_headers(db_session: AsyncSession) -> dict[str, str]:
         algorithm=settings.jwt_algorithm,
     )
 
-    return {"Authorization": f"Bearer {token}"}
+    return {
+        "Authorization": f"Bearer {token}",
+        "X-Requested-With": "XMLHttpRequest",
+    }

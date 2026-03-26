@@ -25,13 +25,18 @@ _EXEMPT_PATHS = {
 }
 
 
+_EXEMPT_PREFIXES = (
+    "/v1/auth/",
+)
+
+
 class CsrfMiddleware(BaseHTTPMiddleware):
     """Reject state-changing requests without X-Requested-With header."""
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         if request.method in _PROTECTED_METHODS:
             path = request.url.path.rstrip("/")
-            if path not in _EXEMPT_PATHS:
+            if path not in _EXEMPT_PATHS and not any(path.startswith(p) for p in _EXEMPT_PREFIXES):
                 xrw = request.headers.get("X-Requested-With", "")
                 if xrw != "XMLHttpRequest":
                     return JSONResponse(
