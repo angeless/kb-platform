@@ -144,7 +144,7 @@ describe("Cookie-based auth and token refresh", () => {
     expect(r1.data).toEqual({ result: "a" });
     expect(r2.data).toEqual({ result: "b" });
     const refreshCalls = fetchMock.mock.calls.filter(
-      (c: [string, RequestInit]) => c[0].includes("/v1/auth/refresh")
+      (c: any[]) => c[0].includes("/v1/auth/refresh")
     );
     expect(refreshCalls).toHaveLength(1);
   });

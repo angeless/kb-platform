@@ -17,9 +17,27 @@ from app.main import create_app
 from app.routers.assets import get_storage
 from app.utils.security import create_access_token, hash_password
 
+from unittest.mock import patch
+
 settings = get_settings()
 
 TEST_DB_URL = settings.database_url + "_test"
+
+
+@pytest.fixture(autouse=True)
+def _disable_login_lockout_and_rate_limit():
+    """Disable Redis-based login lockout and rate limiting in all tests.
+
+    The lockout and rate limiter use Redis which may retain state across test
+    runs, causing spurious 429 errors.  We disable lockout entirely (fail-open)
+    and bypass the rate limit middleware's check logic.
+    """
+    async def _passthrough_dispatch(self, request, call_next):
+        return await call_next(request)
+
+    with patch("app.services.auth_service.AuthService._get_redis", return_value=None), \
+         patch("app.middleware.rate_limit.RateLimitMiddleware.dispatch", _passthrough_dispatch):
+        yield
 
 
 @pytest_asyncio.fixture(scope="session", loop_scope="session")
