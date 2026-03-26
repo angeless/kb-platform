@@ -2,6 +2,7 @@
 
 import { useParams } from "next/navigation";
 import { WikiLayout } from "@/components/wiki-layout";
+import { WikiScrollProvider } from "@/components/wiki-scroll-context";
 
 export default function WikiRouteLayout({
   children,
@@ -11,5 +12,9 @@ export default function WikiRouteLayout({
   const params = useParams();
   const projectId = params.id as string;
 
-  return <WikiLayout projectId={projectId}>{children}</WikiLayout>;
+  return (
+    <WikiScrollProvider>
+      <WikiLayout projectId={projectId}>{children}</WikiLayout>
+    </WikiScrollProvider>
+  );
 }

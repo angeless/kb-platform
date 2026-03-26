@@ -10,9 +10,10 @@ interface TocItem {
 
 interface WikiTocProps {
   contentRef: React.RefObject<HTMLDivElement | null>;
+  scrollContainerRef?: React.RefObject<HTMLElement | null>;
 }
 
-export function WikiToc({ contentRef }: WikiTocProps) {
+export function WikiToc({ contentRef, scrollContainerRef }: WikiTocProps) {
   const [items, setItems] = useState<TocItem[]>([]);
   const [activeId, setActiveId] = useState("");
 
@@ -59,10 +60,15 @@ export function WikiToc({ contentRef }: WikiTocProps) {
   useEffect(() => {
     if (items.length === 0) return;
 
+    const scrollTarget = scrollContainerRef?.current || window;
+
     const handleScroll = () => {
+      const offsetTop = scrollContainerRef?.current
+        ? scrollContainerRef.current.getBoundingClientRect().top
+        : 0;
       for (let i = items.length - 1; i >= 0; i--) {
         const el = document.getElementById(items[i].id);
-        if (el && el.getBoundingClientRect().top <= 100) {
+        if (el && el.getBoundingClientRect().top - offsetTop <= 100) {
           setActiveId(items[i].id);
           return;
         }
@@ -70,10 +76,10 @@ export function WikiToc({ contentRef }: WikiTocProps) {
       setActiveId(items[0]?.id || "");
     };
 
-    window.addEventListener("scroll", handleScroll, { passive: true });
+    scrollTarget.addEventListener("scroll", handleScroll, { passive: true });
     handleScroll();
-    return () => window.removeEventListener("scroll", handleScroll);
-  }, [items]);
+    return () => scrollTarget.removeEventListener("scroll", handleScroll);
+  }, [items, scrollContainerRef]);
 
   if (items.length === 0) return null;
 
@@ -87,7 +93,16 @@ export function WikiToc({ contentRef }: WikiTocProps) {
               href={`#${item.id}`}
               onClick={(e) => {
                 e.preventDefault();
-                document.getElementById(item.id)?.scrollIntoView({ behavior: "smooth" });
+                const target = document.getElementById(item.id);
+                if (target) {
+                  if (scrollContainerRef?.current) {
+                    const container = scrollContainerRef.current;
+                    const top = target.offsetTop - container.offsetTop;
+                    container.scrollTo({ top, behavior: "smooth" });
+                  } else {
+                    target.scrollIntoView({ behavior: "smooth" });
+                  }
+                }
               }}
               className={`block truncate text-xs transition-colors ${
                 item.level === 3 ? "pl-3" : ""

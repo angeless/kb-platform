@@ -155,20 +155,24 @@ class QAService:
 
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
-    async def _call_llm_stream(self, config: dict, user_prompt: str) -> AsyncGenerator[str, None]:
-        """Stream LLM response via OpenAI-compatible streaming API."""
-        url = (config["base_url"] or "https://api.openai.com/v1").rstrip("/") + "/chat/completions"
-        api_key = config["api_key"]
-
+    @staticmethod
+    def _try_decrypt_api_key(api_key: str | bytes) -> str:
+        """Attempt to decrypt an API key; return as-is on failure."""
         try:
             from app.utils.crypto import decrypt
             from shared_config.settings import get_settings
             if isinstance(api_key, (bytes, memoryview)):
-                api_key = decrypt(bytes(api_key), get_settings().encryption_key)
+                return decrypt(bytes(api_key), get_settings().encryption_key)
             elif isinstance(api_key, str) and api_key.startswith("KDF1"):
-                api_key = decrypt(api_key.encode("latin-1"), get_settings().encryption_key)
-        except Exception:
-            pass
+                return decrypt(api_key.encode("latin-1"), get_settings().encryption_key)
+        except Exception as e:
+            logger.warning("API key decryption failed, using raw value: %s", e)
+        return api_key if isinstance(api_key, str) else str(api_key)
+
+    async def _call_llm_stream(self, config: dict, user_prompt: str) -> AsyncGenerator[str, None]:
+        """Stream LLM response via OpenAI-compatible streaming API."""
+        url = (config["base_url"] or "https://api.openai.com/v1").rstrip("/") + "/chat/completions"
+        api_key = self._try_decrypt_api_key(config["api_key"])
 
         messages = [
             {"role": "system", "content": SYSTEM_PROMPT},
@@ -228,18 +232,7 @@ class QAService:
     async def _call_llm(self, config: dict, user_prompt: str) -> str:
         """Call LLM via OpenAI-compatible API."""
         url = (config["base_url"] or "https://api.openai.com/v1").rstrip("/") + "/chat/completions"
-        api_key = config["api_key"]
-
-        # Decrypt API key if it's encrypted (bytes-like)
-        try:
-            from app.utils.crypto import decrypt
-            from shared_config.settings import get_settings
-            if isinstance(api_key, (bytes, memoryview)):
-                api_key = decrypt(bytes(api_key), get_settings().encryption_key)
-            elif isinstance(api_key, str) and api_key.startswith("KDF1"):
-                api_key = decrypt(api_key.encode("latin-1"), get_settings().encryption_key)
-        except Exception:
-            pass  # Already plain text (dev mode or unencrypted)
+        api_key = self._try_decrypt_api_key(config["api_key"])
 
         messages = [
             {"role": "system", "content": SYSTEM_PROMPT},

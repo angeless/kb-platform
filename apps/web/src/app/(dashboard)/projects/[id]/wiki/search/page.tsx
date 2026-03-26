@@ -28,8 +28,9 @@ export default function WikiSearchPage() {
     setIsLoading(true);
     setError("");
     try {
-      const resp = await api.get<SearchHit[]>(
-        `/v1/search/hybrid?project_id=${projectId}&query=${encodeURIComponent(query)}&page_size=20`,
+      const resp = await api.post<SearchHit[]>(
+        "/v1/search/hybrid",
+        { project_id: projectId, query: query, page_size: 20 },
       );
       setResults(resp.data);
       setSearched(true);

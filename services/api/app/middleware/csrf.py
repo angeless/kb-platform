@@ -30,7 +30,7 @@ class CsrfMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         if request.method in _PROTECTED_METHODS:
-            path = request.url.path
+            path = request.url.path.rstrip("/")
             if path not in _EXEMPT_PATHS:
                 xrw = request.headers.get("X-Requested-With", "")
                 if xrw != "XMLHttpRequest":

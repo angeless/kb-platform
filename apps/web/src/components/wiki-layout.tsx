@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { WikiSidebar } from "@/components/wiki-sidebar";
+import { useWikiScrollRef } from "@/components/wiki-scroll-context";
 
 interface WikiLayoutProps {
   projectId: string;
@@ -11,6 +12,7 @@ interface WikiLayoutProps {
 export function WikiLayout({ projectId, children }: WikiLayoutProps) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const scrollRef = useWikiScrollRef();
 
   return (
     <div className="flex h-[calc(100vh-3.5rem)]">
@@ -61,7 +63,10 @@ export function WikiLayout({ projectId, children }: WikiLayoutProps) {
       </div>
 
       {/* Main content */}
-      <main className="flex-1 overflow-y-auto bg-white">
+      <main
+        ref={scrollRef as React.RefObject<HTMLElement>}
+        className="flex-1 overflow-y-auto bg-white"
+      >
         {children}
       </main>
     </div>

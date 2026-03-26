@@ -259,7 +259,7 @@ export default function SearchPage() {
                     {qaAnswer.sources.map((src) => (
                       <Link
                         key={src.doc_id}
-                        href={`/docs/${src.doc_id}`}
+                        href={`/projects/${projectId}/wiki/${src.doc_id}`}
                         className="block rounded-lg bg-gray-50 p-3 text-sm hover:bg-gray-100"
                       >
                         <span className="font-medium text-gray-900">{src.title}</span>
@@ -301,7 +301,7 @@ export default function SearchPage() {
                   return (
                     <Link
                       key={hit.doc_id}
-                      href={`/docs/${hit.doc_id}`}
+                      href={`/projects/${projectId}/wiki/${hit.doc_id}`}
                       className="block rounded-xl border border-gray-200 bg-white p-4 shadow-sm transition-shadow hover:shadow-md"
                     >
                       <div className="flex items-center gap-3">
@@ -335,7 +335,7 @@ export default function SearchPage() {
                 {textResults.map((hit) => (
                   <Link
                     key={hit.doc_id}
-                    href={`/docs/${hit.doc_id}`}
+                    href={`/projects/${projectId}/wiki/${hit.doc_id}`}
                     className="block rounded-xl border border-gray-200 bg-white p-4 shadow-sm transition-shadow hover:shadow-md"
                   >
                     <div className="flex items-center gap-3">
@@ -359,7 +359,7 @@ export default function SearchPage() {
           )}
 
           {/* No Results */}
-          {searched && total === 0 && !searching && (
+          {searched && total === 0 && !searching && !(mode === "qa" && qaAnswer?.answer) && (
             <div className="py-8 text-center text-gray-400">
               {mode === "qa" ? "AI 暂时无法回答，请换个问法试试" : "没有找到匹配的结果"}
             </div>

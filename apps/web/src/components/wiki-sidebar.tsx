@@ -203,8 +203,9 @@ export function WikiSidebar({ projectId, collapsed, onToggle }: WikiSidebarProps
     setIsSearching(true);
     debounceRef.current = setTimeout(async () => {
       try {
-        const resp = await api.get<SearchHit[]>(
-          `/v1/search/hybrid?project_id=${projectId}&query=${encodeURIComponent(searchQuery)}&page_size=15`,
+        const resp = await api.post<SearchHit[]>(
+          "/v1/search/hybrid",
+          { project_id: projectId, query: searchQuery, page_size: 15 },
         );
         setSearchResults(resp.data);
       } catch {

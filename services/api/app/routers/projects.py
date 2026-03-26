@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared_schemas.common import DataResponse, ErrorDetail, ListResponse, PaginationMeta
+from shared_schemas.cross_reference import RouteContentRequest
 from shared_schemas.project import ProjectCreate, ProjectOut, ProjectUpdate
 
 from app.deps import get_db, get_tenant_id, require_role
@@ -153,17 +154,16 @@ async def delete_project(
     },
 )
 async def route_content(
-    body: dict,
+    body: RouteContentRequest,
     db: AsyncSession = Depends(get_db),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
 ):
     from app.services.project_router_service import ProjectRouterService
     svc = ProjectRouterService(db, tenant_id)
-    exclude_id = body.get("exclude_project_id")
     candidates = await svc.route(
-        content_embedding=body.get("embedding"),
-        content_keywords=body.get("keywords"),
-        exclude_project_id=uuid.UUID(exclude_id) if exclude_id else None,
+        content_embedding=body.embedding,
+        content_keywords=body.keywords,
+        exclude_project_id=body.exclude_project_id,
     )
     return ListResponse(
         data=candidates,

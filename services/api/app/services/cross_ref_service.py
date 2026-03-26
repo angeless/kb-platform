@@ -7,6 +7,7 @@ from sqlalchemy import select, delete, and_, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared_models import CrossReference, KnowledgeDoc, KnowledgeDocVersion, SourceRef, DocEmbedding, Project
+from app.utils.math_utils import cosine_similarity
 
 
 class CrossRefService:
@@ -55,12 +56,30 @@ class CrossRefService:
         )
 
         refs = list(as_source.scalars().all()) + list(as_target.scalars().all())
+
+        # Batch-load all referenced doc IDs
+        all_doc_ids = set()
+        for ref in refs:
+            all_doc_ids.add(ref.source_doc_id)
+            all_doc_ids.add(ref.target_doc_id)
+
+        docs_result = await self.db.execute(
+            select(KnowledgeDoc).where(KnowledgeDoc.id.in_(all_doc_ids))
+        )
+        doc_map = {d.id: d for d in docs_result.scalars().all()}
+
+        # Batch-load project info for target docs
+        project_ids = {d.project_id for d in doc_map.values() if d.project_id}
+        projects_result = await self.db.execute(
+            select(Project).where(Project.id.in_(project_ids))
+        )
+        project_map = {p.id: p for p in projects_result.scalars().all()}
+
         results = []
         for ref in refs:
-            # Enrich with doc titles
-            source_doc = await self.db.get(KnowledgeDoc, ref.source_doc_id)
-            target_doc = await self.db.get(KnowledgeDoc, ref.target_doc_id)
-            target_project = await self.db.get(Project, target_doc.project_id) if target_doc else None
+            source_doc = doc_map.get(ref.source_doc_id)
+            target_doc = doc_map.get(ref.target_doc_id)
+            target_project = project_map.get(target_doc.project_id) if target_doc else None
 
             results.append({
                 "id": str(ref.id),
@@ -96,14 +115,21 @@ class CrossRefService:
         if not doc:
             return []
 
-        # Collect already-linked doc ids to exclude
-        existing_links = await self.db.execute(
+        # Collect already-linked doc ids to exclude (both directions)
+        existing_as_source = await self.db.execute(
             select(CrossReference.target_doc_id).where(
                 CrossReference.source_doc_id == doc_id,
                 CrossReference.tenant_id == self.tenant_id,
             )
         )
-        linked_ids = {row[0] for row in existing_links.all()}
+        existing_as_target = await self.db.execute(
+            select(CrossReference.source_doc_id).where(
+                CrossReference.target_doc_id == doc_id,
+                CrossReference.tenant_id == self.tenant_id,
+            )
+        )
+        linked_ids = {row[0] for row in existing_as_source.all()}
+        linked_ids.update(row[0] for row in existing_as_target.all())
         linked_ids.add(doc_id)  # exclude self
 
         seen: dict[str, dict] = {}  # target_doc_id -> best candidate
@@ -135,17 +161,28 @@ class CrossRefService:
                         )
                     ),
                     DocEmbedding.doc_id != doc_id,
-                )
+                ).limit(500)
             )
+            # Collect candidate doc IDs for batch loading
+            emb_candidates = []
             for emb in all_embs.scalars().all():
                 if not emb.embedding:
                     continue
-                sim = _cosine_similarity(source_vec, emb.embedding)
+                sim = cosine_similarity(source_vec, emb.embedding)
                 if sim > 0.75:
-                    target_doc = await self.db.get(KnowledgeDoc, emb.doc_id)
+                    emb_candidates.append((emb.doc_id, sim))
+
+            if emb_candidates:
+                emb_doc_ids = [ec[0] for ec in emb_candidates]
+                emb_docs_result = await self.db.execute(
+                    select(KnowledgeDoc).where(KnowledgeDoc.id.in_(emb_doc_ids))
+                )
+                emb_doc_map = {d.id: d for d in emb_docs_result.scalars().all()}
+                for emb_doc_id, sim in emb_candidates:
+                    target_doc = emb_doc_map.get(emb_doc_id)
                     if target_doc:
                         _add_candidate(
-                            str(emb.doc_id),
+                            str(emb_doc_id),
                             target_doc.title,
                             sim,
                             f"语义相似度: {sim:.2f}",
@@ -282,15 +319,3 @@ class CrossRefService:
         ]
 
         return {"nodes": nodes, "edges": edges}
-
-
-def _cosine_similarity(a: list, b: list) -> float:
-    """Compute cosine similarity between two vectors."""
-    if len(a) != len(b) or not a:
-        return 0.0
-    dot = sum(x * y for x, y in zip(a, b))
-    norm_a = sum(x * x for x in a) ** 0.5
-    norm_b = sum(x * x for x in b) ** 0.5
-    if norm_a == 0 or norm_b == 0:
-        return 0.0
-    return dot / (norm_a * norm_b)

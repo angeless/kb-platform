@@ -108,9 +108,7 @@ export default function ReviewQueuePage() {
     setSelected(new Set());
     try {
       // Use the docs list with status filter via query
-      const endpoint = tab === "reviewing"
-        ? `/v1/docs?project_id=${projectId}&page_size=50`
-        : `/v1/docs?project_id=${projectId}&page_size=50`;
+      const endpoint = `/v1/docs?project_id=${projectId}&page_size=50`;
       const resp = await api.get<Doc[]>(endpoint);
       // Filter client-side by status
       const filtered = resp.data.filter((d) => d.status === tab);
@@ -283,7 +281,7 @@ export default function ReviewQueuePage() {
                     />
                   </td>
                   <td className="px-5 py-3">
-                    <Link href={`/docs/${doc.id}`} className="font-medium text-primary-600 hover:underline">
+                    <Link href={`/projects/${projectId}/wiki/${doc.id}`} className="font-medium text-primary-600 hover:underline">
                       {doc.title}
                     </Link>
                   </td>

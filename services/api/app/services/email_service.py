@@ -1,5 +1,6 @@
 """Email notification service — dev mode logs, production mode sends via SMTP."""
 
+import html
 import logging
 import smtplib
 from email.mime.multipart import MIMEMultipart
@@ -39,22 +40,26 @@ class EmailService:
         logger.info("[email] Sent '%s' to %s", subject, to)
 
     def send_welcome_email(self, to: str, username: str) -> None:
+        safe_username = html.escape(username)
         self._send(
             to=to,
             subject="欢迎使用 KB Platform",
-            html_body=f"<h2>欢迎，{username}！</h2><p>你的知识管理平台账户已创建。</p>",
+            html_body=f"<h2>欢迎，{safe_username}！</h2><p>你的知识管理平台账户已创建。</p>",
         )
 
     def send_reset_email(self, to: str, reset_link: str) -> None:
+        safe_link = html.escape(reset_link)
         self._send(
             to=to,
             subject="KB Platform — 重置密码",
-            html_body=f'<p>点击以下链接重置密码：</p><p><a href="{reset_link}">{reset_link}</a></p><p>链接 1 小时内有效。</p>',
+            html_body=f'<p>点击以下链接重置密码：</p><p><a href="{safe_link}">{safe_link}</a></p><p>链接 1 小时内有效。</p>',
         )
 
     def send_review_notification(self, to: str, doc_title: str, project_name: str) -> None:
+        safe_doc_title = html.escape(doc_title)
+        safe_project_name = html.escape(project_name)
         self._send(
             to=to,
-            subject=f"KB Platform — 文档待审核: {doc_title}",
-            html_body=f"<p>项目 <strong>{project_name}</strong> 中的文档 <strong>{doc_title}</strong> 已提交审核，请查看。</p>",
+            subject=f"KB Platform — 文档待审核: {safe_doc_title}",
+            html_body=f"<p>项目 <strong>{safe_project_name}</strong> 中的文档 <strong>{safe_doc_title}</strong> 已提交审核，请查看。</p>",
         )
