@@ -1,12 +1,13 @@
 """Parser registry — maps asset_type to parser module."""
 
-from . import asr_parser, ocr_parser, pdf_parser, text_parser
+from . import asr_parser, ocr_parser, pdf_parser, text_parser, word_parser
 
 # Maps asset_type -> parser module (must have parse(content: bytes, filename: str) -> list[dict])
 PARSERS: dict[str, object] = {
     "text": text_parser,
     "pdf": pdf_parser,
-    "doc": pdf_parser,  # .doc/.docx files go through PDF pipeline
+    "docx": word_parser,
+    # "doc" (legacy .doc) intentionally omitted — get_parser returns None → unsupported
     "image": ocr_parser,
     "audio": asr_parser,
 }

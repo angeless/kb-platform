@@ -8,6 +8,17 @@
 ### 新增 (Added)
 - 自动化开发工作流（dev-workflow-upgrade v1.3）
 
+## [0.43.1] - 2026-03-27
+
+### 修复
+- Word 解析器：新增 word_parser.py，.docx 文件使用 python-docx 正确解析（T-43-01-A）
+- 解析器路由修正：`docx` → word_parser，`doc` 旧格式标记为 unsupported（T-43-01-B）
+- 修复 .docx 上传后数据丢失的 P0 bug（原因：.docx 被路由到 PDF 解析器）
+
+### 新增
+- Word 解析器支持 Heading 1/2/3 层级分组、超长文本自动拆分
+- 8 个 word_parser 单元测试
+
 ## [0.42.10] - 2026-03-24
 
 ### 验收

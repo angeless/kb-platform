@@ -101,14 +101,16 @@ class TestPdfParser:
         assert result[0]["tags"]["page"] == 1
 
     def test_parser_registry(self):
-        """PDF parser should be registered for 'pdf' and 'doc' types."""
+        """Parser registry should map types correctly."""
         from worker.parsers import get_parser, is_parseable
         assert get_parser("pdf") is not None
-        assert get_parser("doc") is not None
+        assert get_parser("docx") is not None
+        assert get_parser("doc") is None  # legacy .doc unsupported
         assert get_parser("text") is not None
         assert get_parser("image") is not None
         assert get_parser("unknown_type") is None
         assert is_parseable("pdf") is True
+        assert is_parseable("docx") is True
         assert is_parseable("image") is True
 
 
