@@ -110,7 +110,8 @@ export default function KnowledgeGraph({ nodes, edges, projectId }: KnowledgeGra
       maxZoom={2}
     >
       <MiniMap
-        nodeColor={(n) => (n.style?.background as string) ?? "#3b82f6"}
+        nodeColor={// eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (n: any) => (n.style?.background as string) ?? "#3b82f6"}
         maskColor="rgba(0,0,0,0.1)"
       />
       <Controls />

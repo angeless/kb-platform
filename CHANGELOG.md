@@ -8,6 +8,13 @@
 ### 新增 (Added)
 - 自动化开发工作流（dev-workflow-upgrade v1.3）
 
+## [0.43.5] - 2026-03-27
+
+### 验收
+- 全量回归通过：30 passed (ingestion) + 29 passed (frontend) + tsc 0 errors
+- 新功能验收：Word 解析 / OCR-ASR 报错 / Agent API / 知识图谱 全部 PASS
+- 验收报告：`docs/versions/v0.43-acceptance-report.md`
+
 ## [0.43.4] - 2026-03-27
 
 ### 新增
