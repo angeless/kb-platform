@@ -8,6 +8,14 @@
 ### 新增 (Added)
 - 自动化开发工作流（dev-workflow-upgrade v1.3）
 
+## [0.43.4] - 2026-03-27
+
+### 新增
+- 知识图谱 API：`GET /v1/projects/{id}/graph` 返回节点+边数据（T-43-04-B）
+- 知识图谱前端：react-flow 交互图谱，节点按深度着色，点击跳转 Wiki（T-43-04-C/D/E）
+- 项目详情页新增"图谱"入口卡片（T-43-04-F）
+- GraphNode / GraphEdge / GraphResponse Pydantic schemas（T-43-04-A）
+
 ## [0.43.3] - 2026-03-27
 
 ### 新增
