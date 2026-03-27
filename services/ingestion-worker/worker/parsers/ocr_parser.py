@@ -28,14 +28,18 @@ def parse(content: bytes, filename: str) -> list[dict]:
     try:
         from PIL import Image
     except ImportError:
-        logger.warning("Pillow not installed — cannot process image %s", filename)
-        return []
+        raise RuntimeError(
+            "OCR 依赖缺失：Pillow 未安装，"
+            "请在 ingestion-worker 容器中运行 pip install Pillow"
+        )
 
     try:
         import pytesseract
     except ImportError:
-        logger.warning("pytesseract not installed — cannot OCR image %s", filename)
-        return []
+        raise RuntimeError(
+            "OCR 依赖缺失：pytesseract 未安装，"
+            "请在 ingestion-worker 容器中运行 pip install pytesseract"
+        )
 
     try:
         image = Image.open(io.BytesIO(content))
@@ -50,8 +54,10 @@ def parse(content: bytes, filename: str) -> list[dict]:
     try:
         text = pytesseract.image_to_string(image, lang=TESSERACT_LANG)
     except pytesseract.TesseractNotFoundError:
-        logger.warning("Tesseract not installed on system — cannot OCR %s", filename)
-        return []
+        raise RuntimeError(
+            "OCR 依赖缺失：系统未安装 Tesseract，"
+            "请在容器中运行 apt-get install tesseract-ocr"
+        )
     except Exception as e:
         logger.warning("OCR failed for %s: %s", filename, e)
         return []

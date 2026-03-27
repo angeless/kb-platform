@@ -4,6 +4,7 @@ import io
 from unittest.mock import patch
 
 import fitz
+import pytest
 from PIL import Image, ImageDraw, ImageFont
 
 from worker.parsers.text_parser import parse
@@ -132,24 +133,31 @@ def _make_blank_image() -> bytes:
     return buf.getvalue()
 
 
+def _has_tesseract():
+    """Check if pytesseract + Tesseract binary are available."""
+    try:
+        import pytesseract
+        pytesseract.get_tesseract_version()
+        return True
+    except Exception:
+        return False
+
+
+_requires_tesseract = pytest.mark.skipif(
+    not _has_tesseract(),
+    reason="pytesseract or Tesseract binary not available",
+)
+
+
 class TestOcrParser:
+    @_requires_tesseract
     def test_ocr_extracts_text(self):
         """OCR should extract text from an image with readable content."""
         img_bytes = _make_text_image("Hello World OCR Test Content Here")
-        try:
-            import pytesseract
-            pytesseract.get_tesseract_version()
-        except Exception:
-            # Tesseract not installed — skip gracefully
-            result = ocr_parse(img_bytes, "test.png")
-            assert result == []  # Graceful degradation
-            return
-
         result = ocr_parse(img_bytes, "test.png")
-        # Tesseract may or may not extract text from simple drawn text
-        # The key test is that it doesn't crash
         assert isinstance(result, list)
 
+    @_requires_tesseract
     def test_ocr_blank_image_returns_empty(self):
         """Blank image should return empty (too little text)."""
         img_bytes = _make_blank_image()
@@ -158,8 +166,11 @@ class TestOcrParser:
 
     def test_ocr_invalid_image_returns_empty(self):
         """Invalid image data should return empty, not crash."""
-        result = ocr_parse(b"not an image", "bad.png")
-        assert result == []
+        try:
+            result = ocr_parse(b"not an image", "bad.png")
+            assert result == []
+        except RuntimeError:
+            pass  # Expected when pytesseract not installed
 
     def test_ocr_tags_contain_image_metadata(self):
         """If OCR succeeds, tags should contain image metadata."""
@@ -177,17 +188,15 @@ class TestOcrParser:
             assert "image_width" in result[0]["tags"]
             assert "image_height" in result[0]["tags"]
 
-    def test_ocr_graceful_without_tesseract(self):
-        """OCR should return empty list when pytesseract is not importable."""
+    def test_ocr_raises_without_pytesseract(self):
+        """OCR should raise RuntimeError when pytesseract is not importable."""
         img_bytes = _make_text_image("Some text")
         with patch.dict("sys.modules", {"pytesseract": None}):
-            # Re-import to test import failure path
             from importlib import reload
             from worker.parsers import ocr_parser
             reload(ocr_parser)
-            result = ocr_parser.parse(img_bytes, "test.png")
-            assert result == []
-            # Restore
+            with pytest.raises(RuntimeError, match="pytesseract"):
+                ocr_parser.parse(img_bytes, "test.png")
             reload(ocr_parser)
 
     def test_ocr_registered_for_image_type(self):
@@ -269,14 +278,14 @@ class TestAsrParser:
         assert "Full text" in result[0]["content_text"]
         assert result[0]["page_or_timestamp"] == "00:00:00-full"
 
-    def test_asr_graceful_without_whisper(self):
-        """ASR should return empty list when whisper is not importable."""
+    def test_asr_raises_without_whisper(self):
+        """ASR should raise RuntimeError when whisper is not importable."""
         with patch.dict("sys.modules", {"whisper": None}):
             from importlib import reload
             from worker.parsers import asr_parser
             reload(asr_parser)
-            result = asr_parser.parse(b"audio", "test.mp3")
-            assert result == []
+            with pytest.raises(RuntimeError, match="openai-whisper"):
+                asr_parser.parse(b"audio", "test.mp3")
             reload(asr_parser)
 
     def test_asr_tags_contain_metadata(self):

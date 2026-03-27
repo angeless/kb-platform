@@ -54,8 +54,10 @@ def parse(content: bytes, filename: str) -> list[dict]:
     try:
         import whisper  # noqa: F401
     except ImportError:
-        logger.warning("openai-whisper not installed — cannot transcribe %s", filename)
-        return []
+        raise RuntimeError(
+            "ASR 依赖缺失：openai-whisper 未安装，"
+            "请在 ingestion-worker 容器中运行 pip install openai-whisper"
+        )
 
     # Write audio to temp file (Whisper requires file path)
     suffix = os.path.splitext(filename)[1] or ".wav"
@@ -71,8 +73,7 @@ def parse(content: bytes, filename: str) -> list[dict]:
         model = _get_model()
         result = model.transcribe(tmp_path, verbose=False)
     except Exception as e:
-        logger.warning("Whisper transcription failed for %s: %s", filename, e)
-        return []
+        raise RuntimeError(f"ASR 转录失败（可能缺少 ffmpeg）：{e}")
     finally:
         # Clean up temp file
         try:

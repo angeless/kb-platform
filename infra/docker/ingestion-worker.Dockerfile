@@ -2,6 +2,13 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
+# Install system dependencies for OCR (Tesseract) and ASR (ffmpeg)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    tesseract-ocr \
+    tesseract-ocr-chi-sim \
+    ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
 # Install shared packages (local, editable)
 COPY packages/ /packages/
 RUN pip install --no-cache-dir \

@@ -8,6 +8,16 @@
 ### 新增 (Added)
 - 自动化开发工作流（dev-workflow-upgrade v1.3）
 
+## [0.43.2] - 2026-03-27
+
+### 修复
+- OCR 解析器：依赖缺失（Pillow/pytesseract/Tesseract）时抛出 RuntimeError 而非静默返回空（T-43-02-A）
+- ASR 解析器：依赖缺失（whisper/ffmpeg）时抛出 RuntimeError 而非静默返回空（T-43-02-B）
+- 修复图片/音频上传后"任务成功但知识库无内容"的 P0 bug
+
+### 新增
+- ingestion-worker Dockerfile 补全系统依赖：tesseract-ocr + tesseract-ocr-chi-sim + ffmpeg（T-43-02-C）
+
 ## [0.43.1] - 2026-03-27
 
 ### 修复
