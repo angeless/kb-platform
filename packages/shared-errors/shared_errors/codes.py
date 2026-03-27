@@ -51,6 +51,10 @@ class ErrorCode(StrEnum):
     # User
     USER_NOT_FOUND = "USER_NOT_FOUND"
 
+    # API Key
+    API_KEY_INVALID = "API_KEY_INVALID"
+    API_KEY_NOT_FOUND = "API_KEY_NOT_FOUND"
+
     # Search
     SEARCH_QUERY_TOO_SHORT = "SEARCH_QUERY_TOO_SHORT"
     QA_MODEL_NOT_CONFIGURED = "QA_MODEL_NOT_CONFIGURED"
@@ -95,6 +99,8 @@ ERROR_MESSAGES: dict[str, str] = {
     ErrorCode.MODEL_ROUTE_NOT_FOUND: "未找到匹配的模型路由",
     ErrorCode.MODEL_PROVIDER_UNREACHABLE: "AI 服务暂时不可用，请稍后重试",
     ErrorCode.USER_NOT_FOUND: "用户不存在",
+    ErrorCode.API_KEY_INVALID: "API Key 无效或已被撤销",
+    ErrorCode.API_KEY_NOT_FOUND: "API Key 不存在",
     ErrorCode.SEARCH_QUERY_TOO_SHORT: "请输入至少 2 个字的搜索内容",
     ErrorCode.QA_MODEL_NOT_CONFIGURED: "AI 问答功能需要先配置模型服务",
     ErrorCode.VALIDATION_ERROR: "提交的信息有误，请检查后重试",

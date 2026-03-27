@@ -8,6 +8,14 @@
 ### 新增 (Added)
 - 自动化开发工作流（dev-workflow-upgrade v1.3）
 
+## [0.43.3] - 2026-03-27
+
+### 新增
+- Agent 输出接口：API Key 认证 + `/v1/agent/search` + `/v1/agent/ask`（T-43-03-E）
+- API Key 管理：创建/列表/撤销端点 + 前端项目设置页 UI（T-43-03-C/F）
+- `api_key` 数据库表 + Alembic 迁移（T-43-03-A）
+- Agent API 接口文档 `docs/api/agent-api.md`（T-43-03-G）
+
 ## [0.43.2] - 2026-03-27
 
 ### 修复
