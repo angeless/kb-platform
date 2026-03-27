@@ -20,8 +20,8 @@ class SearchHit(BaseModel):
     doc_type: str
     status: str
     node_id: UUID | None
-    snippet: str = Field(description="Matched text snippet")
-    matched_field: str = Field(description="title or content_md")
+    snippet: str = Field(max_length=1000, description="Matched text snippet")
+    matched_field: str = Field(pattern=r"^(title|content_md)$", description="title or content_md")
     version: int
     created_at: datetime
 
@@ -56,6 +56,6 @@ class HybridSearchHit(BaseModel):
     title: str
     doc_type: str
     status: str
-    snippet: str
+    snippet: str = Field(max_length=1000)
     score: float = Field(description="Normalized score (0-1)")
-    match_type: str = Field(description="keyword, semantic, or keyword+semantic")
+    match_type: str = Field(pattern=r"^(keyword|semantic|keyword\+semantic)$", description="keyword, semantic, or keyword+semantic")

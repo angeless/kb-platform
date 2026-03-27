@@ -11,6 +11,7 @@ from shared_config.settings import get_settings
 from shared_errors import register_exception_handlers
 
 from .logging_config import setup_logging
+from .middleware.csrf import CsrfMiddleware
 from .middleware.metrics import MetricsMiddleware
 from .middleware.rate_limit import RateLimitMiddleware
 from .middleware.request_id import RequestIdMiddleware
@@ -30,6 +31,7 @@ from .routers.audit import router as audit_router
 from .routers.ws import router as ws_router
 from .routers.export import router as export_router
 from .routers.qa import router as qa_router
+from .routers.cross_refs import router as cross_refs_router
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +71,7 @@ def create_app() -> FastAPI:
     app.add_middleware(RequestIdMiddleware)
     app.add_middleware(MetricsMiddleware)
     app.add_middleware(RateLimitMiddleware)
+    app.add_middleware(CsrfMiddleware)
 
     # CORS middleware (outermost — added last so it wraps everything)
     settings = get_settings()
@@ -101,6 +104,7 @@ def create_app() -> FastAPI:
     app.include_router(ws_router)
     app.include_router(export_router)
     app.include_router(qa_router)
+    app.include_router(cross_refs_router)
 
     # Custom OpenAPI schema: add Bearer security scheme
     _PUBLIC_PATHS = {"/healthz", "/readyz", "/metrics", "/api/versions", "/api/health/ready"}

@@ -51,7 +51,7 @@ export default function ForgotPasswordPage() {
               密码重置功能暂未开放自助服务，请联系团队管理员帮您重置密码。
             </p>
 
-            {resetToken && (
+            {resetToken && process.env.NODE_ENV === "development" && (
               <div className="mb-6 rounded-lg bg-yellow-50 p-3 text-sm">
                 <p className="font-medium text-yellow-800">开发模式 — 重置 Token:</p>
                 <p className="mt-1 break-all font-mono text-xs text-yellow-700">
@@ -129,8 +129,5 @@ export default function ForgotPasswordPage() {
         </div>
       </div>
     </div>
-  );
-}
-div>
   );
 }

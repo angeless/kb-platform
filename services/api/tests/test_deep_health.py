@@ -20,7 +20,9 @@ async def test_health_ready_all_ok(client: AsyncClient):
     assert resp.status_code == 200
     data = resp.json()
     assert data["status"] == "ok"
-    assert data["version"] == "0.35.0"
+    from pathlib import Path
+    expected_version = Path("VERSION").read_text().strip()
+    assert data["version"] == expected_version
     assert "postgres" in data["checks"]
     assert "redis" in data["checks"]
     assert "minio" in data["checks"]

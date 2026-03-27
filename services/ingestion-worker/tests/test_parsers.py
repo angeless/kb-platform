@@ -195,6 +195,14 @@ class TestOcrParser:
         assert is_parseable("image") is True
 
 
+def _ensure_whisper_mock():
+    """Ensure 'whisper' is importable (mock if not installed)."""
+    import sys
+    if "whisper" not in sys.modules:
+        from unittest.mock import MagicMock
+        sys.modules["whisper"] = MagicMock()
+
+
 class TestAsrParser:
     """Tests for the audio ASR parser using mocked Whisper."""
 
@@ -211,6 +219,7 @@ class TestAsrParser:
 
     def test_asr_parses_segments(self):
         """ASR should produce chunks from Whisper segments."""
+        _ensure_whisper_mock()
         from unittest.mock import MagicMock
         mock_model = MagicMock()
         mock_model.transcribe.return_value = self._mock_transcribe_result()
@@ -228,6 +237,7 @@ class TestAsrParser:
 
     def test_asr_empty_transcription(self):
         """Empty transcription should return empty list."""
+        _ensure_whisper_mock()
         from unittest.mock import MagicMock
         mock_model = MagicMock()
         mock_model.transcribe.return_value = {"text": "", "language": "en", "segments": []}
@@ -240,6 +250,7 @@ class TestAsrParser:
 
     def test_asr_fallback_single_chunk(self):
         """If no segments but full text exists, should return single chunk."""
+        _ensure_whisper_mock()
         from unittest.mock import MagicMock
         mock_model = MagicMock()
         mock_model.transcribe.return_value = {
@@ -268,6 +279,7 @@ class TestAsrParser:
 
     def test_asr_tags_contain_metadata(self):
         """Chunks should have correct audio metadata in tags."""
+        _ensure_whisper_mock()
         from unittest.mock import MagicMock
         mock_model = MagicMock()
         mock_model.transcribe.return_value = self._mock_transcribe_result()
@@ -292,6 +304,7 @@ class TestAsrParser:
 
     def test_asr_concurrent_model_loading(self):
         """Concurrent calls should not crash or deadlock (thread-safety test)."""
+        _ensure_whisper_mock()
         import threading
         from unittest.mock import MagicMock
 
@@ -303,18 +316,19 @@ class TestAsrParser:
 
         def run_parse(index):
             try:
-                with patch("worker.parsers.asr_parser._get_model", return_value=mock_model):
-                    from worker.parsers.asr_parser import parse as asr_parse
-                    results[index] = asr_parse(b"fake audio", f"thread_{index}.mp3")
+                from worker.parsers.asr_parser import parse as asr_parse
+                results[index] = asr_parse(b"fake audio", f"thread_{index}.mp3")
             except Exception as e:
                 errors[index] = e
 
-        t1 = threading.Thread(target=run_parse, args=(0,))
-        t2 = threading.Thread(target=run_parse, args=(1,))
-        t1.start()
-        t2.start()
-        t1.join(timeout=10)
-        t2.join(timeout=10)
+        # Shared patch context — patch is not thread-safe per-thread
+        with patch("worker.parsers.asr_parser._get_model", return_value=mock_model):
+            t1 = threading.Thread(target=run_parse, args=(0,))
+            t2 = threading.Thread(target=run_parse, args=(1,))
+            t1.start()
+            t2.start()
+            t1.join(timeout=10)
+            t2.join(timeout=10)
 
         assert errors[0] is None, f"Thread 0 failed: {errors[0]}"
         assert errors[1] is None, f"Thread 1 failed: {errors[1]}"

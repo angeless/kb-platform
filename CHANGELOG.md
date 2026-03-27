@@ -8,6 +8,147 @@
 ### 新增 (Added)
 - 自动化开发工作流（dev-workflow-upgrade v1.3）
 
+## [0.42.10] - 2026-03-24
+
+### 验收
+- 上线清单 12.1-12.6 逐项验证通过（代码质量/安全/功能/基础设施/监控/运维）
+- 修复：补回丢失的 Wiki 搜索页面
+
+## [0.42.12] - 2026-03-24
+
+### 安全修复
+- 前端上传校验：文件类型白名单 + 大小限制 100MB (M-02/T-42-12-A)
+- Alembic downgrade 数据保护：drop_table 改为 rename_table_backup (M-14/T-42-12-D)
+- 邮箱唯一性改为租户隔离：UNIQUE(email, tenant_id) 替代全局 UNIQUE (M-15/T-42-12-E)
+
+### 稳定性
+- Celery 任务幂等性：重复投递已完成/失败的 job 自动跳过 (M-10/T-42-12-B)
+- Dashboard 全局 ErrorBoundary：所有列表页组件内部报错显示友好提示 (M-12/T-42-12-C)
+
+## [0.42.11] - 2026-03-24
+
+### 安全修复
+- WebSocket JWT 认证改用 httpOnly cookie，不再通过 URL query 传递 (H-03/T-42-11-A)
+- Export 端点添加频率限制：10 次/分钟/用户 (M-07/T-42-11-D)
+
+### 性能优化
+- Embedding JSONB 回退搜索：消除 N+1 查询，批量获取文档；限制内存 500 条 (H-04/T-42-11-B)
+- Settings 单例缓存：get_settings() 添加 @lru_cache (M-06/T-42-11-C)
+
+## [0.42.9] - 2026-03-24
+
+### 新增
+- 邮件通知服务骨架：dev 模式写日志，production 模式 SMTP 发送 (T-42-09-A)
+- 生产配置模板 .env.production.example (T-42-09-B)
+- 健康检查增强：/readyz 增加 Alembic 版本检查 + 新增 /_version 端点 (T-42-09-C)
+- 首次使用引导组件：新用户无项目时显示 4 步引导卡片 (T-42-09-D)
+- 运维文档：部署指南 + 运维手册 + 升级指南 (T-42-09-E/F/G)
+
+## [0.42.8] - 2026-03-24
+
+### 新增
+- Nginx 反向代理配置：HTTPS 终端、WebSocket 代理、静态资源缓存、安全头 (T-42-08-A)
+- HTTPS 证书方案：自签脚本 + Let's Encrypt certbot 自动续签 (T-42-08-B)
+- 生产 Docker Compose：资源限制、日志限制、restart policy、certbot 服务 (T-42-08-C)
+- 备份脚本：PostgreSQL pg_dump + MinIO mirror + 恢复脚本 + crontab 模板 (T-42-08-D)
+- 监控集成：Prometheus 采集 + Grafana 预置仪表盘（请求率/错误率/P95/连接数）(T-42-08-E)
+- 一键部署脚本 deploy.sh：前置检查 + 构建 + 迁移 + 启动 + 健康检查 (T-42-08-F)
+
+## [0.42.7] - 2026-03-24
+
+### 新增
+- 增量分类新增 RESTRUCTURE 类型：节点过载(>15篇)或跨域(>3节点)时触发结构变更建议 (T-42-07-A/B)
+- 跨库索引系统：cross_reference 表 + Model + CRUD API (T-42-07-C/D/E/F)
+  - `POST /v1/cross-refs` 创建引用
+  - `GET /v1/cross-refs/doc/:id` 获取文档引用
+  - `DELETE /v1/cross-refs/:id` 删除引用
+  - `POST /v1/cross-refs/auto-suggest` 基于关键词自动建议引用
+- 多库路由服务：`POST /v1/projects/route` 根据关键词返回 top-3 候选项目 (T-42-07-H/I)
+- Project 模型新增 description 和 profile_keywords 字段 (T-42-07-G)
+- Wiki 文档页展示跨库引用（同库链接 + 跨库标注项目名）(T-42-07-J)
+
+### 变更
+- 增量分类 prompt 增加 RESTRUCTURE 分类和 restructure_suggestion 输出字段
+
+## [0.42.6] - 2026-03-23
+
+### 新增
+- 架构提议 MECE 原则：LLM 输出包含分类维度声明和覆盖度评分 (T-42-06-A)
+- 架构质量门禁：深度限制 5 层、同级重名检测、叶子节点稀疏警告 (T-42-06-C)
+- 文档生成元数据：每篇文档自动提取 keywords 和 knowledge_type (T-42-06-D/F)
+- 审核页 MECE 信息卡：展示分类维度、覆盖度评分、未覆盖内容 (T-42-06-G)
+
+### 变更
+- 架构提议 prompt 增加 MECE 约束和分类维度选择指引 (T-42-06-A)
+- Architecture.levels_json 扩展为包含 MECE 元数据的结构 (T-42-06-B)
+- knowledge_doc 表新增 keywords (JSONB) 和 knowledge_type (VARCHAR) 列 (T-42-06-E)
+
+## [0.42.5] - 2026-03-23
+
+### 新增
+- Wiki 知识浏览视图：三栏布局（架构树导航 + 文档正文 + 右侧 TOC）(T-42-05-A/B/D)
+- Wiki 首页：架构概览卡片 + 最近更新文档列表 (T-42-05-K)
+- 面包屑导航：显示文档在架构树中的路径 (T-42-05-C)
+- 文内目录（TOC）：自动提取 h2/h3 标题，平滑滚动定位 (T-42-05-E)
+- 来源追溯卡片：文档底部展示关联的原始素材 (T-42-05-F)
+- 相关知识推荐：基于语义搜索显示 top-5 相关文档 (T-42-05-G)
+- Wiki 内搜索：全文 + 语义混合搜索 (T-42-05-H)
+- 项目详情页新增 Wiki 快捷入口 (T-42-05-J)
+
+### 变更
+- 项目详情页 Quick Stats 网格从 7 列扩展为 8 列
+
+## [0.42.4] - 2026-03-22
+
+### 新增
+- 前端分页组件 `Pagination`（支持省略号、首尾页、禁用态）(T-42-04-A)
+- 搜索结果分页：智能搜索和关键词搜索支持翻页导航 (T-42-04-B)
+- QA 流式后端 SSE：`/v1/qa/ask` 支持 `stream=true` 参数，流式返回 LLM 响应 (T-42-04-C)
+- QA 流式前端打字机效果：AI 回答逐字显示，带脉冲指示器 (T-42-04-D)
+- QA 回答 Markdown 渲染：使用 `MarkdownView` 组件替代纯文本显示 (T-42-04-E)
+
+### 变更
+- QA 请求 schema 新增 `stream` 字段（默认 false，向后兼容）
+- 搜索请求传递 `page`/`page_size` 参数给后端（后端已支持，此前前端未使用）
+
+## [0.42.3] - 2026-03-22
+
+### 安全修复
+- Embedding upsert 原子化：delete+insert 改为 `INSERT ON CONFLICT DO UPDATE` (H-05/T-42-03)
+- 账户登录锁定：连续 5 次失败锁定 15 分钟，Redis 计数器 (H-08/T-42-03)
+- ZIP bomb 防护增强：目录深度限制 5 层，文件数上限 200 (M-04/T-42-03)
+- Crypto salt 随机化：KDF2 格式使用 os.urandom(16) salt (M-05/T-42-03)
+- Docker 端口收紧：PostgreSQL/Redis/MinIO-API 端口不再暴露到宿主机 (M-09/T-42-03)
+
+### 新增
+- test_login_lockout.py：登录锁定测试（6 个用例）
+- test_crypto_salt.py：随机 salt + 三格式向后兼容测试（6 个用例）
+- AUTH_ACCOUNT_LOCKED 错误码
+
+## [0.42.2] - 2026-03-22
+
+### 安全修复
+- SSRF 防护增强：新增 DNS 解析检查，阻止 DNS rebinding 攻击 (H-01/T-42-02)
+- CSRF 中间件：变更请求必须携带 X-Requested-With 头 (H-02/T-42-02)
+- MinIO 凭证参数化：移除所有硬编码 minioadmin (H-07/T-42-02)
+- Redis 密码保护：启用 requirepass + settings.py redis_password (H-09/T-42-02)
+
+### 新增
+- url_validator.py：独立 URL 验证器（含 DNS 解析 SSRF 检查）
+- csrf.py：CSRF 中间件
+- test_url_validator.py：SSRF 防护测试
+
+## [0.42.1] - 2026-03-22
+
+### 安全修复
+- reset_token 仅在 development 环境返回，production 不再泄露明文 (C-04)
+- QA decrypt 调用修复 (H-06)
+
+### 修复
+- forgot-password 页面语法错误 (C-01)
+- 注册后跳转到 /login 并显示成功提示 (C-02)
+- Dashboard 认证守卫竞态：添加 isCheckingAuth 状态 (C-03)
+
 ## [0.41.8] - 2026-03-22
 
 ### 安全修复

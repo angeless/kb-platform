@@ -199,6 +199,20 @@ async def test_search_snippet_contains_context(client: AsyncClient, auth_headers
 
 # --- Semantic Search Tests ---
 
+# Check if pgvector is available at import time for conditional skipping
+_pgvector_available = True
+try:
+    from pgvector.sqlalchemy import Vector as _Vector
+    if _Vector is None:
+        _pgvector_available = False
+except ImportError:
+    _pgvector_available = False
+
+requires_pgvector = pytest.mark.skipif(
+    not _pgvector_available,
+    reason="pgvector extension not available",
+)
+
 
 def _mock_embed_fn(vector: list[float]):
     """Create a mock embed function that always returns the given vector."""
@@ -207,11 +221,13 @@ def _mock_embed_fn(vector: list[float]):
     return _fn
 
 
+@requires_pgvector
 @pytest.mark.asyncio
 async def test_embed_doc(client: AsyncClient, auth_headers: dict, search_fixture: dict):
     """Embedding a doc should create an embedding record."""
+    from app.services.embedding_service import DEFAULT_DIMENSIONS
     doc_id = search_fixture["doc1_id"]
-    mock_vector = [0.1] * 16  # small vector for testing
+    mock_vector = [0.1] * DEFAULT_DIMENSIONS
 
     async def _fake_embed(text: str) -> list[float]:
         return mock_vector
@@ -224,16 +240,18 @@ async def test_embed_doc(client: AsyncClient, auth_headers: dict, search_fixture
     assert resp.status_code == 200
     data = resp.json()["data"]
     assert data["doc_id"] == str(doc_id)
-    assert data["dimensions"] == 16
+    assert data["dimensions"] == DEFAULT_DIMENSIONS
 
 
+@requires_pgvector
 @pytest.mark.asyncio
 async def test_semantic_search_returns_results(
     client: AsyncClient, auth_headers: dict, search_fixture: dict
 ):
     """Semantic search should return scored results."""
+    from app.services.embedding_service import DEFAULT_DIMENSIONS
     project_id = search_fixture["project_id"]
-    mock_vector = [0.1] * 16
+    mock_vector = [0.1] * DEFAULT_DIMENSIONS
 
     async def _fake_embed(text: str) -> list[float]:
         return mock_vector
@@ -256,6 +274,7 @@ async def test_semantic_search_returns_results(
     assert "title" in data[0]
 
 
+@requires_pgvector
 @pytest.mark.asyncio
 async def test_semantic_search_empty_project(
     client: AsyncClient, auth_headers: dict
@@ -268,7 +287,8 @@ async def test_semantic_search_empty_project(
     )
     project_id = proj_resp.json()["data"]["id"]
 
-    mock_vector = [0.1] * 16
+    from app.services.embedding_service import DEFAULT_DIMENSIONS
+    mock_vector = [0.1] * DEFAULT_DIMENSIONS
     async def _fake_embed(text: str) -> list[float]:
         return mock_vector
 

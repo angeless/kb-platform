@@ -1,19 +1,54 @@
 {
-  "upgrade_version": "1.5",
+  "upgrade_version": "1.14",
   "project_name": "KB Platform",
   "snapshot_commit": "0c228f86b5b2c94abbe11119ee68ae9a291490d7",
   "started_at": "2026-03-20T04:46:37+08:00",
-  "last_updated": "2026-03-22T15:00:00+08:00",
+  "last_updated": "2026-03-24T12:00:00+08:00",
   "current_stage": 7,
   "git_available": true,
   "stages": {
-    "1": { "status": "completed", "commit": "a2cc4e7", "completed_at": "2026-03-20T04:55:00+08:00", "summary": "项目分析与环境确认" },
-    "2": { "status": "completed", "commit": "5e34dce", "completed_at": "2026-03-20T05:10:00+08:00", "summary": "CLAUDE.md 生成" },
-    "3": { "status": "completed", "commit": "b45b343", "completed_at": "2026-03-20T05:50:00+08:00", "summary": "四大技术规范生成 (22 files)" },
-    "4": { "status": "completed", "commit": "57825dd", "completed_at": "2026-03-20T06:25:00+08:00", "summary": "UI 规范生成 (interactive HTML)" },
-    "5": { "status": "completed", "commit": "568c635", "completed_at": "2026-03-20T06:30:00+08:00", "summary": "测试基础设施 (ci_verify.sh + smoke tests)" },
-    "6": { "status": "completed", "commit": "0e89645", "completed_at": "2026-03-20T06:35:00+08:00", "summary": "CHANGELOG + TODO_NEXT + 进度追踪" },
-    "7": { "status": "completed", "commit": null, "completed_at": "2026-03-20T06:40:00+08:00", "summary": "E2E 验证通过 (43/43 checks)" }
+    "1": {
+      "status": "completed",
+      "commit": "a2cc4e7",
+      "completed_at": "2026-03-20T04:55:00+08:00",
+      "summary": "项目分析与环境确认"
+    },
+    "2": {
+      "status": "completed",
+      "commit": "5e34dce",
+      "completed_at": "2026-03-20T05:10:00+08:00",
+      "summary": "CLAUDE.md 生成"
+    },
+    "3": {
+      "status": "completed",
+      "commit": "b45b343",
+      "completed_at": "2026-03-20T05:50:00+08:00",
+      "summary": "四大技术规范生成 (22 files)"
+    },
+    "4": {
+      "status": "completed",
+      "commit": "57825dd",
+      "completed_at": "2026-03-20T06:25:00+08:00",
+      "summary": "UI 规范生成 (interactive HTML)"
+    },
+    "5": {
+      "status": "completed",
+      "commit": "568c635",
+      "completed_at": "2026-03-20T06:30:00+08:00",
+      "summary": "测试基础设施 (ci_verify.sh + smoke tests)"
+    },
+    "6": {
+      "status": "completed",
+      "commit": "0e89645",
+      "completed_at": "2026-03-20T06:35:00+08:00",
+      "summary": "CHANGELOG + TODO_NEXT + 进度追踪"
+    },
+    "7": {
+      "status": "completed",
+      "commit": null,
+      "completed_at": "2026-03-20T06:40:00+08:00",
+      "summary": "E2E 验证通过 (43/43 checks)"
+    }
   },
   "incremental_upgrades": [
     {
@@ -26,6 +61,51 @@
         "新增 dev-governance-part6-audit-integrator.md (§6.4-§6.5)",
         "新增 dev-governance-part0-supplement-v1.5.md (§0.1.5 全局连续性原则)",
         "注意: part0 主文件和 dev-governance.md 索引受 Tier 1 保护未直接修改，增量内容在补充文件中"
+      ]
+    },
+    {
+      "from": "1.5",
+      "to": "1.6",
+      "date": "2026-03-22",
+      "changes": [
+        "新增 dev-governance-part0-supplement-v1.6.md (§0.13 Context 压力自动交接 + §0.14 版本号一致性约束)",
+        "§0.1.5 第 7 条铁律升级: 从主动交接升级为 scheduled task 自动创建新 session",
+        "注意: part0 主文件和 dev-governance.md 索引受 Tier 1 保护未直接修改"
+      ]
+    },
+    {
+      "from": "1.6",
+      "to": "1.7",
+      "date": "2026-03-22",
+      "changes": [
+        "合并 v1.5+v1.6 supplement 到 part0 主文件（§0.1.5 + Phase 8 + §0.13 + §0.14）",
+        "废弃 dev-governance-part0-supplement-v1.5.md 和 v1.6.md",
+        "升级标记文件机制（docs/.upgrade-in-progress）启用",
+        "hooks.json C5 已内置升级绕过条件"
+      ]
+    },
+    {
+      "from": "1.7",
+      "to": "1.10",
+      "date": "2026-03-23",
+      "changes": [
+        "v1.8: 新增 dev-governance-part7-quality-methods.md（TDD/系统化调试/代码审查/Worktree/并行 Agent/完成前验证）",
+        "v1.8: 更新 dev-governance.md 索引添加 part6(a/b/c) + part7",
+        "v1.9: plan-audit 和 ui-spec 技能可通过 plugin 调用（无项目文件变更）",
+        "v1.10: gate-failures.json 迁移为 {failures:[], history:[]} 格式",
+        "v1.10: bug-catalog 技能可通过 plugin 调用（无项目文件变更）"
+      ]
+    },
+    {
+      "from": "1.10",
+      "to": "1.14",
+      "date": "2026-03-24",
+      "changes": [
+        "v1.11: Gate B Wiki/PRD双向验证 + MEMORY.md交接持久化",
+        "v1.12: 铁律#21禁止静默降级 + 铁律#22逐条验收 + Phase4降级检测",
+        "v1.14: 合并为统一版本基线",
+        "CLAUDE.md 新增 docs/MEMORY.md 加载指令",
+        "part0 新增铁律#21/#22 到 §0.5"
       ]
     }
   ]

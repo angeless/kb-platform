@@ -3,7 +3,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Index, String
+from sqlalchemy import DateTime, ForeignKey, Index, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -14,12 +14,13 @@ class User(Base):
     __tablename__ = "user"
     __table_args__ = (
         Index("ix_user_tenant_status", "tenant_id", "status"),
+        UniqueConstraint("email", "tenant_id", name="uq_user_email_tenant"),
     )
 
     tenant_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("tenant.id"), nullable=False
     )
-    email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    email: Mapped[str] = mapped_column(String(255), nullable=False)  # M-15: uniqueness per tenant via table constraint
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[str] = mapped_column(String(30), nullable=False, default="viewer")
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")

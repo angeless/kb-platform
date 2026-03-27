@@ -1,10 +1,14 @@
 """Application configuration loaded from environment variables."""
 
+from functools import lru_cache
+
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _DEFAULT_JWT_SECRET = "change-me-in-production"
 _DEFAULT_ENCRYPTION_KEY = "change-me-32-byte-key-for-aes256"
+_DEFAULT_POSTGRES_PASSWORD = "postgres"
+_DEFAULT_MINIO_KEY = "minioadmin"
 
 
 class Settings(BaseSettings):
@@ -44,9 +48,12 @@ class Settings(BaseSettings):
     redis_host: str = "localhost"
     redis_port: int = 6379
     redis_db: int = 0
+    redis_password: str = ""
 
     @property
     def redis_url(self) -> str:
+        if self.redis_password:
+            return f"redis://:{self.redis_password}@{self.redis_host}:{self.redis_port}/{self.redis_db}"
         return f"redis://{self.redis_host}:{self.redis_port}/{self.redis_db}"
 
     # MinIO / S3
@@ -80,6 +87,14 @@ class Settings(BaseSettings):
     # Logging
     log_level: str = "INFO"
 
+    # SMTP (email)
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from: str = "noreply@kb-platform.com"
+    smtp_tls: bool = True
+
     # CORS
     cors_origins: str = "http://localhost:3000,http://localhost:3001"
 
@@ -105,8 +120,19 @@ class Settings(BaseSettings):
                 raise ValueError(
                     "encryption_key must be at least 32 characters in production."
                 )
+            if self.postgres_password == _DEFAULT_POSTGRES_PASSWORD:
+                raise ValueError(
+                    "postgres_password must not use default 'postgres' in production. "
+                    "Set POSTGRES_PASSWORD environment variable."
+                )
+            if self.s3_access_key == _DEFAULT_MINIO_KEY or self.s3_secret_key == _DEFAULT_MINIO_KEY:
+                raise ValueError(
+                    "s3_access_key/s3_secret_key must not use default 'minioadmin' in production. "
+                    "Set S3_ACCESS_KEY and S3_SECRET_KEY environment variables."
+                )
         return self
 
 
+@lru_cache()
 def get_settings() -> Settings:
     return Settings()

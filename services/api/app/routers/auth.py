@@ -183,6 +183,8 @@ async def reset_password(
     description="Revokes the current refresh token and clears authentication cookies.",
     responses={
         204: {"description": "Logged out, token revoked, cookies cleared"},
+        401: {"description": "Unauthorized"},
+        500: {"description": "Internal server error"},
     },
 )
 async def logout(

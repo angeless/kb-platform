@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared_schemas.common import DataResponse, ErrorDetail, ListResponse, PaginationMeta
+from shared_schemas.cross_reference import RouteContentRequest
 from shared_schemas.project import ProjectCreate, ProjectOut, ProjectUpdate
 
 from app.deps import get_db, get_tenant_id, require_role
@@ -140,3 +141,31 @@ async def delete_project(
     svc = ProjectService(db, tenant_id)
     await svc.delete(project_id)
     return DataResponse(data={"deleted": True})
+
+
+@router.post(
+    "/route",
+    response_model=ListResponse,
+    summary="Route content to best-matching projects",
+    description="Layer 2 routing: embedding similarity + keyword overlap. Returns top-3 candidates with action (auto_route/recommend/low_confidence).",
+    responses={
+        200: {"description": "Routing candidates returned"},
+        **_RESP_AUTH,
+    },
+)
+async def route_content(
+    body: RouteContentRequest,
+    db: AsyncSession = Depends(get_db),
+    tenant_id: uuid.UUID = Depends(get_tenant_id),
+):
+    from app.services.project_router_service import ProjectRouterService
+    svc = ProjectRouterService(db, tenant_id)
+    candidates = await svc.route(
+        content_embedding=body.embedding,
+        content_keywords=body.keywords,
+        exclude_project_id=body.exclude_project_id,
+    )
+    return ListResponse(
+        data=candidates,
+        meta=PaginationMeta(page=1, page_size=len(candidates), total=len(candidates)),
+    )

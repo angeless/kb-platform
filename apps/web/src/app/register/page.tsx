@@ -26,12 +26,8 @@ export default function RegisterPage() {
       setLocalError("请输入邮箱");
       return;
     }
-    if (password.length < 8) {
-      setLocalError("密码至少 8 位");
-      return;
-    }
-    if (!/[A-Z]/.test(password) || !/[0-9]/.test(password)) {
-      setLocalError("密码需包含大写字母和数字");
+    if (password.length < 8 || !/[A-Z]/.test(password) || !/[0-9]/.test(password)) {
+      setLocalError("密码至少 8 位，需包含大写字母和数字");
       return;
     }
     if (password !== confirmPassword) {
@@ -41,7 +37,7 @@ export default function RegisterPage() {
 
     try {
       await register(tenantName, email, password);
-      router.push("/projects");
+      router.push("/login?registered=true");
     } catch {
       // error is set in store
     }

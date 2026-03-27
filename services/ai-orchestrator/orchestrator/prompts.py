@@ -10,7 +10,11 @@ SYSTEM_PROMPT_ARCHITECTURE = """你是一个知识系统架构设计专家。你
 推断这些资料属于什么行业、应该如何组织成一个多层级的知识系统架构。
 
 你必须严格基于提供的资料内容推断，不得编造不存在的分类或主题。
-如果资料不足以判断某个层级，应在输出中标注"待确认"。"""
+如果资料不足以判断某个层级，应在输出中标注"待确认"。
+
+架构设计必须满足 MECE 原则（互斥且穷举）：
+- 互斥：任何一个知识片段的主归位唯一，不能同时属于两个同级节点
+- 穷举：所有资料片段都能归入某个节点，无遗漏"""
 
 USER_PROMPT_ARCHITECTURE_TEMPLATE = """以下是一个项目中上传的原始资料片段（已解析为文本）。
 请根据这些内容：
@@ -29,6 +33,10 @@ USER_PROMPT_ARCHITECTURE_TEMPLATE = """以下是一个项目中上传的原始�
   "architecture_name": "xxx知识系统",
   "industry": "推断的行业",
   "reasoning": "推断依据（1-2句话）",
+  "classification_dimension": "topic|process|audience|chronological|hybrid",
+  "dimension_rationale": "选择此分类维度的原因（1句话）",
+  "coverage_score": 85,
+  "uncovered_chunks": ["无法归类的内容描述（如有）"],
   "levels": [
     {{"level": 1, "name": "层级名称"}},
     {{"level": 2, "name": "层级名称"}},
@@ -57,7 +65,11 @@ USER_PROMPT_ARCHITECTURE_TEMPLATE = """以下是一个项目中上传的原始�
 - node_type 只能是: category, topic, document, glossary, conflict, index
 - parent_name 为 null 表示根节点
 - 至少输出 2 个层级
-- 节点数量应该反映资料内容的实际覆盖范围，不要过多猜测"""
+- 节点数量应该反映资料内容的实际覆盖范围，不要过多猜测
+- classification_dimension 说明：topic=按主题, process=按流程, audience=按受众, chronological=按时间, hybrid=混合
+- coverage_score 为 0-100 整数，表示资料内容被架构覆盖的百分比
+- 架构深度不超过 5 层，每层 3-7 个节点
+- 确保节点名称无重复"""
 
 
 def build_propose_prompt(
@@ -131,14 +143,18 @@ USER_PROMPT_GENERATE_DOC_TEMPLATE = """请为以下知识系统节点生成一�
   "content_md": "完整的 Markdown 正文内容（含标题、正文、来源引用）",
   "cited_chunk_indices": [0, 1, 2],
   "has_conflicts": false,
-  "conflict_description": null
+  "conflict_description": null,
+  "keywords": ["关键词1", "关键词2", "关键词3"],
+  "knowledge_type": "fact|process|rule|definition|case"
 }}
 
 注意：
 - content_md 中引用来源时使用 [来源N] 格式，N 对应资料片段的序号（从0开始）
 - 如果发现矛盾，设 has_conflicts=true 并填写 conflict_description
 - 文档应包含：标题、适用范围、正文内容、来源列表
-- 如果资料不够形成有意义的文档，返回 content_md 为空字符串"""
+- 如果资料不够形成有意义的文档，返回 content_md 为空字符串
+- keywords：2-5 个描述核心主题的关键词
+- knowledge_type：fact=事实, process=流程, rule=规范, definition=定义, case=案例"""
 
 
 def build_generate_doc_prompt(
@@ -217,10 +233,11 @@ USER_PROMPT_CLASSIFY_TEMPLATE = """以下是一个知识系统中已有的知识
   "classifications": [
     {{
       "chunk_index": 0,
-      "relation_type": "new|supplement|correction|conflict",
-      "target_doc_id": "已有文档ID（supplement/correction时必填，new/conflict时为null）",
+      "relation_type": "new|supplement|correction|conflict|restructure",
+      "target_doc_id": "已有文档ID（supplement/correction时必填，其他为null）",
       "reason": "判断理由",
-      "conflict_description": "冲突描述（仅conflict时必填，其他为null）"
+      "conflict_description": "冲突描述（仅conflict时必填，其他为null）",
+      "restructure_suggestion": "结构变更建议（仅restructure时必填，其他为null）"
     }}
   ]
 }}
@@ -229,7 +246,13 @@ relation_type 说明：
 - new：已有知识中没有对应主题，需要新建文档
 - supplement：已有主题但缺少这些细节，需要补充到已有文档
 - correction：新资料证明已有知识过期或有误，需要修正已有文档
-- conflict：新旧资料互相矛盾且无法自动判断，需要人工确认"""
+- conflict：新旧资料互相矛盾且无法自动判断，需要人工确认
+- restructure：节点文档数过多(>15篇)或内容跨域(>3节点相关)，建议结构变更
+
+触发 restructure 的条件：
+1. 目标节点已有 > 15 篇文档（节点过载）
+2. 新内容与 3 个以上不同节点都高度相关（跨域内容）
+输出 restructure 时需补充 restructure_suggestion 字段说明建议"""
 
 
 def build_classify_prompt(

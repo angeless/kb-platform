@@ -10,8 +10,8 @@ T = TypeVar("T")
 class ErrorDetail(BaseModel):
     """Error response schema for OpenAPI documentation."""
 
-    error_code: str = Field(..., description="Machine-readable error code", examples=["DOCUMENT_NOT_FOUND"])
-    message: str = Field(..., description="Human-readable error message", examples=["文档不存在"])
+    error_code: str = Field(..., max_length=50, description="Machine-readable error code", examples=["DOCUMENT_NOT_FOUND"])
+    message: str = Field(..., max_length=500, description="Human-readable error message", examples=["文档不存在"])
     detail: dict[str, Any] = Field(default_factory=dict, description="Additional error details")
     meta: dict[str, Any] = Field(default_factory=dict, description="Request metadata", examples=[{"request_id": "abc-123"}])
 

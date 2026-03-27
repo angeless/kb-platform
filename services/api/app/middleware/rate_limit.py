@@ -19,6 +19,10 @@ EXEMPT_PATHS = {"/healthz", "/readyz", "/docs", "/openapi.json", "/redoc", "/api
 # Paths with stricter upload rate limits
 UPLOAD_PATHS = {"/v1/assets/upload", "/v1/assets/import-url", "/v1/assets/import-archive"}
 
+# Export endpoints — stricter rate limit (M-07 fix: 10 per minute via export_rate_limit)
+EXPORT_PATHS = {"/v1/docs/", "/v1/projects/"}  # matched by path containing /export
+EXPORT_RATE_LIMIT_PER_MINUTE = 10
+
 # Auth endpoints with per-IP stricter rate limits (anti-brute-force)
 AUTH_RATE_LIMITS: dict[str, str] = {
     "/v1/auth/login": "auth_login_rate_limit",
@@ -160,10 +164,12 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             identity = f"ip:{client_ip}"
         elif path in UPLOAD_PATHS:
             limit = settings.upload_rate_limit_per_minute
+        elif "/export" in path:
+            limit = EXPORT_RATE_LIMIT_PER_MINUTE
         else:
             limit = settings.rate_limit_per_minute
 
-        category = "auth" if auth_setting else ("upload" if path in UPLOAD_PATHS else "api")
+        category = "auth" if auth_setting else ("upload" if path in UPLOAD_PATHS else ("export" if "/export" in path else "api"))
         return limit, f"ratelimit:{identity}:{category}"
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:

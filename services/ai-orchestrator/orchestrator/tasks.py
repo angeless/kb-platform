@@ -107,14 +107,20 @@ def propose_architecture(self, project_id: str, job_id: str) -> dict:
                 )
                 session.delete(draft)
 
-            # Create Architecture
+            # Create Architecture with MECE metadata
             arch = Architecture(
                 id=uuid.uuid4(),
                 project_id=project_uuid,
                 name=result.get("architecture_name", f"{project.name} 知识系统"),
                 version="0.1.0",
                 status="draft",
-                levels_json=result.get("levels", []),
+                levels_json={
+                    "levels": result.get("levels", []),
+                    "classification_dimension": result.get("classification_dimension", "topic"),
+                    "dimension_rationale": result.get("dimension_rationale", ""),
+                    "coverage_score": result.get("coverage_score", 0),
+                    "uncovered_chunks": result.get("uncovered_chunks", []),
+                },
             )
             session.add(arch)
             session.flush()
@@ -317,7 +323,7 @@ def generate_docs(self, project_id: str, job_id: str) -> dict:
                     logger.info("Skipping node %s: LLM returned empty content", node.node_name)
                     continue
 
-                # Create KnowledgeDoc
+                # Create KnowledgeDoc with knowledge metadata
                 doc_id = uuid.uuid4()
                 doc = KnowledgeDoc(
                     id=doc_id,
@@ -327,6 +333,8 @@ def generate_docs(self, project_id: str, job_id: str) -> dict:
                     title=result.get("title", node.node_name),
                     current_version=1,
                     status="draft",
+                    keywords=result.get("keywords"),
+                    knowledge_type=result.get("knowledge_type"),
                 )
                 session.add(doc)
                 session.flush()

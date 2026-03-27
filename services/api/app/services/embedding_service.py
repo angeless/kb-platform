@@ -6,7 +6,8 @@ import logging
 import uuid
 from typing import Callable
 
-from sqlalchemy import delete, select, text
+from sqlalchemy import select, text
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared_errors import ErrorCode, NotFoundException
@@ -70,24 +71,37 @@ class EmbeddingService(TenantService):
         content = f"{doc.title}\n\n{ver.content_md}" if ver else doc.title
         embedding = await self.embed_fn(content)
 
-        # Upsert: delete existing then insert
-        await self.db.execute(
-            delete(DocEmbedding).where(DocEmbedding.doc_id == doc_id)
-        )
-        record = DocEmbedding(
-            id=uuid.uuid4(),
-            doc_id=doc_id,
-            project_id=doc.project_id,
-            version=doc.current_version,
-            embedding=embedding,
-            model_name=DEFAULT_MODEL,
-            dimensions=len(embedding),
-        )
-        # Write to pgvector column as well (dual-write during migration)
+        # Atomic upsert via INSERT ON CONFLICT DO UPDATE (H-05)
+        values = {
+            "id": uuid.uuid4(),
+            "doc_id": doc_id,
+            "project_id": doc.project_id,
+            "version": doc.current_version,
+            "embedding": embedding,
+            "model_name": DEFAULT_MODEL,
+            "dimensions": len(embedding),
+        }
         if hasattr(DocEmbedding, "embedding_vec") and DocEmbedding.embedding_vec is not None:
-            record.embedding_vec = embedding
-        self.db.add(record)
+            values["embedding_vec"] = embedding
+
+        stmt = pg_insert(DocEmbedding).values(**values)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["doc_id"],
+            set_={
+                "version": stmt.excluded.version,
+                "embedding": stmt.excluded.embedding,
+                "model_name": stmt.excluded.model_name,
+                "dimensions": stmt.excluded.dimensions,
+                **({"embedding_vec": stmt.excluded.embedding_vec}
+                   if "embedding_vec" in values else {}),
+            },
+        )
+        await self.db.execute(stmt)
         await self.db.flush()
+
+        # Return the upserted record
+        q = select(DocEmbedding).where(DocEmbedding.doc_id == doc_id)
+        record = (await self.db.execute(q)).scalar_one()
         return record
 
     async def semantic_search(
@@ -109,12 +123,12 @@ class EmbeddingService(TenantService):
                    d.title,
                    d.doc_type,
                    d.status,
-                   (e.embedding_vec <=> :query_vec::vector) AS distance
+                   (e.embedding_vec <=> CAST(:query_vec AS vector)) AS distance
             FROM doc_embedding e
             JOIN knowledge_doc d ON d.id = e.doc_id
             WHERE e.project_id = :project_id
               AND e.embedding_vec IS NOT NULL
-            ORDER BY e.embedding_vec <=> :query_vec::vector
+            ORDER BY e.embedding_vec <=> CAST(:query_vec AS vector)
             LIMIT :top_k
         """)
         result = await self.db.execute(
@@ -144,31 +158,47 @@ class EmbeddingService(TenantService):
         query_embedding: list[float],
         top_k: int,
     ) -> list[dict]:
-        """Legacy JSONB-based semantic search (used when embedding_vec is null)."""
+        """Legacy JSONB-based semantic search (used when embedding_vec is null).
+
+        H-04 fix: batch fetch embeddings (max 500) and batch fetch docs
+        to eliminate N+1 queries and limit memory usage.
+        """
         import math
 
-        emb_q = select(DocEmbedding).where(DocEmbedding.project_id == project_id)
+        # Limit memory: fetch at most 500 embeddings
+        emb_q = select(DocEmbedding).where(
+            DocEmbedding.project_id == project_id
+        ).limit(500)
         embeddings = (await self.db.execute(emb_q)).scalars().all()
 
         if not embeddings:
+            return []
+
+        # Pre-compute query norm once
+        norm_a = math.sqrt(sum(x * x for x in query_embedding))
+        if not norm_a:
             return []
 
         scored = []
         for emb in embeddings:
             vec = emb.embedding
             dot = sum(x * y for x, y in zip(query_embedding, vec))
-            norm_a = math.sqrt(sum(x * x for x in query_embedding))
             norm_b = math.sqrt(sum(x * x for x in vec))
-            score = dot / (norm_a * norm_b) if norm_a and norm_b else 0.0
+            score = dot / (norm_a * norm_b) if norm_b else 0.0
             scored.append((emb.doc_id, score))
 
         scored.sort(key=lambda x: x[1], reverse=True)
         top = scored[:top_k]
 
+        # Batch fetch all docs in one query (H-04: eliminates N+1)
+        top_doc_ids = [doc_id for doc_id, _ in top]
+        docs_q = select(KnowledgeDoc).where(KnowledgeDoc.id.in_(top_doc_ids))
+        docs = (await self.db.execute(docs_q)).scalars().all()
+        doc_map = {d.id: d for d in docs}
+
         results = []
         for doc_id, score in top:
-            doc_q = select(KnowledgeDoc).where(KnowledgeDoc.id == doc_id)
-            doc = (await self.db.execute(doc_q)).scalar_one_or_none()
+            doc = doc_map.get(doc_id)
             if doc is None:
                 continue
             results.append({

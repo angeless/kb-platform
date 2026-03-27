@@ -12,6 +12,7 @@ class ErrorCode(StrEnum):
     AUTH_EMAIL_ALREADY_EXISTS = "AUTH_EMAIL_ALREADY_EXISTS"
     AUTH_REFRESH_TOKEN_INVALID = "AUTH_REFRESH_TOKEN_INVALID"
     AUTH_RESET_TOKEN_INVALID = "AUTH_RESET_TOKEN_INVALID"
+    AUTH_ACCOUNT_LOCKED = "AUTH_ACCOUNT_LOCKED"
 
     # Project
     PROJECT_NOT_FOUND = "PROJECT_NOT_FOUND"
@@ -72,6 +73,7 @@ ERROR_MESSAGES: dict[str, str] = {
     ErrorCode.AUTH_EMAIL_ALREADY_EXISTS: "该邮箱已被注册",
     ErrorCode.AUTH_REFRESH_TOKEN_INVALID: "登录已失效，请重新登录",
     ErrorCode.AUTH_RESET_TOKEN_INVALID: "重置链接已失效，请重新申请",
+    ErrorCode.AUTH_ACCOUNT_LOCKED: "账户已临时锁定，请稍后重试",
     ErrorCode.PROJECT_NOT_FOUND: "项目不存在或已被删除",
     ErrorCode.PROJECT_NAME_DUPLICATE: "项目名称已存在，请换一个",
     ErrorCode.ASSET_NOT_FOUND: "文件不存在或已被删除",

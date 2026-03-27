@@ -35,6 +35,7 @@ class ApiClient {
 
   async request<T>(path: string, options: RequestInit = {}): Promise<ApiResponse<T>> {
     const headers: Record<string, string> = {
+      "X-Requested-With": "XMLHttpRequest",
       ...(options.headers as Record<string, string>),
     };
 
@@ -190,6 +191,7 @@ export function uploadWithProgress(
 
     xhr.open("POST", url);
     xhr.withCredentials = true;
+    xhr.setRequestHeader("X-Requested-With", "XMLHttpRequest");
     xhr.send(formData);
   });
 }

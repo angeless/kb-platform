@@ -1,6 +1,7 @@
 """Health check endpoints."""
 
 import asyncio
+import logging
 import time
 
 import boto3
@@ -14,6 +15,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.deps import get_db
 from shared_config.settings import get_settings
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["health"])
 
@@ -42,9 +45,39 @@ async def healthz():
     },
 )
 async def readyz(db: AsyncSession = Depends(get_db)):
-    """Readiness probe — checks database connectivity."""
+    """Readiness probe — checks database connectivity + Alembic migration version."""
     await db.execute(text("SELECT 1"))
-    return {"status": "ok"}
+
+    # Check Alembic migration version
+    try:
+        result = await db.execute(text("SELECT version_num FROM alembic_version LIMIT 1"))
+        row = result.first()
+        alembic_version = row[0] if row else "none"
+    except Exception as e:
+        logger.warning("Alembic version check failed: %s", e)
+        alembic_version = "check_failed"
+
+    return {"status": "ok", "alembic_version": alembic_version}
+
+
+@router.get(
+    "/_version",
+    summary="Application version",
+    description="Returns the current application version from the VERSION file.",
+    responses={
+        200: {"description": "Version returned"},
+        500: {"description": "Internal server error"},
+    },
+)
+async def version():
+    """Return current application version."""
+    import pathlib
+    version_file = pathlib.Path(__file__).resolve().parents[4] / "VERSION"
+    try:
+        ver = version_file.read_text().strip()
+    except FileNotFoundError:
+        ver = "unknown"
+    return {"version": ver}
 
 
 @router.get(
@@ -160,6 +193,13 @@ async def _check_minio() -> dict:
 )
 async def health_ready(db: AsyncSession = Depends(get_db)):
     """Deep health check — checks PostgreSQL, Redis, and MinIO connectivity."""
+    import pathlib
+    version_file = pathlib.Path(__file__).resolve().parents[4] / "VERSION"
+    try:
+        ver = version_file.read_text().strip()
+    except FileNotFoundError:
+        ver = "unknown"
+
     pg_result, redis_result, minio_result = await asyncio.gather(
         _check_postgres(db),
         _check_redis(),
@@ -176,7 +216,7 @@ async def health_ready(db: AsyncSession = Depends(get_db)):
 
     body = {
         "status": overall,
-        "version": "0.35.0",
+        "version": ver,
         "checks": {
             "postgres": pg_result,
             "redis": redis_result,

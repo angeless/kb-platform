@@ -1,12 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuthStore } from "@/stores/auth-store";
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const justRegistered = searchParams.get("registered") === "true";
   const { login, isLoading, error } = useAuthStore();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -45,6 +47,12 @@ export default function LoginPage() {
 
         <div className="rounded-xl border border-gray-200 bg-white p-8 shadow-sm">
           <h2 className="mb-6 text-xl font-semibold">登录</h2>
+
+          {justRegistered && (
+            <div className="mb-4 rounded-lg bg-green-50 p-3 text-sm text-green-700">
+              注册成功！请使用刚才注册的邮箱和密码登录。
+            </div>
+          )}
 
           {displayError && (
             <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-600">

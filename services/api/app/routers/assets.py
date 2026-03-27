@@ -33,7 +33,8 @@ def get_storage(settings: Settings = Depends(get_settings_dep)) -> StorageClient
         try:
             _storage_client = StorageClient(settings)
             _storage_client.ensure_bucket()
-        except Exception:
+        except Exception as e:
+            logger.error("StorageClient initialization failed: %s", e)
             return None
     return _storage_client
 
