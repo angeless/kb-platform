@@ -14,15 +14,18 @@ import "@xyflow/react/dist/style.css";
 
 interface GraphNode {
   id: string;
-  node_name: string;
+  label: string;
+  node_type: string;
   node_path: string[];
-  doc_count: number;
+  status: string;
 }
 
 interface GraphEdge {
+  id: string;
   source: string;
   target: string;
-  rel_type: string;
+  edge_type: string;
+  relation_type?: string;
 }
 
 interface KnowledgeGraphProps {
@@ -59,7 +62,7 @@ export default function KnowledgeGraph({ nodes, edges, projectId }: KnowledgeGra
         type: "default",
         position: { x: xOffset + idx * xSpacing, y: depth * ySpacing },
         data: {
-          label: n.node_name,
+          label: n.label,
           nodePath: n.node_path,
         },
         style: {
@@ -78,9 +81,9 @@ export default function KnowledgeGraph({ nodes, edges, projectId }: KnowledgeGra
   const flowEdges: Edge[] = useMemo(
     () =>
       edges.map((e, i) => {
-        const isCrossRef = e.rel_type === "cross_ref";
+        const isCrossRef = e.edge_type === "cross_ref";
         return {
-          id: `e-${i}`,
+          id: e.id || `e-${i}`,
           source: e.source,
           target: e.target,
           animated: isCrossRef,

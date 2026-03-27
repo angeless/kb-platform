@@ -7,8 +7,10 @@ import { api, ApiClientError } from "@/lib/api";
 import KnowledgeGraph from "@/components/wiki/knowledge-graph";
 
 interface GraphData {
-  nodes: Array<{ id: string; node_name: string; node_path: string[]; doc_count: number }>;
-  edges: Array<{ source: string; target: string; rel_type: string }>;
+  nodes: Array<{ id: string; label: string; node_type: string; node_path: string[]; status: string }>;
+  edges: Array<{ id: string; source: string; target: string; edge_type: string; relation_type?: string }>;
+  node_count: number;
+  edge_count: number;
 }
 
 export default function GraphPage() {

@@ -94,7 +94,7 @@ def parse(content: bytes, filename: str) -> list[dict]:
             part_buf: list[str] = []
             part_idx = 1
             for part in parts:
-                if part_buf and len("\n\n".join(part_buf)) + len(part) > MAX_CHUNK_CHARS:
+                if part_buf and len("\n\n".join(part_buf)) + 2 + len(part) > MAX_CHUNK_CHARS:
                     chunks.append(_make_chunk(
                         "\n\n".join(part_buf),
                         f"{base_ts}-part-{part_idx}",

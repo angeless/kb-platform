@@ -1,14 +1,16 @@
 """Graph visualization schemas."""
 
-from pydantic import BaseModel
+from typing import Literal
+
+from pydantic import BaseModel, Field
 
 
 class GraphNode(BaseModel):
     id: str
-    label: str
-    node_type: str  # "doc"
+    label: str = Field(max_length=500)
+    node_type: Literal["doc"] = "doc"
     node_path: list[str]
-    status: str
+    status: Literal["approved", "draft"]
 
 
 class GraphEdge(BaseModel):

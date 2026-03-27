@@ -8,8 +8,8 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from shared_errors import ErrorCode, NotFoundException
-from shared_models import ApiKey, User
+from shared_errors import AppException, ErrorCode, NotFoundException
+from shared_models import ApiKey, Project, User
 from shared_schemas.api_key import ApiKeyCreateRequest, ApiKeyCreateResponse, ApiKeyListItem
 from shared_schemas.common import DataResponse, ErrorDetail, ListResponse, PaginationMeta
 
@@ -36,6 +36,11 @@ async def create_api_key(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    # Verify project exists and belongs to user's tenant
+    proj = await db.get(Project, project_id)
+    if proj is None or proj.tenant_id != current_user.tenant_id:
+        raise AppException(ErrorCode.PROJECT_NOT_FOUND, "项目不存在", status_code=404)
+
     raw_key = "kb_" + secrets.token_urlsafe(24)
     key_hash = hashlib.sha256(raw_key.encode()).hexdigest()
     key_prefix = raw_key[:8]
@@ -115,7 +120,7 @@ async def revoke_api_key(
     api_key = result.scalar_one_or_none()
     if api_key is None:
         raise NotFoundException(
-            error_code=ErrorCode.ASSET_NOT_FOUND,
+            error_code=ErrorCode.API_KEY_NOT_FOUND,
             message="API Key 不存在",
         )
 

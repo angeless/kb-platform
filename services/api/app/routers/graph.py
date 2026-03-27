@@ -3,39 +3,47 @@
 import uuid
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from shared_errors import AppException, ErrorCode
+from shared_models import Project, User
 from shared_models.architecture import ArchitectureNode
 from shared_models.cross_reference import CrossReference
 from shared_models.knowledge import KnowledgeDoc
+from shared_schemas.common import DataResponse, ERROR_RESPONSES_AUTH
 from shared_schemas.graph import GraphEdge, GraphNode, GraphResponse
 
 from app.deps import get_current_user, get_db
-from shared_models import User
 
 router = APIRouter(prefix="/v1/projects", tags=["graph"])
 
 
 @router.get(
     "/{project_id}/graph",
-    response_model=GraphResponse,
+    response_model=DataResponse[GraphResponse],
     summary="Get knowledge graph",
     description="Returns nodes and edges for the project knowledge graph visualization.",
+    responses={**ERROR_RESPONSES_AUTH},
 )
 async def get_project_graph(
     project_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> GraphResponse:
+):
+    # Verify project exists and belongs to user's tenant
+    proj = await db.get(Project, project_id)
+    if proj is None or proj.tenant_id != current_user.tenant_id:
+        raise AppException(ErrorCode.PROJECT_NOT_FOUND, "项目不存在", status_code=404)
+
     # 1. Query docs — if > 500 total, restrict to approved only
     base_filter = [
         KnowledgeDoc.project_id == project_id,
         KnowledgeDoc.status.in_(["approved", "draft"]),
     ]
-    count_q = select(KnowledgeDoc.id).where(*base_filter)
+    count_q = select(func.count()).select_from(KnowledgeDoc).where(*base_filter)
     count_result = await db.execute(count_q)
-    total = len(count_result.all())
+    total = count_result.scalar() or 0
 
     if total > 500:
         base_filter = [
@@ -43,7 +51,7 @@ async def get_project_graph(
             KnowledgeDoc.status == "approved",
         ]
 
-    docs_q = select(KnowledgeDoc).where(*base_filter)
+    docs_q = select(KnowledgeDoc).where(*base_filter).limit(1000)
     docs_result = await db.execute(docs_q)
     docs = docs_result.scalars().all()
 
@@ -109,9 +117,11 @@ async def get_project_graph(
             for x in xrefs
         ]
 
-    return GraphResponse(
-        nodes=graph_nodes,
-        edges=edges,
-        node_count=len(graph_nodes),
-        edge_count=len(edges),
+    return DataResponse(
+        data=GraphResponse(
+            nodes=graph_nodes,
+            edges=edges,
+            node_count=len(graph_nodes),
+            edge_count=len(edges),
+        )
     )

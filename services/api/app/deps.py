@@ -115,7 +115,7 @@ def require_role(minimum_role: str):
 
 
 async def get_api_key_project(
-    authorization: str = Header(...),
+    authorization: str | None = Header(None),
     db: AsyncSession = Depends(get_db),
 ) -> tuple[ApiKey, uuid.UUID, uuid.UUID]:
     """Authenticate via API key (Bearer token).
@@ -125,6 +125,11 @@ async def get_api_key_project(
 
     Returns (api_key_record, project_id, tenant_id).
     """
+    if not authorization:
+        raise UnauthorizedException(
+            error_code=ErrorCode.API_KEY_INVALID,
+            message="未提供认证凭据",
+        )
     if not authorization.startswith("Bearer "):
         raise UnauthorizedException(
             error_code=ErrorCode.API_KEY_INVALID,

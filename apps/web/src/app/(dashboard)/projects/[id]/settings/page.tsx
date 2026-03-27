@@ -47,7 +47,7 @@ export default function ProjectSettingsPage() {
     try {
       const resp = await api.get<ApiKeyItem[]>(`/v1/projects/${projectId}/api-keys`);
       setApiKeys(resp.data);
-    } catch { /* ignore — non-critical */ }
+    } catch (e) { console.error("Failed to load API keys", e); }
   }, [projectId]);
 
   useEffect(() => {

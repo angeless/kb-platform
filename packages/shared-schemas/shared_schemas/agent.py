@@ -36,7 +36,13 @@ class AgentAskRequest(BaseModel):
     top_k: int = Field(default=5, ge=1, le=20)
 
 
+class AgentSourceRef(BaseModel):
+    doc_id: UUID
+    title: str
+    node_path: list[str] = []
+
+
 class AgentAskResponse(BaseModel):
     answer: str
-    sources: list[dict]
+    sources: list[AgentSourceRef]
     related_questions: list[str]

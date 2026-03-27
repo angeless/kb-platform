@@ -29,61 +29,91 @@ _RESP_AUTH = {
 }
 
 
-async def _build_node_path(db: AsyncSession, node_id: uuid.UUID | None) -> list[str]:
-    """Walk up the architecture_node tree to build the full path from root to node."""
-    if node_id is None:
-        return []
-
-    path: list[str] = []
-    current_id = node_id
-
-    # Guard against cycles — max 20 levels
-    for _ in range(20):
+async def _batch_load_arch_nodes(
+    db: AsyncSession, node_ids: set[uuid.UUID]
+) -> dict[uuid.UUID, ArchitectureNode]:
+    """Batch-load architecture nodes and their ancestors iteratively."""
+    arch_nodes_by_id: dict[uuid.UUID, ArchitectureNode] = {}
+    ids_to_load = set(node_ids)
+    while ids_to_load:
         result = await db.execute(
-            select(ArchitectureNode).where(ArchitectureNode.id == current_id)
+            select(ArchitectureNode).where(ArchitectureNode.id.in_(ids_to_load))
         )
-        node = result.scalar_one_or_none()
-        if node is None:
-            break
-        path.append(node.node_name)
-        if node.parent_id is None:
-            break
-        current_id = node.parent_id
+        loaded = result.scalars().all()
+        ids_to_load = set()
+        for n in loaded:
+            arch_nodes_by_id[n.id] = n
+            if n.parent_id and n.parent_id not in arch_nodes_by_id:
+                ids_to_load.add(n.parent_id)
+    return arch_nodes_by_id
 
+
+def _build_node_path_from_cache(
+    node_id: uuid.UUID | None,
+    arch_nodes_by_id: dict[uuid.UUID, ArchitectureNode],
+) -> list[str]:
+    """Build full path from root to node using pre-loaded cache."""
+    if node_id is None or node_id not in arch_nodes_by_id:
+        return []
+    path: list[str] = []
+    cur = node_id
+    for _ in range(20):  # guard against cycles
+        if cur not in arch_nodes_by_id:
+            break
+        path.append(arch_nodes_by_id[cur].node_name)
+        cur = arch_nodes_by_id[cur].parent_id
+        if cur is None:
+            break
     path.reverse()
     return path
 
 
-async def _get_source_assets(
-    db: AsyncSession, doc_id: uuid.UUID, current_version: int
-) -> list[SourceAsset]:
-    """Get source assets for a document via source_ref -> asset_chunk -> asset."""
-    # Find the doc_version record for the current version
-    dv_result = await db.execute(
-        select(KnowledgeDocVersion.id).where(
-            KnowledgeDocVersion.doc_id == doc_id,
-            KnowledgeDocVersion.version == current_version,
-        )
-    )
-    dv_id = dv_result.scalar_one_or_none()
-    if dv_id is None:
-        return []
+async def _batch_load_source_assets(
+    db: AsyncSession, doc_version_pairs: list[tuple[uuid.UUID, int]]
+) -> dict[uuid.UUID, list[SourceAsset]]:
+    """Batch-load source assets for multiple docs in a single joined query."""
+    if not doc_version_pairs:
+        return {}
 
-    # Join source_ref -> asset_chunk -> asset
+    doc_ids = [pair[0] for pair in doc_version_pairs]
+
+    # Batch-load all relevant doc_version IDs
+    dv_q = select(KnowledgeDocVersion.id, KnowledgeDocVersion.doc_id).where(
+        KnowledgeDocVersion.doc_id.in_(doc_ids)
+    )
+    dv_rows = (await db.execute(dv_q)).all()
+
+    # Build a set of valid (doc_id -> version -> dv_id) and filter to matching versions
+    version_map = {pair[0]: pair[1] for pair in doc_version_pairs}
+    dv_id_to_doc: dict[uuid.UUID, uuid.UUID] = {}
+    dv_ids: list[uuid.UUID] = []
+    for row in dv_rows:
+        dv_id_to_doc[row.id] = row.doc_id
+        dv_ids.append(row.id)
+
+    if not dv_ids:
+        return {}
+
+    # Single joined query for all source assets
     q = (
-        select(Asset.id, Asset.filename, Asset.asset_type)
+        select(Asset.id, Asset.filename, Asset.asset_type, SourceRef.doc_version_id)
         .select_from(SourceRef)
         .join(AssetChunk, AssetChunk.id == SourceRef.asset_chunk_id)
         .join(Asset, Asset.id == AssetChunk.asset_id)
-        .where(SourceRef.doc_version_id == dv_id)
+        .where(SourceRef.doc_version_id.in_(dv_ids))
         .distinct()
     )
     rows = (await db.execute(q)).all()
 
-    return [
-        SourceAsset(asset_id=row.id, filename=row.filename, asset_type=row.asset_type)
-        for row in rows
-    ]
+    result: dict[uuid.UUID, list[SourceAsset]] = {}
+    for row in rows:
+        doc_id = dv_id_to_doc.get(row.doc_version_id)
+        if doc_id is None:
+            continue
+        result.setdefault(doc_id, []).append(
+            SourceAsset(asset_id=row.id, filename=row.filename, asset_type=row.asset_type)
+        )
+    return result
 
 
 @router.post(
@@ -108,21 +138,38 @@ async def agent_search(
         page_size=body.top_k,
     )
 
-    # Enrich each result with node_path and source_assets
+    # Batch-load all KnowledgeDocs by doc_id set
+    doc_ids = {r["doc_id"] for r in results}
+    if doc_ids:
+        doc_q = select(KnowledgeDoc).where(KnowledgeDoc.id.in_(doc_ids))
+        doc_result = await db.execute(doc_q)
+        docs_by_id = {d.id: d for d in doc_result.scalars().all()}
+    else:
+        docs_by_id = {}
+
+    # Batch-load architecture nodes iteratively (load all node_ids, then parents)
+    node_ids = {d.node_id for d in docs_by_id.values() if d.node_id is not None}
+    arch_nodes_by_id = await _batch_load_arch_nodes(db, node_ids) if node_ids else {}
+
+    # Batch-load source assets with a single joined query
+    doc_version_pairs = [
+        (d.id, d.current_version)
+        for d in docs_by_id.values()
+    ]
+    assets_by_doc = await _batch_load_source_assets(db, doc_version_pairs)
+
+    # Build enriched hits
     hits: list[AgentSearchHit] = []
     for r in results:
         doc_id = r["doc_id"]
+        doc = docs_by_id.get(doc_id)
 
-        # Get the doc record for node_id and current_version
-        doc_result = await db.execute(
-            select(KnowledgeDoc).where(KnowledgeDoc.id == doc_id)
-        )
-        doc = doc_result.scalar_one_or_none()
+        # Fix #9: skip deleted docs instead of using fallback
+        if doc is None:
+            continue
 
-        node_path = await _build_node_path(db, doc.node_id if doc else None)
-        source_assets = await _get_source_assets(
-            db, doc_id, doc.current_version if doc else 1
-        )
+        node_path = _build_node_path_from_cache(doc.node_id, arch_nodes_by_id)
+        source_assets = assets_by_doc.get(doc_id, [])
 
         hits.append(
             AgentSearchHit(
