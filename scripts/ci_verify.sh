@@ -65,7 +65,7 @@ run_check "Ruff format check" "python3 -m ruff format --check . --quiet" "false"
 echo ""
 echo "── Frontend Checks ──"
 if [ -d "apps/web" ]; then
-  run_check "TypeScript (tsc --noEmit)" "cd apps/web && npx tsc --noEmit" "false"
+  run_check "TypeScript (tsc --noEmit)" "cd apps/web && npx tsc --noEmit" "true"
 else
   echo "  (no frontend found, skipping)"
 fi
@@ -73,11 +73,15 @@ fi
 # ── Step 3: Backend Tests ──
 echo ""
 echo "── Backend Tests ──"
-if [ "$QUICK_MODE" = true ]; then
-  run_check "Smoke tests" "python3 -m pytest services/api/tests/ -x -q --timeout=30 2>/dev/null || python3 -m pytest services/api/tests/ -x -q"
-else
-  run_check "Full test suite" "python3 -m pytest services/api/tests/ -v --timeout=120 2>/dev/null || python3 -m pytest services/api/tests/ -v"
-fi
+for d in services/*/tests; do
+  [ -d "$d" ] || continue
+  SVC_NAME=$(basename "$(dirname "$d")")
+  if [ "$QUICK_MODE" = true ]; then
+    run_check "Tests: $SVC_NAME" "python3 -m pytest $d -x -q"
+  else
+    run_check "Tests: $SVC_NAME" "python3 -m pytest $d -v"
+  fi
+done
 
 # ── Step 4: Frontend Tests (full mode only) ──
 if [ "$QUICK_MODE" = false ] && [ -d "apps/web" ]; then
