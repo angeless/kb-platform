@@ -28,12 +28,18 @@ class Settings(BaseSettings):
     postgres_user: str = "postgres"
     postgres_password: str = "postgres"
     postgres_db: str = "kb_platform"
+    postgres_ssl: bool = False
+
+    @property
+    def _pg_ssl_suffix(self) -> str:
+        return "?ssl=require" if self.postgres_ssl else ""
 
     @property
     def database_url(self) -> str:
         return (
             f"postgresql+asyncpg://{self.postgres_user}:{self.postgres_password}"
             f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
+            f"{self._pg_ssl_suffix}"
         )
 
     @property
@@ -42,6 +48,7 @@ class Settings(BaseSettings):
         return (
             f"postgresql://{self.postgres_user}:{self.postgres_password}"
             f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
+            f"{self._pg_ssl_suffix}"
         )
 
     # Redis
