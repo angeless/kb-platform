@@ -92,6 +92,7 @@ export default function ProjectDetailPage() {
           { label: "任务", count: "—", href: `/projects/${projectId}/jobs` },
           { label: "检索", count: "—", href: `/projects/${projectId}/search` },
           { label: "Wiki", count: "—", href: `/projects/${projectId}/wiki` },
+          { label: "图谱", count: "—", href: `/projects/${projectId}/graph` },
           { label: "冲突", count: "—", href: `/projects/${projectId}/conflicts` },
           { label: "导出", count: "—", href: `/projects/${projectId}/exports` },
         ].map((stat) => (

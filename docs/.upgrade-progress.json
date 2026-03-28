@@ -1,9 +1,9 @@
 {
-  "upgrade_version": "1.14",
+  "upgrade_version": "1.18",
   "project_name": "KB Platform",
   "snapshot_commit": "0c228f86b5b2c94abbe11119ee68ae9a291490d7",
   "started_at": "2026-03-20T04:46:37+08:00",
-  "last_updated": "2026-03-24T12:00:00+08:00",
+  "last_updated": "2026-03-27T22:00:00+08:00",
   "current_stage": 7,
   "git_available": true,
   "stages": {
@@ -106,6 +106,16 @@
         "v1.14: 合并为统一版本基线",
         "CLAUDE.md 新增 docs/MEMORY.md 加载指令",
         "part0 新增铁律#21/#22 到 §0.5"
+      ]
+    },
+    {
+      "from": "1.14",
+      "to": "1.18",
+      "date": "2026-03-27",
+      "changes": [
+        "新增 docs/experience/common-errors.md（含 CE-001~CE-003 从 v0.43 审计中提炼的通用错误模式）",
+        "新增 scripts/replace-ui-spec-path.sh（UI 规范路径占位符自动替换脚本，v1.2 规范要求）",
+        "Skill v1.0-v1.3 全量特性已确认覆盖：gate-failures追踪/跨Session审计/功能性重构性删除规则/任务定义质量门禁/文件锁超时"
       ]
     }
   ]

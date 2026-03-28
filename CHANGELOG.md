@@ -8,6 +8,50 @@
 ### 新增 (Added)
 - 自动化开发工作流（dev-workflow-upgrade v1.3）
 
+## [0.43.5] - 2026-03-27
+
+### 验收
+- 全量回归通过：30 passed (ingestion) + 29 passed (frontend) + tsc 0 errors
+- 新功能验收：Word 解析 / OCR-ASR 报错 / Agent API / 知识图谱 全部 PASS
+- 验收报告：`docs/versions/v0.43-acceptance-report.md`
+
+## [0.43.4] - 2026-03-27
+
+### 新增
+- 知识图谱 API：`GET /v1/projects/{id}/graph` 返回节点+边数据（T-43-04-B）
+- 知识图谱前端：react-flow 交互图谱，节点按深度着色，点击跳转 Wiki（T-43-04-C/D/E）
+- 项目详情页新增"图谱"入口卡片（T-43-04-F）
+- GraphNode / GraphEdge / GraphResponse Pydantic schemas（T-43-04-A）
+
+## [0.43.3] - 2026-03-27
+
+### 新增
+- Agent 输出接口：API Key 认证 + `/v1/agent/search` + `/v1/agent/ask`（T-43-03-E）
+- API Key 管理：创建/列表/撤销端点 + 前端项目设置页 UI（T-43-03-C/F）
+- `api_key` 数据库表 + Alembic 迁移（T-43-03-A）
+- Agent API 接口文档 `docs/api/agent-api.md`（T-43-03-G）
+
+## [0.43.2] - 2026-03-27
+
+### 修复
+- OCR 解析器：依赖缺失（Pillow/pytesseract/Tesseract）时抛出 RuntimeError 而非静默返回空（T-43-02-A）
+- ASR 解析器：依赖缺失（whisper/ffmpeg）时抛出 RuntimeError 而非静默返回空（T-43-02-B）
+- 修复图片/音频上传后"任务成功但知识库无内容"的 P0 bug
+
+### 新增
+- ingestion-worker Dockerfile 补全系统依赖：tesseract-ocr + tesseract-ocr-chi-sim + ffmpeg（T-43-02-C）
+
+## [0.43.1] - 2026-03-27
+
+### 修复
+- Word 解析器：新增 word_parser.py，.docx 文件使用 python-docx 正确解析（T-43-01-A）
+- 解析器路由修正：`docx` → word_parser，`doc` 旧格式标记为 unsupported（T-43-01-B）
+- 修复 .docx 上传后数据丢失的 P0 bug（原因：.docx 被路由到 PDF 解析器）
+
+### 新增
+- Word 解析器支持 Heading 1/2/3 层级分组、超长文本自动拆分
+- 8 个 word_parser 单元测试
+
 ## [0.42.10] - 2026-03-24
 
 ### 验收
