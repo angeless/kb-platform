@@ -25,6 +25,19 @@ _CHECK_TIMEOUT = 1.0
 
 
 @router.get(
+    "/api/health",
+    summary="PA health check",
+    description="Health check endpoint for PA platform integration. Returns 200 when service is alive with timestamp.",
+    responses={200: {"description": "Service is healthy"}},
+)
+async def api_health():
+    """PA-compatible health check — returns status + timestamp."""
+    from datetime import datetime, timezone
+
+    return {"status": "ok", "timestamp": datetime.now(timezone.utc).isoformat()}
+
+
+@router.get(
     "/healthz",
     summary="Liveness probe",
     description="Lightweight liveness check. Always returns ok. Used by container orchestrators (e.g., K8s livenessProbe).",
