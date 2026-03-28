@@ -12,6 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared_models import Project
+from app.utils.math_utils import cosine_similarity
 
 
 class ProjectRouterService:
@@ -54,7 +55,7 @@ class ProjectRouterService:
 
             # Layer 2a: Embedding similarity against project profile
             if content_embedding and project.profile_embedding:
-                emb_score = _cosine_similarity(content_embedding, project.profile_embedding)
+                emb_score = cosine_similarity(content_embedding, project.profile_embedding)
                 if emb_score > 0.3:
                     reasons.append(f"语义相似度: {emb_score:.2f}")
 
@@ -106,15 +107,3 @@ class ProjectRouterService:
 
         candidates.sort(key=lambda x: x["confidence"], reverse=True)
         return candidates[:3]
-
-
-def _cosine_similarity(a: list, b: list) -> float:
-    """Compute cosine similarity between two vectors."""
-    if len(a) != len(b) or not a:
-        return 0.0
-    dot = sum(x * y for x, y in zip(a, b))
-    norm_a = sum(x * x for x in a) ** 0.5
-    norm_b = sum(x * x for x in b) ** 0.5
-    if norm_a == 0 or norm_b == 0:
-        return 0.0
-    return dot / (norm_a * norm_b)

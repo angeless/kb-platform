@@ -50,11 +50,13 @@ export function OnboardingGuide({ projectId }: OnboardingGuideProps) {
           const href = typeof step.href === "function"
             ? projectId ? step.href(projectId) : "#"
             : step.href;
+          const isDisabled = typeof step.href === "function" && !projectId;
           return (
             <Link
               key={step.label}
               href={href}
-              className="flex items-start gap-3 rounded-lg bg-white p-4 shadow-sm transition-shadow hover:shadow-md"
+              aria-disabled={isDisabled}
+              className={`flex items-start gap-3 rounded-lg bg-white p-4 shadow-sm transition-shadow hover:shadow-md ${isDisabled ? "pointer-events-none opacity-50" : ""}`}
             >
               <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white">
                 {step.icon}

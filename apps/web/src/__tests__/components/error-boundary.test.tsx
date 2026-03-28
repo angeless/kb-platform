@@ -1,3 +1,4 @@
+import React from "react";
 import { render, screen } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
 import { ErrorBoundary } from "@/components/error-boundary";
@@ -6,7 +7,7 @@ function GoodChild() {
   return <div>正常内容</div>;
 }
 
-function BadChild(): JSX.Element {
+function BadChild(): React.JSX.Element {
   throw new Error("渲染爆炸了");
 }
 

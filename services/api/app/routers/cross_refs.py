@@ -35,8 +35,8 @@ async def create_cross_ref(
 ):
     svc = CrossRefService(db, tenant_id)
     ref = await svc.create(
-        source_doc_id=uuid.UUID(body.source_doc_id),
-        target_doc_id=uuid.UUID(body.target_doc_id),
+        source_doc_id=body.source_doc_id,
+        target_doc_id=body.target_doc_id,
         relation_type=body.relation_type,
         confidence=body.confidence,
         note=body.note,
@@ -115,7 +115,7 @@ async def auto_suggest_cross_refs(
     tenant_id: uuid.UUID = Depends(get_tenant_id),
 ):
     svc = CrossRefService(db, tenant_id)
-    suggestions = await svc.auto_suggest(uuid.UUID(body.doc_id), body.max_results)
+    suggestions = await svc.auto_suggest(body.doc_id, body.max_results)
     return ListResponse(
         data=suggestions,
         meta=PaginationMeta(page=1, page_size=len(suggestions), total=len(suggestions)),

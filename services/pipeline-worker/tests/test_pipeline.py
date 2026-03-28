@@ -18,7 +18,7 @@ class TestClassifyChunks:
         db = MagicMock()
         db.execute.return_value.scalars.return_value.all.return_value = []
         result = classify_chunks(db, uuid.uuid4(), [])
-        assert result == {"new": [], "supplement": [], "correction": [], "conflict": []}
+        assert result == {"new": [], "supplement": [], "correction": [], "conflict": [], "restructure": []}
 
     @patch("worker.stages.classify.celery_app")
     def test_calls_orchestrator_via_celery(self, mock_celery):

@@ -75,11 +75,9 @@ describe("Cookie-based auth and token refresh", () => {
     expect(retryCall[1].credentials).toBe("include");
   });
 
-  it("redirects to /login on refresh failure", async () => {
-    Object.defineProperty(window, "location", {
-      writable: true,
-      value: { href: "/" },
-    });
+  it("dispatches session-expired event on refresh failure", async () => {
+    const expiredHandler = vi.fn();
+    window.addEventListener("session-expired", expiredHandler);
 
     // First call: 401
     fetchMock.mockResolvedValueOnce({
@@ -95,7 +93,9 @@ describe("Cookie-based auth and token refresh", () => {
     });
 
     await expect(api.get("/v1/documents")).rejects.toThrow("登录已过期，请重新登录");
-    expect(window.location.href).toBe("/login");
+    expect(expiredHandler).toHaveBeenCalledTimes(1);
+
+    window.removeEventListener("session-expired", expiredHandler);
   });
 
   it("does not refresh for auth endpoint 401", async () => {
@@ -144,7 +144,7 @@ describe("Cookie-based auth and token refresh", () => {
     expect(r1.data).toEqual({ result: "a" });
     expect(r2.data).toEqual({ result: "b" });
     const refreshCalls = fetchMock.mock.calls.filter(
-      (c: [string, RequestInit]) => c[0].includes("/v1/auth/refresh")
+      (c: any[]) => c[0].includes("/v1/auth/refresh")
     );
     expect(refreshCalls).toHaveLength(1);
   });

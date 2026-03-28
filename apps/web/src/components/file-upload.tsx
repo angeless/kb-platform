@@ -41,6 +41,8 @@ export function FileUpload({ projectId, onUploadComplete }: FileUploadProps) {
   const [items, setItems] = useState<UploadItem[]>([]);
   const [isDragOver, setIsDragOver] = useState(false);
   const abortControllers = useRef<Map<number, AbortController>>(new Map());
+  const itemsLengthRef = useRef(0);
+  itemsLengthRef.current = items.length;
 
   const updateItem = (index: number, update: Partial<UploadItem>) => {
     setItems((prev) =>
@@ -97,14 +99,14 @@ export function FileUpload({ projectId, onUploadComplete }: FileUploadProps) {
       });
       setItems((prev) => [...prev, ...newItems]);
 
-      const startIndex = items.length;
+      const startIndex = itemsLengthRef.current;
       for (let i = 0; i < newItems.length; i++) {
         if (newItems[i].status === "error") continue;
         await uploadFile(newItems[i].file, startIndex + i);
       }
       onUploadComplete();
     },
-    [items.length, projectId, onUploadComplete],
+    [projectId, onUploadComplete],
   );
 
   const handleDrop = useCallback(

@@ -4,6 +4,7 @@ Extends the IP-literal checks in url_fetcher.py with DNS resolution
 to prevent DNS rebinding attacks (e.g., evil.com resolving to 169.254.169.254).
 """
 
+import asyncio
 import ipaddress
 import socket
 from urllib.parse import urlparse
@@ -33,8 +34,8 @@ def _is_private_ip(ip_str: str) -> bool:
         return False
 
 
-def validate_import_url(url: str) -> None:
-    """Validate a URL for safe external fetching, including DNS resolution check.
+async def validate_import_url(url: str) -> None:
+    """Validate a URL for safe external fetching, including async DNS resolution check.
 
     Raises AppException if the URL points to internal/private infrastructure.
     """
@@ -61,9 +62,10 @@ def validate_import_url(url: str) -> None:
             message="不允许访问内网地址",
         )
 
-    # DNS resolution check — resolve hostname and verify all IPs are public
+    # Async DNS resolution check — resolve hostname and verify all IPs are public
+    loop = asyncio.get_event_loop()
     try:
-        addrinfo = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
+        addrinfo = await loop.getaddrinfo(hostname, None, family=socket.AF_UNSPEC, type=socket.SOCK_STREAM)
         for family, _type, _proto, _canonname, sockaddr in addrinfo:
             resolved_ip = sockaddr[0]
             if _is_private_ip(resolved_ip):

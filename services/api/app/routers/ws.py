@@ -70,6 +70,8 @@ async def ws_job_status(websocket: WebSocket, project_id: str):
     # Subscribe to Redis channel for this project
     channel_name = f"job_events:{project_id}"
 
+    redis_client = None
+    pubsub = None
     try:
         import redis.asyncio as aioredis
 
@@ -93,7 +95,9 @@ async def ws_job_status(websocket: WebSocket, project_id: str):
         logger.warning("WebSocket error: %s", e)
     finally:
         try:
-            await pubsub.unsubscribe(channel_name)
-            await redis_client.aclose()
+            if pubsub is not None:
+                await pubsub.unsubscribe(channel_name)
+            if redis_client is not None:
+                await redis_client.aclose()
         except Exception:
             pass

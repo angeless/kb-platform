@@ -8,6 +8,7 @@ import { MarkdownView } from "@/components/markdown-view";
 import { WikiToc } from "@/components/wiki-toc";
 import { WikiBreadcrumb } from "@/components/wiki-breadcrumb";
 import { SourceRefs } from "@/components/source-refs";
+import { useWikiScrollRef } from "@/components/wiki-scroll-context";
 
 interface SourceRef {
   id: string;
@@ -69,6 +70,7 @@ export default function WikiDocPage() {
   const projectId = params.id as string;
   const docId = params.docId as string;
   const contentRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useWikiScrollRef();
 
   const [doc, setDoc] = useState<DocDetail | null>(null);
   const [nodes, setNodes] = useState<ArchNode[]>([]);
@@ -96,8 +98,9 @@ export default function WikiDocPage() {
 
         // Load related docs + cross refs (non-critical)
         try {
-          const searchResp = await api.get<SearchHit[]>(
-            `/v1/search/hybrid?project_id=${projectId}&query=${encodeURIComponent(docResp.data.title)}&page_size=6`,
+          const searchResp = await api.post<SearchHit[]>(
+            "/v1/search/hybrid",
+            { project_id: projectId, query: docResp.data.title, page_size: 6 },
           );
           setRelated(searchResp.data.filter((h) => h.doc_id !== docId).slice(0, 5));
         } catch {
@@ -120,7 +123,7 @@ export default function WikiDocPage() {
   }, [projectId, docId]);
 
   if (isLoading) return <div className="py-12 text-center text-gray-400">加载中...</div>;
-  if (error || !doc) return <div className="py-12 text-center text-red-500">{error}</div>;
+  if (error || !doc) return <div className="py-12 text-center text-red-500">{error || "文档不存在"}</div>;
 
   const currentVer = doc.versions.find((v) => v.version === doc.current_version);
 
@@ -217,7 +220,7 @@ export default function WikiDocPage() {
       {/* TOC sidebar — hidden on mobile and tablet */}
       <aside className="hidden w-56 shrink-0 xl:block">
         <div className="sticky top-6">
-          <WikiToc contentRef={contentRef} />
+          <WikiToc contentRef={contentRef} scrollContainerRef={scrollContainerRef ?? undefined} />
         </div>
       </aside>
     </div>

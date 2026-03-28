@@ -1,6 +1,7 @@
 """Health check endpoints."""
 
 import asyncio
+import logging
 import time
 
 import boto3
@@ -14,6 +15,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.deps import get_db
 from shared_config.settings import get_settings
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["health"])
 

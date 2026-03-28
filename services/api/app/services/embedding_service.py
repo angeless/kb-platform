@@ -123,12 +123,12 @@ class EmbeddingService(TenantService):
                    d.title,
                    d.doc_type,
                    d.status,
-                   (e.embedding_vec <=> :query_vec::vector) AS distance
+                   (e.embedding_vec <=> CAST(:query_vec AS vector)) AS distance
             FROM doc_embedding e
             JOIN knowledge_doc d ON d.id = e.doc_id
             WHERE e.project_id = :project_id
               AND e.embedding_vec IS NOT NULL
-            ORDER BY e.embedding_vec <=> :query_vec::vector
+            ORDER BY e.embedding_vec <=> CAST(:query_vec AS vector)
             LIMIT :top_k
         """)
         result = await self.db.execute(
