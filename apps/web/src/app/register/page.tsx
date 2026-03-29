@@ -26,8 +26,24 @@ export default function RegisterPage() {
       setLocalError("请输入邮箱");
       return;
     }
-    if (password.length < 8 || !/[A-Z]/.test(password) || !/[0-9]/.test(password)) {
-      setLocalError("密码至少 8 位，需包含大写字母和数字");
+    if (password.length < 8) {
+      setLocalError("密码至少 8 位");
+      return;
+    }
+    if (!/[A-Z]/.test(password)) {
+      setLocalError("密码必须包含至少一个大写字母");
+      return;
+    }
+    if (!/[a-z]/.test(password)) {
+      setLocalError("密码必须包含至少一个小写字母");
+      return;
+    }
+    if (!/[0-9]/.test(password)) {
+      setLocalError("密码必须包含至少一个数字");
+      return;
+    }
+    if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>/?~`]/.test(password)) {
+      setLocalError("密码必须包含至少一个特殊字符（如 !@#$%）");
       return;
     }
     if (password !== confirmPassword) {
@@ -98,7 +114,7 @@ export default function RegisterPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
-                placeholder="至少 8 位，含大写字母和数字"
+                placeholder="至少 8 位，含大小写字母、数字和特殊字符"
               />
             </div>
 

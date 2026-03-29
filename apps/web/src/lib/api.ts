@@ -74,7 +74,7 @@ class ApiClient {
         const retryBody = await retryResp.json();
         if (!retryResp.ok) {
           const err = retryBody as ApiError;
-          throw new ApiClientError(getUserMessage(err.error_code, err.message), err.error_code, retryResp.status);
+          throw new ApiClientError(getUserMessage(err.error_code, err.message), err.error_code, retryResp.status, err.detail);
         }
         return retryBody as ApiResponse<T>;
       }
@@ -90,7 +90,7 @@ class ApiClient {
 
     if (!resp.ok) {
       const err = body as ApiError;
-      throw new ApiClientError(getUserMessage(err.error_code, err.message), err.error_code, resp.status);
+      throw new ApiClientError(getUserMessage(err.error_code, err.message), err.error_code, resp.status, err.detail);
     }
 
     return body as ApiResponse<T>;
@@ -131,6 +131,7 @@ export class ApiClientError extends Error {
     message: string,
     public errorCode: string,
     public statusCode: number,
+    public detail?: Record<string, unknown>,
   ) {
     super(message);
     this.name = "ApiClientError";

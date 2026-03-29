@@ -1,7 +1,7 @@
 # KB Platform v0.44 版本开发任务计划
 
 **文档编号**: PLAN-2026-03-28-v044
-**版本**: V2.0（代码核实版，读代码后修订）
+**版本**: V2.7（新增 v0.44.16 内部 tenant_id → kb_id 重命名）
 **日期**: 2026-03-28
 **基线 commit**: main HEAD (v0.43.5)
 **基线分支**: main
@@ -21,6 +21,25 @@
 > | ApiKey 表名 | `api_keys`（复数） | 实际表名 `api_key`（单数） |
 >
 > V1.0 的 14 个任务缩减为 V2.0 的 12 个任务（RBAC 和版本历史各减少 1 个"建表"任务）。
+
+> **V2.1 修订说明（审查合规性修复，7 项问题修复）**
+>
+> 对照 §2.5 规范逐条审查，修复 H-1×3（缺少 scope boundary）、H-2（GET /versions 权限 editor+ → viewer+）、H-3（JWT/role 获取路径不明确）、M-1（GET batch 返回结构缺失）、M-2（parent_id 假设未标注）。
+
+> **V2.2 修订说明（北极星过滤，W-007 SSE 移出，任务从 12 → 11）**
+>
+> W-007（SSE 进度推送）北极星三问不通过（属于 UX 优化，不强化核心链路），从 v0.44 移出，原 v0.44.8–v0.44.12 重新编号为 v0.44.8–v0.44.11。
+
+> **V2.3 修订说明（基于 v0.45 代码读取，补充已有能力 + 边界澄清）**
+>
+> 编写 v0.45 计划时系统读取了 `cross_refs.py`、`audit_service.py`、`audit.py`、`search.py`、`model_providers.py` 等文件，发现以下能力**在 v0.44 计划起草时已存在但未在 Chapter 1.2 中列出**：
+>
+> | 新增至已有能力清单 | 对 v0.44 的影响 |
+> |----------------|---------------|
+> | CrossReference CRUD API（`/v1/cross-refs`）完整实现 | v0.44.8/9 边界注释更精确：这两个任务只操作 `ArchitectureNode`，不涉及 `CrossReference` |
+> | `AuditService` + `GET /v1/audit-logs` 完整实现 | v0.44 各任务实现时无需自行建审计机制；v0.45.10 统一补全写入集成 |
+> | `POST /v1/search/hybrid`（混合检索端点）已实现 | W-003 gap 确认为纯前端，v0.45 范围 |
+> | 模型提供商 + 路由规则 CRUD（`/v1/model-providers`）已实现 | W-021 gap 确认为纯前端，v0.45 范围 |
 
 ---
 
@@ -44,6 +63,23 @@
 - **`services/ingestion-worker/worker/parsers/asr_parser.py`** — 使用本地 `openai-whisper`；支持格式：MP3/WAV/M4A/FLAC/OGG/WEBM（ffmpeg 解码）；已正确抛出 RuntimeError
 - **`services/api/app/routers/qa.py`** — QA 接口已实现 SSE 流式响应（`StreamingResponse` with `text/event-stream`），可作为 SSE 实现参考
 - **`packages/shared-models/shared_models/api_key.py`** — 表名 `api_key`（单数），字段：`project_id`, `tenant_id`, `name`, `key_hash`, `key_prefix`, `is_active`, `created_by`, `last_used_at`
+
+> **以下条目为 V2.3 新增（基于编写 v0.45 计划时的代码读取）：**
+
+- **`services/api/app/routers/cross_refs.py`** — CrossReference CRUD **完整实现**，v0.44 无需修改后端：
+  - `POST /v1/cross-refs`（创建关联，editor+）
+  - `GET /v1/cross-refs/doc/{doc_id}`（文档关联列表）
+  - `DELETE /v1/cross-refs/{ref_id}`（删除，editor+）
+  - `GET /v1/cross-refs/project/{project_id}/graph`（项目关联图数据）
+  - `POST /v1/cross-refs/auto-suggest`（AI 建议关联）
+  - CrossReference 字段：`source_doc_id`、`target_doc_id`、`relation_type`（枚举：`related/depends_on/extends/contradicts/supersedes`）、`confidence`、`note`、`created_by`
+- **`services/api/app/services/audit_service.py`** — `AuditService` 完整实现（`log()` + `list()`），v0.44 实现各任务时**无需重复建审计机制**；`audit_log` 表已存在；写入集成统一在 v0.45.10 补全
+- **`services/api/app/routers/audit.py`** — `GET /v1/audit-logs` 已实现（分页 + 过滤，`tenant_admin+`）
+- **`services/api/app/routers/search.py`** — 三个搜索端点均已实现（JWT 认证，非 API Key）：
+  - `POST /v1/search/text`（全文检索）
+  - `POST /v1/search/semantic`（pgvector）
+  - `POST /v1/search/hybrid`（混合搜索）— v0.45.1 前端切换目标
+- **`services/api/app/routers/model_providers.py`** — 模型提供商 + 路由规则 CRUD 完整实现（`tenant_admin+`）— v0.45.12 前端设置页的 API 来源
 
 ### 1.3 最小改动原则
 
@@ -78,6 +114,7 @@
 | W-005 | ASR 端到端打通 | **待验证**：parser 已有但完整链路未验证 | **有**：无 ASR 专有状态展示 |
 | W-007 | SSE 进度推送 | **有**：jobs 路由仍为轮询；无 SSE 端点 | **有**：仍为轮询 |
 | W-010 | 图谱节点合并/拆分 | **有**：无 ArchitectureNode 合并/拆分 API | **有**：图谱只读 |
+| W-011 | 图谱关系手动编辑 | **无**（CrossReference CRUD + auto-suggest 完整实现，v0.44 不需动后端） | **有**：图谱/文档页仅只读，无关联创建/删除 UI — **延后至 v0.45（v0.45.7/8）** |
 | W-015 | API 限流 + 用量统计 | **有**：`api_key` 无限速字段；无限流中间件；无用量记录 | **无** |
 
 ---
@@ -93,27 +130,27 @@
 | 任务版本号 | 任务名称 | 优先级 | 状态 |
 |----------|--------|------|------|
 | v0.44.1 | 前端 RBAC 感知（角色上下文 + 权限门控 UI） | P0 | Planned |
-| v0.44.2 | 前端用户管理页（邀请/改角色/移除，基于已有 API） | P0 | Planned |
+| v0.44.2 | 侧边栏隐藏"用户管理"入口（产品决策：v1 单用户场景，企业版再开放） | P0 | Planned |
 | v0.44.3 | 版本历史 API 补全（`GET /versions` 列表 + `POST /rollback`） | P0 | Planned |
 | v0.44.4 | 前端版本历史 UI（版本列表 + diff + 回滚） | P0 | Planned |
 | v0.44.5 | 批量导入后端（ZIP 解压 + 批量任务调度 + batch API） | P1 | Planned |
 | v0.44.6 | 前端批量导入 UI（拖拽上传 + 批次进度列表） | P1 | Planned |
 | v0.44.7 | ASR 端到端打通（验证 + 修复 + 前端状态展示） | P1 | Planned |
-| v0.44.8 | SSE 流水线进度推送（endpoint + pipeline-worker 推送 + 前端切换） | P1 | Planned |
-| v0.44.9 | 图谱 ArchitectureNode 合并/拆分 API | P1 | Planned |
-| v0.44.10 | 前端图谱编辑操作（选节点 + 合并/拆分面板） | P1 | Planned |
-| v0.44.11 | API Key 限流（Redis token bucket，per key 速率限制） | P1 | Planned |
-| v0.44.12 | API 用量统计（`api_usage_log` 表 + 查询端点） | P1 | Planned |
+| v0.44.8 | 图谱 ArchitectureNode 合并/拆分 API | P1 | Planned |
+| v0.44.9 | 前端图谱编辑操作（选节点 + 合并/拆分面板） | P1 | Planned |
+| v0.44.10 | API Key 限流（Redis token bucket，per key 速率限制） | P1 | Planned |
+| v0.44.11 | API 用量统计（`api_usage_log` 表 + 查询端点） | P1 | Planned |
 
 ### 3.3 明确不做的事项
 
 - ~~新建 RBAC 数据模型/中间件~~（已存在）
 - ~~新建版本历史数据表~~（已存在 `knowledge_doc_version`）
 - 项目级独立角色（user_project_roles 表）— 现有系统是 tenant-wide 角色，不在本版本引入 project-level 分层
-- 图谱关系手动编辑（W-011）— 延后
+- 图谱关系手动编辑（W-011）— CrossReference 后端 CRUD **已完整实现**（不需动后端），仅缺前端 UI；延后至 v0.45（v0.45.7 文档详情页关联面板 + v0.45.8 图谱页关系编辑）
 - 多人协作编辑（W-012）— 北极星明确不做
 - 多格式导出（W-006）— 延后
 - AI 对话式 RAG / 自动摘要（W-008/009）— 延后
+- **SSE 流水线进度推送（W-007）— 北极星三问不通过，属于 UX 优化，不在本版本做；保留轮询，放回 WISHLIST 候排**
 
 ---
 
@@ -129,9 +166,8 @@ P1 独立，可按顺序推进：
 
 v0.44.5 → v0.44.6    ← 批量导入（v0.44.6 依赖 v0.44.5 的 API）
 v0.44.7              ← ASR 独立
-v0.44.8              ← SSE 独立（参考 qa.py 已有实现）
-v0.44.9 → v0.44.10  ← 图谱编辑（v0.44.10 依赖 v0.44.9 的 API）
-v0.44.11 → v0.44.12 ← API 限流 + 统计（v0.44.12 可与 v0.44.11 同步进行）
+v0.44.8 → v0.44.9   ← 图谱编辑（v0.44.9 依赖 v0.44.8 的 API）
+v0.44.10 → v0.44.11 ← API 限流 + 统计（v0.44.11 可与 v0.44.10 同步进行）
 ```
 
 ---
@@ -244,67 +280,67 @@ v0.44.11 → v0.44.12 ← API 限流 + 统计（v0.44.12 可与 v0.44.11 同步�
 
 ---
 
-### v0.44.2: 前端用户管理页
+### v0.44.2: 侧边栏隐藏"用户管理"入口
 
 **任务版本号：** v0.44.2
 **优先级：** P0
-**前置依赖：** v0.44.1（需要角色上下文，否则无法控制页面访问）
+**前置依赖：** 无（独立改动，单文件）
 
 ---
 
-#### 背景与目标
+#### 背景与产品决策
 
-**后端现状（已有，无需修改）：**
-- `GET /v1/users` — 列出租户内所有用户（分页）
-- `POST /v1/users` — 邀请用户（入参：email + role）
-- `PATCH /v1/users/{id}` — 修改用户角色或状态
-- `DELETE /v1/users/{id}` — 软删除用户
-- 以上全部要求 `tenant_admin` 角色
+> **V2.6 重新定义（产品 Owner 确认，2026-03-28）**
+>
+> 当前 KB Platform v1 的使用场景是**单用户/单团队自管理**，每个注册账号拥有自己独立的知识库，不需要邀请其他成员共同管理。用户管理（邀请/改角色/移除）是企业级多人协作场景的功能，当前阶段暴露在侧边栏会造成困惑并无实际用途。
+>
+> **决策：v0.44 中将"用户管理"和"审计日志"从侧边栏完全移除，不做角色判断，直接不展示。页面文件保留，不删除，供未来企业版启用。**
 
-**目标（Goal）：**
-为 tenant_admin 提供用户管理页面，通过已有 API 完成邀请成员、修改角色、移除成员操作。
+**补充说明：**
+- 注册行为设计上会给每个注册者 `tenant_admin` 角色（因为你是自己知识库的主人），这是正确的
+- 两个独立注册的账号属于两个不同租户，后端已做严格 `tenant_id` 隔离，互相看不到对方数据
+- "用户管理"入口目前对所有人可见是因为侧边栏没有做任何角色过滤，这是侧边栏的问题，不是角色分配的问题
 
 ---
 
-#### 新增页面/组件
+#### 修改内容
 
-**新增页面：** `apps/web/app/settings/users/page.tsx`（路径待确认，与现有 settings 路由结构对齐）
+**`apps/web/src/components/sidebar.tsx`**
 
-**页面功能：**
-1. 成员列表：邮箱、角色标签、状态（active/inactive）、邀请时间
-2. "邀请成员" 按钮（tenant_admin 可见）→ Modal：输入邮箱 + 下拉选角色（不含 tenant_admin，防止越权）
-3. 每行操作：
-   - 修改角色（下拉，tenant_admin 可见）
-   - 移除成员（确认对话框，tenant_admin 可见）
-4. 自身不可修改/删除自己的角色（前端校验）
+当前 `settingsItems` 数组：
+```
+{ label: "模型配置", href: "/settings/models", icon: "🤖" },
+{ label: "用户管理", href: "/settings/users", icon: "👥" },   ← 移除
+{ label: "审计日志", href: "/settings/audit", icon: "📋" },   ← 移除
+```
 
-**新增组件：**
-- `apps/web/components/UserManagement/InviteModal.tsx`
-- `apps/web/components/UserManagement/UserTable.tsx`
+修改后：
+```
+{ label: "模型配置", href: "/settings/models", icon: "🤖" },
+```
+
+> 如果"系统管理"分组只剩一项，可考虑去掉分组标题，直接放入主导航，具体由实现时判断。
 
 ---
 
 #### 验收标准
 
-- [ ] tenant_admin 登录后，导航中可进入用户管理页
-- [ ] 用户列表正确展示成员邮箱、角色、状态
-- [ ] 邀请新成员：输入 email + 选角色 → 提交 → 列表刷新 → 新成员出现
-- [ ] 修改成员角色：下拉选择新角色 → 保存 → 角色标签更新
-- [ ] 移除成员：确认对话框 → 确认 → 成员从列表中消失
-- [ ] 非 tenant_admin 用户无法访问该页面（跳转到 403 或首页）
+- [ ] 登录后侧边栏中不出现"用户管理"和"审计日志"入口
+- [ ] 直接访问 `/settings/users` 仍可正常打开（页面保留，不删除）
+- [ ] 侧边栏其余项目（项目、模型配置）行为不变
 
 ---
 
 #### 工作范围
 
 **包含：**
-- `apps/web/app/settings/users/page.tsx`
-- `apps/web/components/UserManagement/` 组件
-- 导航栏中添加用户管理入口（tenant_admin 可见）
+- `apps/web/src/components/sidebar.tsx`（修改，移除两个 settingsItems 条目）
 
-**不包含：**
+**明确不包含：**
+- 删除 `/settings/users/page.tsx`（保留，未来企业版使用）
+- 删除 `/settings/audit/page.tsx`（保留）
+- 角色判断逻辑（不做条件判断，直接不展示）
 - 任何后端修改
-- SSO / 批量导入用户 / 用户注册流程修改
 
 ---
 
@@ -690,99 +726,9 @@ v0.44.11 → v0.44.12 ← API 限流 + 统计（v0.44.12 可与 v0.44.11 同步�
 
 ---
 
-### v0.44.8: SSE 流水线进度推送
+### v0.44.8: 图谱 ArchitectureNode 合并/拆分 API
 
 **任务版本号：** v0.44.8
-**优先级：** P1
-**前置依赖：** 无（独立任务；参考 `qa.py` 的 `StreamingResponse` 实现）
-
----
-
-#### 需求定义
-
-**目标（Goal）：**
-为流水线任务新增 SSE 端点，pipeline-worker 在每个 stage 完成时向 Redis 发布消息，API 层订阅后推送给前端，替换现有的客户端轮询。
-
----
-
-#### 新增 API 端点
-
-| 端点 | 方法 | 权限 | 说明 |
-|-----|------|------|------|
-| `/v1/jobs/{job_id}/stream` | GET | JWT 认证 (`viewer+`) | SSE 流，推送 job 状态变化 |
-
-**SSE 事件格式（参照 qa.py 已有 `text/event-stream` 实现）：**
-```
-event: progress
-data: {"job_id": "uuid", "stage": "stage_3_classify", "progress_pct": 33, "message": "正在分类知识条目..."}
-
-event: completed
-data: {"job_id": "uuid", "knowledge_doc_count": 12}
-
-event: failed
-data: {"job_id": "uuid", "error": "ASR provider timeout"}
-
-event: heartbeat
-data: {}
-```
-
-**推送机制：**
-- Redis channel：`job_progress:{job_id}`
-- pipeline-worker 在每个 stage 完成时：`redis.publish(f"job_progress:{job_id}", json.dumps(payload))`
-- API SSE endpoint：订阅该 channel，逐条转换为 SSE event 推送
-- 无消息超过 30 秒时推送 `heartbeat` 事件
-- job 结束（completed/failed）后，服务端主动关闭连接
-- 连接最长保持 10 分钟
-
----
-
-#### pipeline-worker 变更
-
-**改动范围：** `services/pipeline-worker/` 内各 stage 完成处，追加 `redis.publish()` 调用
-
-> Phase 1 必须先读 pipeline-worker 代码，确认：
-> 1. 当前 stage 实现结构（是否有统一的 stage 完成回调？还是每个 stage 独立文件？）
-> 2. pipeline-worker 是否已有 Redis 客户端可复用
-> 根据实际结构决定最小改动方式，不重构 stage 架构。
-
----
-
-#### 前端变更
-
-- 现有轮询代码（`setInterval` + `GET /v1/jobs/{id}`）→ 替换为 `EventSource('/v1/jobs/{job_id}/stream')`
-- `EventSource` 原生支持自动重连
-- 收到 `completed` 或 `failed` 事件后，关闭 `EventSource`
-- heartbeat 30s 无响应时视为超时，显示提示
-
----
-
-#### 验收标准
-
-- [ ] 触发流水线后，`Network` 面板中出现 SSE 连接（`/v1/jobs/{id}/stream`），无重复轮询 GET
-- [ ] 前端进度随 stage 推送实时更新（不等待全部完成）
-- [ ] job 完成后 SSE 连接自动关闭
-- [ ] 30 秒 heartbeat 正常推送
-- [ ] 现有 `GET /v1/jobs/{id}` 轮询端点保留（不删除，兼容其他调用方）
-
----
-
-#### 工作范围
-
-**包含：**
-- `services/api/app/routers/jobs.py`（或等效路由文件）— 新增 `GET /v1/jobs/{job_id}/stream` SSE 端点
-- `services/pipeline-worker/` — 各 stage 完成处追加 `redis.publish()` 调用（Phase 1 先读确认改动点）
-- `apps/web/` — 将现有轮询替换为 `EventSource`
-
-**不包含（延后）：**
-- WebSocket 实现（本版本仅做 SSE，不引入 WebSocket 基础设施）
-- 删除现有轮询端点 `GET /v1/jobs/{id}`（保留，兼容其他调用方）
-- 批量 job 进度聚合推送（仅单个 job 的 stream）
-
----
-
-### v0.44.9: 图谱 ArchitectureNode 合并/拆分 API
-
-**任务版本号：** v0.44.9
 **优先级：** P1
 **前置依赖：** 无（独立后端任务）
 
@@ -889,13 +835,15 @@ data: {}
 - 任何数据库 migration（无新表）
 - `CrossReference` 的处理（合并/拆分后跨文档引用保持原样，不强制更新）
 
+> ⚠️ **边界说明（V2.3 新增）**：`CrossReference` CRUD API（`/v1/cross-refs`）**已完整实现**，v0.44.8 不涉及 CrossReference 的任何修改。v0.44.8 操作的对象是 `ArchitectureNode`（架构分类节点），与跨文档关联层完全独立。
+
 ---
 
-### v0.44.10: 前端图谱编辑操作
+### v0.44.9: 前端图谱编辑操作
 
-**任务版本号：** v0.44.10
+**任务版本号：** v0.44.9
 **优先级：** P1
-**前置依赖：** v0.44.9（API 可用）
+**前置依赖：** v0.44.8（API 可用）
 
 ---
 
@@ -943,15 +891,15 @@ data: {}
 - `apps/web/components/Graph/NodeSplitPanel.tsx`（新建）
 
 **不包含（延后）：**
-- 图谱边（CrossReference）的手动编辑与审核（W-011，独立版本）
+- 图谱边（CrossReference）的手动编辑与审核（W-011）— CrossReference 后端 CRUD 已完整实现，仅缺前端 UI，**已在 v0.45 规划（v0.45.7 文档详情页关联面板 + v0.45.8 图谱页关系编辑）**。v0.44.9 不实现 CrossReference 相关的任何前端逻辑。
 - ArchitectureNode 重命名/描述修改（非本任务，可通过已有后端接口处理，不在此次 UI 中引入）
 - 合并/拆分的撤销（Undo）功能
 
 ---
 
-### v0.44.11: API Key 限流
+### v0.44.10: API Key 限流
 
-**任务版本号：** v0.44.11
+**任务版本号：** v0.44.10
 **优先级：** P1
 **前置依赖：** 无（独立任务；依赖 v0.43.3 已有的 `get_api_key_project` 依赖函数）
 
@@ -978,9 +926,14 @@ data: {}
 
 #### 限流实现
 
-**新增文件：** `services/api/app/middleware/rate_limiter.py`
+> ⚠️ **V2.4 修正（冲突修复）**
+>
+> 原计划拟新建 `middleware/rate_limiter.py`，但 `services/api/app/middleware/rate_limit.py` 已存在完整生产级限流中间件（Redis 滑动窗口 + 本地内存 fallback，已全局注册于 `main.py`）。
+> 若再新建同名文件将造成命名冲突和逻辑重复。
+>
+> **修正方案：不新建独立文件，在 `agent.py` 两个端点的依赖链中内联 per-key Redis INCR（约 15 行），与全局 `rate_limit.py` 完全并列、互不影响。**
 
-**算法：** 滑动窗口计数（用 Redis INCR + TTL 模拟）
+**算法：** 固定窗口计数（用 Redis INCR + TTL 模拟）
 
 **Redis Key 格式：** `rl:api:{api_key_id}:{unix_timestamp_minute}`
 （每个整分钟一个 Key，TTL = 120 秒，避免时钟偏差导致 Key 过早过期）
@@ -989,10 +942,10 @@ data: {}
 1. 请求到达 `/v1/agent/*`，提取 `api_key.id` 和 `rate_limit_per_minute`
 2. 若 `rate_limit_per_minute == 0`，跳过限流
 3. 否则：`count = INCR rl:api:{api_key_id}:{minute}`；首次 INCR 时设置 TTL = 120s
-4. 若 `count > rate_limit_per_minute`：返回 429 + header `Retry-After: {60 - current_second}` + 错误码 `RATE_LIMIT_EXCEEDED`
+4. 若 `count > rate_limit_per_minute`：返回 429 + header `Retry-After: {60 - current_second}` + 错误码 `SYSTEM_RATE_LIMITED`（复用 `shared_errors.codes.SYSTEM_RATE_LIMITED`，不新增枚举值）
 5. 否则：放行
 
-**接入方式：** 在 `services/api/app/routers/agent.py` 的两个端点依赖链中注入 rate limiter（而不是全局 middleware，避免影响其他路由）
+**接入方式：** 在 `services/api/app/routers/agent.py` 的两个端点依赖链中内联限流逻辑（而不是全局 middleware，避免影响其他路由）
 
 ---
 
@@ -1013,20 +966,22 @@ data: {}
 **包含：**
 - `infra/sql/alembic/` — migration（`api_key` 表新增字段）
 - `packages/shared-models/shared_models/api_key.py` — 新增 `rate_limit_per_minute` 字段
-- `services/api/app/middleware/rate_limiter.py`（新建）
-- `services/api/app/routers/agent.py` — 注入限流依赖
-- `packages/shared-errors/` — 注册 `RATE_LIMIT_EXCEEDED`
+- `services/api/app/routers/agent.py` — 内联 per-key 限流逻辑（约 15 行，复用 Redis client）
+
+**不新增：**
+- `services/api/app/middleware/rate_limiter.py`（❌ 与已有 `rate_limit.py` 冲突，禁止新建）
+- `packages/shared-errors/` 中的 `RATE_LIMIT_EXCEEDED`（❌ 复用已有 `SYSTEM_RATE_LIMITED`，不新增枚举值）
 
 **不包含：**
 - 管理员修改 API Key 限流值的 UI（已有 `PATCH /v1/api-keys/{id}` 可覆盖，若不存在则作为衍生建议）
 
 ---
 
-### v0.44.12: API 用量统计
+### v0.44.11: API 用量统计
 
-**任务版本号：** v0.44.12
+**任务版本号：** v0.44.11
 **优先级：** P1
-**前置依赖：** v0.44.11（限流中间件已建立，可在同位置追加统计逻辑）
+**前置依赖：** v0.44.10（限流中间件已建立，可在同位置追加统计逻辑）
 
 ---
 
@@ -1109,6 +1064,297 @@ data: {}
 
 ---
 
+### v0.44.12: Q&A 对话界面
+
+**任务版本号：** v0.44.12
+**优先级：** P1
+**前置依赖：** 无（后端 `POST /v1/qa/ask` 已完整实现，含 SSE streaming + 非流式模式）
+
+---
+
+#### 需求定义
+
+**目标（Goal）：**
+为已有的 Q&A 后端接口提供前端对话页面，让用户可以在项目内用自然语言向知识库提问，并看到流式回答。
+
+**已有（代码确认）：**
+- `POST /v1/qa/ask`：JWT 认证，支持 `stream=true`（SSE `StreamingResponse`）和 `stream=false`（普通 JSON）
+- `QAService.ask_stream()`：已实现，RAG 检索 + LLM 生成
+- 无任何前端 Q&A 页面
+
+---
+
+#### 新增页面
+
+**新增页面：** `apps/web/src/app/(dashboard)/projects/[id]/qa/page.tsx`
+
+**页面功能：**
+1. 消息列表区：用户问题（右侧气泡）+ AI 回答（左侧气泡，SSE 流式渲染）
+2. 输入框 + 发送按钮（支持 Enter 发送）
+3. 发送时调用 `POST /v1/qa/ask`（`stream=true`），逐 token 更新 AI 气泡内容
+4. 回答完成后在气泡底部展示引用来源（`sources[]` 字段）
+5. 对话历史保存在组件 state（刷新即清空，不持久化）
+6. 空状态文案：「向本项目的知识库提问，AI 将基于已有文档回答」
+
+**项目首页新增入口：**
+- 在 `projects/[id]/page.tsx` 的 9 个 tile 中添加"问答"tile（第 10 个，或替换"—"最多的 tile 之一）
+- Sidebar 当前无项目级子导航，不改动 sidebar（侧边栏改动属于 v0.44.1 范围）
+
+---
+
+#### 验收标准
+
+- [ ] 进入 `/projects/{id}/qa`，看到空对话界面和引导文案
+- [ ] 输入问题发送，AI 回答以流式方式逐字出现（不是一次性加载）
+- [ ] 流式过程中发送按钮变为"等待中"禁用状态
+- [ ] 回答结束后展示 sources（若有）
+- [ ] 网络错误时在 AI 气泡处显示错误提示，不崩溃
+
+---
+
+#### 工作范围
+
+**包含：**
+- `apps/web/src/app/(dashboard)/projects/[id]/qa/page.tsx`（新建）
+- `apps/web/src/app/(dashboard)/projects/[id]/page.tsx`（修改，新增问答入口 tile）
+
+**不包含：**
+- 对话历史持久化（后端无接口，留 v0.46）
+- 多轮对话上下文传递（v0.46）
+- 模型选择 UI
+
+---
+
+### v0.44.13: 首次体验修复
+
+**任务版本号：** v0.44.13
+**优先级：** P0（影响新用户首次印象，是系统"能不能用"的感知问题）
+**前置依赖：** 无（纯前端改动）
+
+---
+
+#### 需求定义
+
+**目标（Goal）：**
+修复新用户首次使用时遇到的三个具体迷惑点：项目首页仪表板全是"—"、不知道资料在哪里上传、新建项目表单不知道填什么。
+
+**问题列表（代码核实）：**
+
+| 问题 | 根因 | 修复方案 |
+|-----|------|---------|
+| **[P0-Critical] 上传文件后永远卡在"等待中"，无法处理** | `FileUpload` 组件上传成功后未调用任何 Job 创建接口；asset 记录 `parse_status="pending"` 后无人触发；Celery ingestion-worker 需收到 `ingest` Job 才会工作 | 上传成功后立即调用 `POST /v1/jobs`（`job_type="ingest"`, `asset_id`），自动触发解析；资料列表页为已解析完成的 asset 增加"运行流水线"按钮（`job_type="pipeline"`） |
+| 项目首页 9 个 tile，8 个显示"—" | `projects/[id]/page.tsx` 只请求了 assets，其余 tile 无数据 | 并发请求 docs / architectures / jobs count，展示实际数字 |
+| 不知道去哪里上传资料 | 无明显 CTA；"资料"tile 看起来和其他 tile 一样，且显示"—" | assets=0 时在项目首页展示醒目"上传第一份资料"卡片 |
+| 新建项目"行业（可选）"不知所云 | placeholder 文字太短，没有说明用途 | 加说明文字：「帮助 AI 更准确地理解文档内容，例如：医疗、金融、教育、法律」 |
+| OnboardingGuide 消失后再也看不到 | 基于 localStorage，关掉即永久不见 | 改为：无项目时始终显示（移除 localStorage 逻辑）；有项目后自动不显示 |
+
+---
+
+#### 修改清单
+
+**1. `apps/web/src/components/file-upload.tsx`** ← **最优先**
+- 上传成功后（`status: "done"`）立即调用 `POST /v1/jobs`：`{ project_id, job_type: "ingest", asset_id: <新asset的id> }`
+- 上传接口返回值 `AssetOut` 含 `id`，可直接使用
+- 成功触发后在文件项目旁显示"解析中..."提示
+
+**2. `apps/web/src/app/(dashboard)/projects/[id]/assets/page.tsx`**
+- 资产列表新增操作列：`parse_status="done"` 的 asset 显示"▶ 运行流水线"按钮 → `POST /v1/jobs`（`job_type="pipeline"`, `asset_id`）
+- 解析中（`parse_status="processing"`）显示 spinner
+- 等待中（`parse_status="pending"`）显示"⏳ 等待解析"（说明原因，不让用户困惑）
+
+**3. `apps/web/src/app/(dashboard)/projects/[id]/page.tsx`**
+- 并发请求 `GET /v1/docs?project_id={id}&page=1&page_size=1` → `meta.total` = 文档数
+- 并发请求 `GET /v1/projects/{id}/architectures` → `.length` = 架构数
+- 并发请求 `GET /v1/jobs?project_id={id}&page=1&page_size=1` → `meta.total` = 任务数
+- assets=0 时，"最近资料"区域改为醒目的空状态卡，含"立即上传"大按钮（跳转 `/projects/{id}/assets`）
+
+**4. `apps/web/src/app/(dashboard)/projects/page.tsx`**
+- 新建项目表单"行业（可选）"input 下方添加说明文字：`帮助 AI 更准确地理解文档内容，例如：医疗、金融、教育、法律`
+- placeholder 改为"例如：医疗、金融、教育"
+
+**5. `apps/web/src/components/onboarding-guide.tsx`**
+- 移除 localStorage 相关逻辑（`STORAGE_KEY` / `useEffect` / `handleDismiss`）
+- 改为：`props.hasProjects === false` 时显示，否则不显示
+- `ProjectsPage` 传入 `hasProjects={projects.length > 0}`
+
+---
+
+#### 验收标准
+
+- [ ] **[Critical]** 上传一个 PDF 文件，上传完成后资产列表该文件旁出现"解析中..."，"任务"tile 数字变为 1
+- [ ] **[Critical]** 进入资产列表，`parse_status="done"` 的文件显示"▶ 运行流水线"按钮，点击后任务数增加
+- [ ] 进入任意已有内容的项目，首页 tile 均显示数字，无"—"
+- [ ] 进入空项目（无资料），"最近资料"区域显示"立即上传"大按钮
+- [ ] 新建项目表单"行业"字段有说明文字，placeholder 有示例
+- [ ] 首次访问（无项目时）OnboardingGuide 正常展示
+- [ ] 创建第一个项目后，OnboardingGuide 自动不再显示
+
+---
+
+#### 工作范围
+
+**包含：**
+- `apps/web/src/components/file-upload.tsx`（修改，上传后自动触发 ingest job）
+- `apps/web/src/app/(dashboard)/projects/[id]/assets/page.tsx`（修改，新增流水线触发按钮）
+- `apps/web/src/app/(dashboard)/projects/[id]/page.tsx`（修改，加载真实统计数据）
+- `apps/web/src/app/(dashboard)/projects/page.tsx`（修改，表单说明文字）
+- `apps/web/src/components/onboarding-guide.tsx`（修改，移除 localStorage 逻辑）
+
+**不包含：**
+- sidebar 的角色隔离（属于 v0.44.1 范围）
+- 设置页重复路由清理（标注为已知问题，记为衍生建议）
+- 后端流水线本身的任何改动（纯前端触发补全）
+
+---
+
+### v0.44.14: 审计日志上报 PA 中台
+
+**任务版本号：** v0.44.14
+**优先级：** P0
+**前置依赖：** ⚠️ **硬性阻塞：PA 中台需提供日志收集接口规范（URL / 鉴权方式 / 字段格式）后方可开发**
+
+---
+
+#### 需求定义
+
+**目标（Goal）：**
+将 KB Platform 的服务端操作审计日志和客户端行为日志上报给 PA 中台，便于统一 debug 和用户行为分析。
+
+**范围：**
+- **服务端日志**：`AuditService.log()` 写完本地 `audit_log` 表后，异步推送给 PA 中台日志收集接口
+- **客户端日志**：浏览器端关键用户行为（页面切换、上传、Q&A 发问）+ 未捕获的前端错误，推送给 PA 中台前端日志接口
+
+**现状（代码确认）：**
+- `AuditService.log()` 目前仅做 `INSERT INTO audit_log`，无任何外部推送
+- 前端无任何日志上报逻辑
+- PA 中台日志 API 规范：**未知，待 PA 团队提供**
+
+---
+
+#### 待确认事项（开发前必须明确）
+
+| 问题 | 说明 |
+|-----|------|
+| PA 日志收集 URL | 服务端和客户端是同一个接口还是两个？ |
+| 鉴权方式 | API Key？JWT？mTLS？ |
+| 推送字段格式 | 哪些字段是必填的？字段命名规范？ |
+| 推送失败策略 | 失败是否重试？是否允许丢弃（fire-and-forget）？ |
+| 客户端日志级别 | 只要 error，还是也要 info/warn？ |
+
+---
+
+#### 实现方向（规范确认后细化）
+
+**服务端：**
+- `AuditService.log()` 写入本地 DB 后，启动 `asyncio.create_task()` 异步 HTTP POST 给 PA 接口
+- 推送失败不影响主流程（fire-and-forget），但记录本地 warning 日志
+- 新增 `PA_LOG_ENDPOINT` / `PA_LOG_API_KEY` 环境变量（`shared-config` 中注册）
+
+**客户端：**
+- 新建 `apps/web/src/lib/pa-logger.ts`：封装 PA 日志上报函数
+- 在 `apps/web/src/app/layout.tsx` 注册全局 `window.onerror` + `unhandledrejection` 监听
+- 关键操作节点（上传完成、Q&A 发问、登录）调用 `paLogger.track(event, payload)`
+
+---
+
+#### 验收标准
+
+- [ ] 上传一个文件，PA 中台日志控制台可查到对应的 `upload` 事件记录
+- [ ] 前端触发一个 JS 错误，PA 中台可查到错误上报
+- [ ] PA 中台接口不可达时，KB 服务端和前端均不崩溃，本地流程正常继续
+- [ ] 不上报任何用户密码、JWT token、API Key 等敏感字段
+
+---
+
+#### 工作范围
+
+**包含：**
+- `packages/shared-config/` — 新增 `PA_LOG_ENDPOINT`、`PA_LOG_API_KEY` 配置项
+- `services/api/app/services/audit_service.py` — 修改，log() 后追加异步推送
+- `apps/web/src/lib/pa-logger.ts`（新建）
+- `apps/web/src/app/layout.tsx` — 修改，注册全局错误监听
+
+**不包含：**
+- 修改 `audit_log` 本地表结构
+- 日志持久化队列 / 重试机制（先做 fire-and-forget，复杂版本留衍生）
+
+---
+
+### v0.44.15: 登录接入 PAPass
+
+**任务版本号：** v0.44.15
+**优先级：** P0
+**前置依赖：** ⚠️ **硬性阻塞：PA 中台需提供 PAPass OAuth2 / OIDC 接入文档（授权端点 / Token 端点 / Client ID 申请流程）后方可开发**
+
+---
+
+#### 需求定义
+
+**目标（Goal）：**
+将 KB Platform 的登录认证从自建 email+JWT 体系切换为 PAPass（PA 中台统一账号），用户通过 PAPass 登录后自动获得 KB 访问权限，无需单独注册 KB 账号。
+
+**现状（代码确认）：**
+- KB 当前认证：完全自建（`/register` → 创建 Tenant + User → 返回 JWT）
+- 无任何 OAuth / OIDC / SSO 代码
+- PAPass 接入文档：**未知，待 PA 团队提供**
+
+---
+
+#### 架构影响评估
+
+这是 KB 最大范围的单次改动之一，涉及：
+
+| 模块 | 影响 |
+|-----|------|
+| `services/api/app/routers/auth.py` | 废弃 `/register`、`/login`、`/refresh`；改为 OAuth 回调处理 |
+| `services/api/app/services/auth_service.py` | 重写认证流程：PAPass token 换取 KB 内部 JWT |
+| `packages/shared-models/` `User` 模型 | 新增 `papass_user_id`、`papass_access_token` 字段；Alembic migration |
+| Tenant 创建逻辑 | 首次 PAPass 登录时自动创建对应 Tenant（或由 PA 提供 tenant 映射） |
+| 前端登录页 | 替换为"使用 PAPass 登录"按钮 → 跳转 PAPass 授权页 |
+| JWT payload | 需包含 PAPass identity 信息，各 API 依赖不变 |
+
+**预估工作量：** 大（建议排在 v0.44 最后执行，或单独开一个 v0.44.15 分支并行）
+
+---
+
+#### 待确认事项（开发前必须明确）
+
+| 问题 | 说明 |
+|-----|------|
+| PAPass 协议类型 | OAuth2 Authorization Code Flow？OIDC？SAML？ |
+| 授权端点 / Token 端点 URL | 正式环境和测试环境各是什么？ |
+| Client ID 和 Client Secret | 需要向 PA 中台申请，申请流程？ |
+| Scope | 需要哪些 scope？用户信息 API 返回哪些字段？ |
+| Tenant 映射方式 | PAPass 的组织 ID 如何对应 KB 的 Tenant ID？ |
+| 现有 KB 账号迁移 | 已有 email 注册的用户数据如何处理？ |
+
+---
+
+#### 验收标准
+
+- [ ] 访问 KB 登录页，点击"使用 PAPass 登录"，跳转到 PAPass 授权页
+- [ ] PAPass 授权完成后，自动跳回 KB 并进入已登录状态
+- [ ] 首次登录自动创建 KB Tenant + User（对应 PAPass 身份）
+- [ ] 已有 KB email 账号在迁移期间的访问策略明确（兼容期 or 强制切换）
+- [ ] KB 内部 JWT 中 `tenant_id` 隔离逻辑不变
+
+---
+
+#### 工作范围
+
+**包含（规范确认后细化）：**
+- `services/api/app/routers/auth.py` — 重写
+- `services/api/app/services/auth_service.py` — 重写
+- `packages/shared-models/shared_models/user.py` — 新增 PAPass 字段 + migration
+- `apps/web/src/app/login/page.tsx` — 替换为 PAPass 跳转按钮
+- `apps/web/src/stores/auth-store.ts` — 适配新认证流程
+
+**不包含：**
+- 自建账号注销/迁移工具（留衍生）
+- MFA / 二次验证（由 PAPass 侧负责）
+
+---
+
 ## 第六章 实现约束
 
 ### 6.1 目录规范
@@ -1127,6 +1373,14 @@ data: {}
 - Asset 状态字段：`parse_status`（不是 `status`）
 - API Key 表名：`api_key`（单数）
 - 新增表命名：遵循单数（`batch_import`、`batch_import_asset`、`api_usage_log`）
+
+> **V2.3 新增（避免与已有表/字段冲突）：**
+
+- CrossReference 表名：`cross_reference`（单数）— 已存在，v0.44 不新建
+- CrossReference `relation_type` 枚举值：`related`、`depends_on`、`extends`、`contradicts`、`supersedes`（固定枚举，不可随意扩展）
+- 审计日志表名：`audit_log`（单数）— 已存在，v0.44 各任务不重复创建
+- 模型提供商表名：`model_provider`（单数）— 已存在
+- 模型路由表名：`model_route`（单数）— 已存在
 
 ### 6.3 权限约束
 
@@ -1159,7 +1413,7 @@ data: {}
 ## 第九章 版本号管理
 
 - 参考 `dev-governance-part1-version.md` §1.1–§1.4
-- 本版本 12 个任务，版本号 `0.44.1` ~ `0.44.12`
+- 本版本 15 个任务，版本号 `0.44.1` ~ `0.44.15`
 
 ---
 
@@ -1183,10 +1437,10 @@ data: {}
 |-----|-----------|------|
 | v0.44.5 | `batch_import` | 批量导入批次记录 |
 | v0.44.5 | `batch_import_asset` | 批次内文件关联 |
-| v0.44.11 | `api_key.rate_limit_per_minute` | 已有表新增字段 |
-| v0.44.12 | `api_usage_log` | API Key 调用日志 |
+| v0.44.10 | `api_key.rate_limit_per_minute` | 已有表新增字段 |
+| v0.44.11 | `api_usage_log` | API Key 调用日志 |
 
-**合计：** 3 张新表 + 1 个已有表新增字段（相比 V1.0 草稿减少 3 张错误规划的表）
+**合计：** 3 张新表 + 1 个已有表新增字段
 
 ---
 
@@ -1212,11 +1466,14 @@ data: {}
 | v0.44.5 | 批量导入后端 | P1 | — | Planned |
 | v0.44.6 | 前端批量导入 UI | P1 | — | Planned |
 | v0.44.7 | ASR 端到端打通 | P1 | — | Planned |
-| v0.44.8 | SSE 流水线进度推送 | P1 | — | Planned |
-| v0.44.9 | 图谱 ArchitectureNode 合并/拆分 API | P1 | — | Planned |
-| v0.44.10 | 前端图谱编辑操作 | P1 | — | Planned |
-| v0.44.11 | API Key 限流 | P1 | — | Planned |
-| v0.44.12 | API 用量统计 | P1 | — | Planned |
+| v0.44.8 | 图谱 ArchitectureNode 合并/拆分 API | P1 | — | Planned |
+| v0.44.9 | 前端图谱编辑操作 | P1 | — | Planned |
+| v0.44.10 | API Key 限流 | P1 | — | Planned |
+| v0.44.11 | API 用量统计 | P1 | — | Planned |
+| v0.44.12 | Q&A 对话界面 | P1 | — | Planned |
+| v0.44.13 | 首次体验修复（仪表板统计 + 上传引导 + 表单说明） | P0 | — | Planned |
+| v0.44.14 | 审计日志上报 PA 中台（服务端 + 客户端） | P0 | — | Blocked（待 PA 接口规范） |
+| v0.44.15 | 登录接入 PAPass（OAuth/OIDC 统一账号） | P0 | — | Blocked（待 PAPass 接入文档 + tenant_id 映射方案确认） |
 
 ---
 
@@ -1227,6 +1484,10 @@ data: {}
 | 2026-03-27 | V1.0 初稿，未读代码（草稿） | 产品 Owner |
 | 2026-03-28 | V2.0 全面修订：读代码核实后发现 5 处错误假设，RBAC 和版本历史各减少 1 个建表任务，总任务从 14 → 12，字段名全面修正 | 产品 Owner |
 | 2026-03-28 | V2.1 规范审查修复：补 v0.44.4/v0.44.8/v0.44.10 的"不包含"边界段落（H-1）；修正 GET /versions 权限 editor+ → viewer+ 并加决策注释（H-2）；v0.44.1 补 JWT/me 三分支明确处理（H-3）；补 GET /batch-import/{batch_id} 返回结构（M-1）；v0.44.9 合并 parent_id 假设加注（M-2） | 产品 Owner |
+| 2026-03-28 | V2.2 北极星过滤：砍出 W-007 SSE 进度推送（UX 优化，北极星三问不通过）；总任务 12 → 11；原 v0.44.9~v0.44.12 重编号为 v0.44.8~v0.44.11 | 产品 Owner |
+| 2026-03-28 | V2.4 冲突修复：v0.44.10 移除新建 `rate_limiter.py`（与已有 `rate_limit.py` 冲突），改为在 `agent.py` 内联 per-key Redis INCR；错误码改用 `SYSTEM_RATE_LIMITED`（不新增 `RATE_LIMIT_EXCEEDED`）。 | 产品 Owner |
+| 2026-03-28 | V2.5 新增任务 + 现状修正：① 新增 v0.44.12（Q&A 对话界面，后端 `POST /v1/qa/ask` SSE 已完整实现，仅缺前端）；② 新增 v0.44.13（首次体验修复：上传后自动触发 ingest job [P0-Critical]、仪表板统计、上传引导、表单说明、OnboardingGuide 修复）；③ v0.44.2 路径修正回滚；总任务数 11 → 13。 | 产品 Owner |
+| 2026-03-28 | V2.6 产品决策 v0.44.2：将"用户管理入口隐藏"替换原"补全邀请/改角色/移除"方案。v1 单用户场景不需要用户管理；页面文件保留供企业版使用；侧边栏同步移除"审计日志"入口。 | 产品 Owner |
 
 ---
 

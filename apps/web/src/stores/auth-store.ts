@@ -54,7 +54,16 @@ export const useAuthStore = create<AuthState>((set) => ({
       // Register does not return tokens / set cookies — user must login after registration
       set({ isLoading: false });
     } catch (e) {
-      const msg = e instanceof ApiClientError ? e.message : "注册失败";
+      let msg = "注册失败";
+      if (e instanceof ApiClientError) {
+        msg = e.message;
+        // If the server returned field-level validation errors, show the first one
+        const fields = e.detail?.fields as Record<string, string> | undefined;
+        if (fields) {
+          const firstField = Object.values(fields)[0];
+          if (firstField) msg = firstField;
+        }
+      }
       set({ error: msg, isLoading: false });
       throw e;
     }

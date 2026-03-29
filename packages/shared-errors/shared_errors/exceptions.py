@@ -70,12 +70,19 @@ def register_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(RequestValidationError)
     async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+        # Extract user-friendly field errors from Pydantic validation
+        field_errors: dict[str, str] = {}
+        for err in exc.errors():
+            loc = err.get("loc", ())
+            # Skip the first element ("body") to get the field name
+            field = ".".join(str(p) for p in loc[1:]) if len(loc) > 1 else str(loc[-1]) if loc else "unknown"
+            field_errors[field] = str(err.get("msg", ""))
         return JSONResponse(
             status_code=422,
             content={
                 "error_code": ErrorCode.VALIDATION_ERROR,
                 "message": "提交的信息有误，请检查后重试",
-                "detail": {},
+                "detail": {"fields": field_errors},
                 "meta": {"request_id": getattr(request.state, "request_id", None)},
             },
         )
