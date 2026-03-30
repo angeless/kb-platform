@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { StatusBadge } from "@/components/status-badge";
+import { PermissionGuard } from "@/components/PermissionGuard";
 import { useDocs } from "@/hooks/useDocs";
 
 export default function ProjectDocsPage() {
@@ -72,11 +73,13 @@ export default function ProjectDocsPage() {
                     <td className="px-5 py-3"><StatusBadge status={doc.status} /></td>
                     <td className="px-5 py-3">
                       <div className="flex gap-2">
-                        {doc.status === "draft" && (
-                          <Link href={`/docs/${doc.id}/edit`} className="text-xs text-primary-600 hover:underline">
-                            编辑
-                          </Link>
-                        )}
+                        <PermissionGuard action="edit">
+                          {doc.status === "draft" && (
+                            <Link href={`/docs/${doc.id}/edit`} className="text-xs text-primary-600 hover:underline">
+                              编辑
+                            </Link>
+                          )}
+                        </PermissionGuard>
                         {doc.current_version > 1 && (
                           <Link href={`/docs/${doc.id}/diff?from=1&to=${doc.current_version}`} className="text-xs text-gray-500 hover:underline">
                             对比

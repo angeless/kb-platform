@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { api, ApiClientError } from "@/lib/api";
 import { StatusBadge } from "@/components/status-badge";
+import { PermissionGuard } from "@/components/PermissionGuard";
 import { RejectModal } from "@/components/reject-modal";
 
 interface Doc {
@@ -211,27 +212,33 @@ export default function ReviewQueuePage() {
         <div className="mb-4 flex items-center gap-3 rounded-lg bg-primary-50 px-4 py-3">
           <span className="text-sm font-medium text-primary-700">已选 {selected.size} 篇</span>
           {tab === "draft" && (
-            <button
-              onClick={() => handleBatchAction("review")}
-              className="rounded bg-primary-600 px-3 py-1 text-xs font-medium text-white hover:bg-primary-700"
-            >
-              批量提交审核
-            </button>
+            <PermissionGuard action="edit">
+              <button
+                onClick={() => handleBatchAction("review")}
+                className="rounded bg-primary-600 px-3 py-1 text-xs font-medium text-white hover:bg-primary-700"
+              >
+                批量提交审核
+              </button>
+            </PermissionGuard>
           )}
           {tab === "reviewing" && (
             <>
-              <button
-                onClick={() => handleBatchAction("publish")}
-                className="rounded bg-green-600 px-3 py-1 text-xs font-medium text-white hover:bg-green-700"
-              >
-                批量通过
-              </button>
-              <button
-                onClick={() => setShowReject(true)}
-                className="rounded bg-red-600 px-3 py-1 text-xs font-medium text-white hover:bg-red-700"
-              >
-                批量驳回
-              </button>
+              <PermissionGuard action="publish">
+                <button
+                  onClick={() => handleBatchAction("publish")}
+                  className="rounded bg-green-600 px-3 py-1 text-xs font-medium text-white hover:bg-green-700"
+                >
+                  批量通过
+                </button>
+              </PermissionGuard>
+              <PermissionGuard action="publish">
+                <button
+                  onClick={() => setShowReject(true)}
+                  className="rounded bg-red-600 px-3 py-1 text-xs font-medium text-white hover:bg-red-700"
+                >
+                  批量驳回
+                </button>
+              </PermissionGuard>
             </>
           )}
           <button

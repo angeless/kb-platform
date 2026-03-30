@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { api, ApiClientError } from "@/lib/api";
 import { StatusBadge } from "@/components/status-badge";
+import { PermissionGuard } from "@/components/PermissionGuard";
 import { MarkdownView } from "@/components/markdown-view";
 
 interface SourceRef {
@@ -105,18 +106,24 @@ export default function DocDetailPage() {
       <div className="mb-6 flex gap-2">
         {doc.status === "draft" && (
           <>
-            <Link href={`/docs/${docId}/edit`} className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700">
-              编辑内容
-            </Link>
-            <button onClick={() => handleAction("review")} className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
-              提交审核
-            </button>
+            <PermissionGuard action="edit">
+              <Link href={`/docs/${docId}/edit`} className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700">
+                编辑内容
+              </Link>
+            </PermissionGuard>
+            <PermissionGuard action="edit">
+              <button onClick={() => handleAction("review")} className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
+                提交审核
+              </button>
+            </PermissionGuard>
           </>
         )}
         {doc.status === "reviewing" && (
-          <button onClick={() => handleAction("publish")} className="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700">
-            发布
-          </button>
+          <PermissionGuard action="publish">
+            <button onClick={() => handleAction("publish")} className="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700">
+              发布
+            </button>
+          </PermissionGuard>
         )}
         {doc.current_version > 1 && (
           <Link href={`/docs/${docId}/diff?from=1&to=${doc.current_version}`} className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">

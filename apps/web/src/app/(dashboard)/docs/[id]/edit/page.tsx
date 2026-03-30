@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { api, ApiClientError } from "@/lib/api";
 import { MarkdownView } from "@/components/markdown-view";
+import { PermissionGuard } from "@/components/PermissionGuard";
 
 interface DocDetail {
   id: string;
@@ -151,13 +152,15 @@ export default function DocEditPage() {
       </div>
 
       <div className="mt-4 flex gap-3">
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="rounded-lg bg-primary-600 px-6 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50"
-        >
-          {saving ? "保存中..." : "保存新版本"}
-        </button>
+        <PermissionGuard action="edit">
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="rounded-lg bg-primary-600 px-6 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50"
+          >
+            {saving ? "保存中..." : "保存新版本"}
+          </button>
+        </PermissionGuard>
         <button onClick={handleNavigateBack} className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50">
           取消
         </button>

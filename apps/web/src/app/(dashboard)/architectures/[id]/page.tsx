@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { api, ApiClientError } from "@/lib/api";
 import { StatusBadge } from "@/components/status-badge";
+import { PermissionGuard } from "@/components/PermissionGuard";
 import { TreeNode, buildTree, type TreeNodeData } from "@/components/tree-node";
 import { NodePanel } from "@/components/node-panel";
 
@@ -95,19 +96,23 @@ export default function ArchitectureDetailPage() {
             <span className="text-sm text-gray-400">v{arch.version}</span>
           </div>
           <div className="flex gap-2">
-            <button
-              onClick={() => setShowAddForm(!showAddForm)}
-              className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
-            >
-              + 新增节点
-            </button>
-            {arch.status === "draft" && (
+            <PermissionGuard action="edit">
               <button
-                onClick={handlePublish}
-                className="rounded-lg bg-primary-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-700"
+                onClick={() => setShowAddForm(!showAddForm)}
+                className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
               >
-                发布架构
+                + 新增节点
               </button>
+            </PermissionGuard>
+            {arch.status === "draft" && (
+              <PermissionGuard action="edit">
+                <button
+                  onClick={handlePublish}
+                  className="rounded-lg bg-primary-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-700"
+                >
+                  发布架构
+                </button>
+              </PermissionGuard>
             )}
           </div>
         </div>

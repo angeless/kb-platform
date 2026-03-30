@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { api, ApiClientError } from "@/lib/api";
+import { PermissionGuard } from "@/components/PermissionGuard";
 
 interface Project {
   id: string;
@@ -165,13 +166,15 @@ export default function ProjectSettingsPage() {
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
             />
           </div>
-          <button
-            type="submit"
-            disabled={saving}
-            className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50"
-          >
-            {saving ? "保存中..." : "保存"}
-          </button>
+          <PermissionGuard action="manage_project">
+            <button
+              type="submit"
+              disabled={saving}
+              className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50"
+            >
+              {saving ? "保存中..." : "保存"}
+            </button>
+          </PermissionGuard>
         </form>
       </div>
 
@@ -191,13 +194,15 @@ export default function ProjectSettingsPage() {
             placeholder="Key 名称（如：生产环境）"
             className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
           />
-          <button
-            onClick={handleCreateKey}
-            disabled={creatingKey || !newKeyName.trim()}
-            className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50"
-          >
-            {creatingKey ? "创建中..." : "创建 Key"}
-          </button>
+          <PermissionGuard action="manage_project">
+            <button
+              onClick={handleCreateKey}
+              disabled={creatingKey || !newKeyName.trim()}
+              className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50"
+            >
+              {creatingKey ? "创建中..." : "创建 Key"}
+            </button>
+          </PermissionGuard>
         </div>
 
         {/* Key List */}
@@ -216,14 +221,16 @@ export default function ProjectSettingsPage() {
                   {k.last_used_at && <span>最近使用: {new Date(k.last_used_at).toLocaleDateString()}</span>}
                   <span>{new Date(k.created_at).toLocaleDateString()}</span>
                   {k.is_active && (
-                    revokeId === k.id ? (
-                      <span className="flex items-center gap-1">
-                        <button onClick={() => handleRevokeKey(k.id)} className="text-red-600 hover:underline">确认撤销</button>
-                        <button onClick={() => setRevokeId(null)} className="text-gray-500 hover:underline">取消</button>
-                      </span>
-                    ) : (
-                      <button onClick={() => setRevokeId(k.id)} className="text-red-500 hover:underline">撤销</button>
-                    )
+                    <PermissionGuard action="manage_project">
+                      {revokeId === k.id ? (
+                        <span className="flex items-center gap-1">
+                          <button onClick={() => handleRevokeKey(k.id)} className="text-red-600 hover:underline">确认撤销</button>
+                          <button onClick={() => setRevokeId(null)} className="text-gray-500 hover:underline">取消</button>
+                        </span>
+                      ) : (
+                        <button onClick={() => setRevokeId(k.id)} className="text-red-500 hover:underline">撤销</button>
+                      )}
+                    </PermissionGuard>
                   )}
                 </div>
               </div>
@@ -262,6 +269,7 @@ export default function ProjectSettingsPage() {
       )}
 
       {/* Danger Zone */}
+      <PermissionGuard action="delete_project">
       <div className="rounded-xl border border-red-200 bg-white p-6 shadow-sm">
         <h2 className="mb-2 text-lg font-semibold text-red-600">危险区域</h2>
         <p className="mb-4 text-sm text-gray-500">删除项目后，所有资料、文档、架构将不可恢复。</p>
@@ -291,6 +299,7 @@ export default function ProjectSettingsPage() {
           </div>
         )}
       </div>
+      </PermissionGuard>
     </div>
   );
 }
