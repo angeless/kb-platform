@@ -7,6 +7,7 @@
 
 ### 新增 (Added)
 - 自动化开发工作流（dev-workflow-upgrade v1.3）
+- 前端 RBAC 权限感知：usePermission hook + PermissionGuard 组件，按角色隐藏操作按钮（v0.44.1）
 
 ## [0.43.5] - 2026-03-27
 
