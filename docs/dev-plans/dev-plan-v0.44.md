@@ -41,6 +41,12 @@
 > | `POST /v1/search/hybrid`（混合检索端点）已实现 | W-003 gap 确认为纯前端，v0.45 范围 |
 > | 模型提供商 + 路由规则 CRUD（`/v1/model-providers`）已实现 | W-021 gap 确认为纯前端，v0.45 范围 |
 
+> **V2.7 修订说明（新增 v0.44.16，总任务 15 → 16）**
+>
+> 产品 Owner 确认：将 KB 内部所有 `tenant_id` 字段重命名为 `kb_id`，覆盖数据库列（Alembic migration）、ORM 模型、所有 service / router / dep、JWT payload 及前端。
+> PA 侧（PA 中台、PAPass）字段名不变，KB 向 PA 上报时须将 `kb_id` 映射为 PA 约定字段名（待 PA 提供规范后在 v0.44.14/15 实现时确认）。
+> 此任务影响全仓库，属于高风险重构，执行时须逐文件确认，并覆盖 tenant 隔离的回归测试。
+
 ---
 
 ## 第一章 开发管理（总原则）
@@ -140,6 +146,11 @@
 | v0.44.9 | 前端图谱编辑操作（选节点 + 合并/拆分面板） | P1 | Planned |
 | v0.44.10 | API Key 限流（Redis token bucket，per key 速率限制） | P1 | Planned |
 | v0.44.11 | API 用量统计（`api_usage_log` 表 + 查询端点） | P1 | Planned |
+| v0.44.12 | Q&A 对话界面（`POST /v1/qa/ask` 已有后端，补前端） | P1 | Planned |
+| v0.44.13 | 首次体验修复（[P0-Critical] 上传触发 ingest job + 仪表板真实统计 + 上传引导 + 表单说明） | P0 | Planned |
+| v0.44.14 | 审计日志上报 PA 中台（服务端 + 客户端） | P0 | Blocked（待 PA 接口规范） |
+| v0.44.15 | 登录接入 PAPass（OAuth/OIDC 统一账号） | P0 | Blocked（待 PAPass 接入文档） |
+| v0.44.16 | KB 内部 `tenant_id` 全面重命名为 `kb_id`（DB migration + ORM + service/router/dep + JWT + 前端） | P1 | Planned |
 
 ### 3.3 明确不做的事项
 
@@ -168,6 +179,15 @@ v0.44.5 → v0.44.6    ← 批量导入（v0.44.6 依赖 v0.44.5 的 API）
 v0.44.7              ← ASR 独立
 v0.44.8 → v0.44.9   ← 图谱编辑（v0.44.9 依赖 v0.44.8 的 API）
 v0.44.10 → v0.44.11 ← API 限流 + 统计（v0.44.11 可与 v0.44.10 同步进行）
+v0.44.12             ← Q&A 对话界面（独立纯前端）
+v0.44.13             ← 首次体验修复（独立纯前端，含 P0-Critical 上传触发 bug）
+
+⚠️  Blocked（待 PA 接口文档）：
+v0.44.14             ← 审计日志上报 PA 中台
+v0.44.15             ← 登录接入 PAPass
+
+P1 独立（可穿插执行，建议在 v0.44.14/15 解除阻塞前完成）：
+v0.44.16             ← KB 内部 tenant_id → kb_id 全量重命名（高风险重构，须单独分支）
 ```
 
 ---
@@ -1280,78 +1300,340 @@ v0.44.10 → v0.44.11 ← API 限流 + 统计（v0.44.11 可与 v0.44.10 同步�
 
 ---
 
-### v0.44.15: 登录接入 PAPass
+### v0.44.15: 登录接入 Pass（PA 中台统一账号）
 
 **任务版本号：** v0.44.15
 **优先级：** P0
-**前置依赖：** ⚠️ **硬性阻塞：PA 中台需提供 PAPass OAuth2 / OIDC 接入文档（授权端点 / Token 端点 / Client ID 申请流程）后方可开发**
+**前置依赖：** ✅ Pass 接入文档已提供（V1.0，2026-03-23）；所有技术问题已澄清（Q1-Q6）
+**运维前置（非代码阻塞）：** 需 PA 管理员创建 KB 产品并提供 `productId`；需运维确认生产环境 Pass API 域名
 
 ---
 
 #### 需求定义
 
 **目标（Goal）：**
-将 KB Platform 的登录认证从自建 email+JWT 体系切换为 PAPass（PA 中台统一账号），用户通过 PAPass 登录后自动获得 KB 访问权限，无需单独注册 KB 账号。
+将 KB Platform 的登录认证从自建 email+bcrypt+KB-JWT 体系切换为 Pass（PA 中台统一账号），使用 Pass JWT 作为唯一认证凭据。用户在 KB 登录/注册时，KB 后端代理调用 Pass API，Pass 签发 JWT，KB 存入 httpOnly cookie 并基于 Pass JWT 验证所有后续请求。
 
-**现状（代码确认）：**
-- KB 当前认证：完全自建（`/register` → 创建 Tenant + User → 返回 JWT）
-- 无任何 OAuth / OIDC / SSO 代码
-- PAPass 接入文档：**未知，待 PA 团队提供**
+**核心机制：**
+- 认证信任根在 Pass 服务端，KB 不再自签 JWT
+- KB 通过 `GET /pass/me`（Bearer Pass-JWT）验证 token 有效性并获取用户身份
+- KB 本地 User 表通过 `pass_id` 字段关联 Pass 账号，存储 KB 内部的 `tenant_id` 和 `role`
+- KB 与 Pass 之间只传 `passId`（UUID）和 `productId`，不传 KB 内部的 `tenant_id`
+
+**现状（代码确认 2026-03-28）：**
+- KB 当前认证：完全自建（`auth_service.py` → bcrypt 校验 → `create_access_token()` 本地签发 JWT）
+- JWT payload：`{ sub: user_id, tenant_id, role, exp, iat }`
+- `get_current_user()`：从 cookie/header 取 JWT → `decode_access_token()` 本地验签 → `SELECT User WHERE id = sub`
+- 前端：email+password 表单 → `POST /v1/auth/login` → httpOnly cookie → `GET /v1/auth/me`
+- `RefreshToken` 表存储 refresh token hash，支持吊销
+
+---
+
+#### Pass 接入文档摘要（PA 中台提供）
+
+| API | 方法 | 用途 |
+|-----|------|------|
+| `/api/v1/pass/register` | POST | 注册 Pass 账号（需 productId, email/phone, password, displayName） |
+| `/api/v1/pass/login` | POST | 登录（需 productId, email/phone, password）→ 返回 `{ passId, token, expiresAt, productBindings }` |
+| `/api/v1/pass/refresh` | POST | 刷新 token（Bearer 旧 token）→ 返回 `{ token, expiresAt }` |
+| `/api/v1/pass/me` | GET | 验证 token + 获取账号信息（Bearer token）→ 返回 `{ passId, email, phone, displayName, avatarUrl, productBindings }` |
+
+**Pass JWT 格式：** `audience: "pass"`, `sub: "pass:{passAccountId}"`
+**Token 有效期：** 默认 3600 秒（1 小时），由 PA 侧 `AUTH_TOKEN_TTL_SECONDS` 控制
+**Pass API 限流：** 当前无限流（PA 侧待办项），KB 中期应加 Redis 缓存
+**密码策略：** Pass 要求 8-128 位无复杂度限制，KB 的强校验（大小写+数字+特殊字符）完全兼容
+**错误码：** PA-7001（不存在）、PA-7003（已注册）、PA-7004（已封禁）
+
+---
+
+#### 架构设计
+
+**登录流程：**
+
+```
+用户输入 email + password
+    ↓
+KB 前端 POST /v1/auth/login { email, password }（不变）
+    ↓
+KB 后端 auth_service.py:
+    1. 调用 Pass API: POST {PASS_BASE_URL}/api/v1/pass/login
+       body: { productId: KB_PRODUCT_ID, email, password }
+    2. Pass 返回 { passId, token, expiresAt, productBindings }
+       ├─ 401 → 凭证无效 → 抛 UnauthorizedException
+       ├─ PA-7004 (403) → 账号封禁 → 抛 ForbiddenException("账号已被封禁，请联系管理员")
+       └─ 200 → 继续
+    3. 查本地 User: SELECT * FROM user WHERE pass_id = :passId
+       ├─ 存在 → 使用该 User
+       └─ 不存在 → 首次登录，自动创建：
+          a) 创建 Tenant(name=email, status="active")
+          b) 创建 User(pass_id=passId, email=email, role="tenant_admin", tenant_id=tenant.id)
+          c) 不设 password_hash（密码由 Pass 管理）
+    4. 将 Pass JWT（token）存入 httpOnly cookie "access_token"
+    5. 将 expiresAt 存入 httpOnly cookie（或由 cookie max_age 控制）
+    6. 返回前端（前端无感知差异）
+```
+
+**请求验证流程（每个 API 请求）：**
+
+```
+get_current_user():
+    1. 从 cookie/header 取出 Pass JWT
+    2. 调用 Pass API: GET {PASS_BASE_URL}/api/v1/pass/me
+       Header: Authorization: Bearer <pass_jwt>
+       ├─ 401 → token 无效/过期 → 抛 UnauthorizedException
+       └─ 200 → 返回 { passId, email, ... }
+    3. SELECT * FROM user WHERE pass_id = :passId
+       → 拿到 tenant_id、role（KB 内部概念）
+    4. 返回 User 对象
+    （中期优化：Redis 缓存 pass_jwt_hash → User 映射，TTL 5 分钟）
+```
+
+**Token 刷新流程：**
+
+```
+KB /v1/auth/refresh:
+    1. 从 cookie 取出当前 Pass JWT
+    2. 调用 Pass API: POST {PASS_BASE_URL}/api/v1/pass/refresh
+       Header: Authorization: Bearer <pass_jwt>
+    3. Pass 返回新 { token, expiresAt }
+    4. 更新 httpOnly cookie
+    5. 返回前端
+    （KB 本地 RefreshToken 表不再使用，可保留但不写入新记录）
+```
+
+**注册流程：**
+
+```
+KB /v1/auth/register:
+    1. 调用 Pass API: POST {PASS_BASE_URL}/api/v1/pass/register
+       body: { productId: KB_PRODUCT_ID, email, password, displayName }
+    2. Pass 返回 { passId, token, expiresAt, productBinding }
+       ├─ PA-7003 (409) → 已注册 → 抛 ConflictException
+       └─ 201 → 继续
+    3. 创建 KB Tenant + User（pass_id=passId, role=tenant_admin）
+    4. 将 Pass JWT 存入 httpOnly cookie（注册即登录）
+    5. 返回前端
+```
 
 ---
 
 #### 架构影响评估
 
-这是 KB 最大范围的单次改动之一，涉及：
-
-| 模块 | 影响 |
-|-----|------|
-| `services/api/app/routers/auth.py` | 废弃 `/register`、`/login`、`/refresh`；改为 OAuth 回调处理 |
-| `services/api/app/services/auth_service.py` | 重写认证流程：PAPass token 换取 KB 内部 JWT |
-| `packages/shared-models/` `User` 模型 | 新增 `papass_user_id`、`papass_access_token` 字段；Alembic migration |
-| Tenant 创建逻辑 | 首次 PAPass 登录时自动创建对应 Tenant（或由 PA 提供 tenant 映射） |
-| 前端登录页 | 替换为"使用 PAPass 登录"按钮 → 跳转 PAPass 授权页 |
-| JWT payload | 需包含 PAPass identity 信息，各 API 依赖不变 |
-
-**预估工作量：** 大（建议排在 v0.44 最后执行，或单独开一个 v0.44.15 分支并行）
+| 模块 | 影响 | 改动量 |
+|-----|------|-------|
+| `services/api/app/services/auth_service.py` | 核心改动：`login()` / `register()` / `refresh()` 改为代理 Pass API；新增 `PassClient` HTTP 客户端；移除本地 bcrypt 校验和 JWT 签发 | 大 |
+| `services/api/app/deps.py` | `get_current_user()` 改为：调用 Pass `/me` 验证 → 按 `pass_id` 查 User（替代本地 JWT decode） | 中 |
+| `services/api/app/routers/auth.py` | 适配新 auth_service 接口；`register` 改为注册即登录（设 cookie）；移除 `forgot-password` / `reset-password`（由 Pass 管理密码） | 中 |
+| `packages/shared-models/shared_models/user.py` | 新增 `pass_id: Mapped[str | None]`（VARCHAR(255), nullable, 索引）；`password_hash` 改为 nullable | 小 |
+| `infra/sql/alembic/` | 新增 migration：`ADD COLUMN pass_id` + `ALTER password_hash DROP NOT NULL` + `CREATE INDEX ix_user_pass_id` | 小 |
+| `packages/shared-config/shared_config/settings.py` | 新增：`pass_base_url`、`kb_product_id` | 小 |
+| `packages/shared-schemas/shared_schemas/auth.py` | `RegisterRequest` 移除 `tenant_name`，新增可选 `display_name`；其余不变 | 小 |
+| `packages/shared-errors/` | 新增 Pass 错误码映射：PA-7001→404, PA-7003→409, PA-7004→403 | 小 |
+| `apps/web/src/app/register/page.tsx` | "团队名称"字段改为可选的"昵称"字段 | 小 |
+| `apps/web/src/app/login/page.tsx` | 不变（仍是 email+password 表单，调用同一 KB 后端） | 无 |
+| `apps/web/src/stores/auth-store.ts` | `register()` 参数从 `(tenantName, email, password)` 改为 `(email, password, displayName?)`；注册后自动登录状态 | 小 |
+| `apps/web/src/lib/api.ts` | 401 重试逻辑不变（仍调 KB `/v1/auth/refresh`，KB 后端代理 Pass refresh） | 无 |
+| `services/api/app/utils/security.py` | `create_access_token()` / `decode_access_token()` 不再被 auth 流程调用，但 **保留**（可能被其他模块使用） | 无 |
 
 ---
 
-#### 待确认事项（开发前必须明确）
+#### 待确认事项（Q1-Q6 已全部澄清，2026-03-29）
 
-| 问题 | 说明 |
-|-----|------|
-| PAPass 协议类型 | OAuth2 Authorization Code Flow？OIDC？SAML？ |
-| 授权端点 / Token 端点 URL | 正式环境和测试环境各是什么？ |
-| Client ID 和 Client Secret | 需要向 PA 中台申请，申请流程？ |
-| Scope | 需要哪些 scope？用户信息 API 返回哪些字段？ |
-| Tenant 映射方式 | PAPass 的组织 ID 如何对应 KB 的 Tenant ID？ |
-| 现有 KB 账号迁移 | 已有 email 注册的用户数据如何处理？ |
+| # | 问题 | 状态 | 结论 |
+|---|-----|------|------|
+| Q1 | productId 来源 | ✅ 已澄清 | `Product` 表主键（VarChar(36) UUID），由租户管理员在 PA 后台产品管理模块创建。KB 团队需找 PA 管理员创建产品并拿到 UUID，配置为环境变量 `KB_PRODUCT_ID` |
+| Q2 | Pass API base URL | ✅ 已澄清 | Pass 模块挂载在 PA 核心 API 服务上，路由前缀 `/api/v1/pass/*`。开发：`http://localhost:3001`；生产：取决于部署域名（Nginx 反代），需运维确认。配置为环境变量 `PASS_BASE_URL` |
+| Q3 | Token 有效期 | ✅ 已澄清 | 默认 3600 秒（1 小时），由 PA 侧 `AUTH_TOKEN_TTL_SECONDS` 控制。响应 `expiresAt` 是精确过期时间戳，KB 按此做 cookie max_age + 提前刷新 |
+| Q4 | `/pass/me` 限流 | ✅ 已澄清 | 当前无限流（PA 代码无 `@Throttle` / `@RateLimit`）。KB 短期每次请求直接调；中期加 Redis 缓存（TTL 5 分钟） |
+| Q5 | 密码策略 | ✅ 已澄清 | Pass：`@MinLength(8)` + `@MaxLength(128)`，无复杂度要求。KB 前端强校验完全兼容，无需改动 |
+| Q6 | 封禁/解封 | ✅ 已澄清 | 管理端 `PATCH /pass-management/accounts/:id { status: "active" }` 可解封（需 `pass:manage` 权限）。无 C 端自助解封，KB 提示"请联系管理员" |
+| — | 协议类型 | ✅ 已澄清 | REST API（非 OAuth2/OIDC），直接调用 `/pass/login` 返回 JWT |
+| — | Token 验证方式 | ✅ 已决策 | 调用 `GET /pass/me` 验证（Pass JWT 签名由 PA 服务端验证，KB 无需本地验签） |
+| — | Tenant 映射 | ✅ 已决策 | 每个 Pass 用户首次登录 KB 时创建独立 Tenant（沿用现有行为） |
+| ⏳ | KB `productId` 实际值 | ⏳ 运维 | 需 PA 管理员在后台创建 KB 产品后提供 UUID |
+| ⏳ | Pass API 生产域名 | ⏳ 运维 | 需运维确认生产环境部署地址 |
+| ⏳ | 现有 KB 账号迁移策略 | ⏳ 产品决策 | 建议：上线时所有用户需通过 Pass 重新注册（v1 用户量极小，无需迁移脚本） |
 
 ---
 
 #### 验收标准
 
-- [ ] 访问 KB 登录页，点击"使用 PAPass 登录"，跳转到 PAPass 授权页
-- [ ] PAPass 授权完成后，自动跳回 KB 并进入已登录状态
-- [ ] 首次登录自动创建 KB Tenant + User（对应 PAPass 身份）
-- [ ] 已有 KB email 账号在迁移期间的访问策略明确（兼容期 or 强制切换）
-- [ ] KB 内部 JWT 中 `tenant_id` 隔离逻辑不变
+- [ ] KB 登录页输入 email+password，后端调用 Pass `/login` → 成功登录 → 进入 `/projects`
+- [ ] KB 注册页输入 email+password+昵称（可选），后端调用 Pass `/register` → 成功注册并自动登录
+- [ ] 首次 Pass 登录自动创建 KB Tenant + User（`pass_id` 字段正确填充）
+- [ ] 同一 Pass 账号重复登录 KB 不重复创建 Tenant/User
+- [ ] Pass token 过期后，前端自动尝试 `/refresh` → 成功续期 → 用户无感知
+- [ ] Pass token 过期且 refresh 失败 → 前端跳转登录页
+- [ ] 已封禁账号（PA-7004）登录时提示"账号已被封禁，请联系管理员"
+- [ ] 已注册邮箱再次注册（PA-7003）提示"邮箱已注册"
+- [ ] KB 内部 `tenant_id` 隔离逻辑不变（两个不同 Pass 用户看不到对方的数据）
+- [ ] `get_current_user()` 正确通过 Pass `/me` 验证 token → 返回正确的 User 对象
+- [ ] 废弃的 `/forgot-password`、`/reset-password` 端点返回 410 Gone（或移除）
+- [ ] 前端 TypeScript 编译无错误（`tsc --noEmit`）
 
 ---
 
 #### 工作范围
 
-**包含（规范确认后细化）：**
-- `services/api/app/routers/auth.py` — 重写
-- `services/api/app/services/auth_service.py` — 重写
-- `packages/shared-models/shared_models/user.py` — 新增 PAPass 字段 + migration
-- `apps/web/src/app/login/page.tsx` — 替换为 PAPass 跳转按钮
-- `apps/web/src/stores/auth-store.ts` — 适配新认证流程
+**包含：**
+- `services/api/app/services/auth_service.py` — 重写：login/register/refresh 代理 Pass API；新增 `PassClient` 封装 HTTP 调用
+- `services/api/app/deps.py` — 修改 `get_current_user()`：Pass `/me` 验证 + `pass_id` 查 User
+- `services/api/app/routers/auth.py` — 适配新 auth_service；注册改为注册即登录；废弃 forgot/reset-password
+- `packages/shared-models/shared_models/user.py` — 新增 `pass_id` 字段；`password_hash` 改 nullable
+- `infra/sql/alembic/` — migration：add `pass_id` + alter `password_hash` nullable + index
+- `packages/shared-config/shared_config/settings.py` — 新增 `pass_base_url`、`kb_product_id`
+- `packages/shared-schemas/shared_schemas/auth.py` — `RegisterRequest` 适配（移除 tenant_name，加 display_name）
+- `packages/shared-errors/` — Pass 错误码映射
+- `apps/web/src/app/register/page.tsx` — "团队名称" → "昵称"（可选）
+- `apps/web/src/stores/auth-store.ts` — register 参数适配
 
 **不包含：**
-- 自建账号注销/迁移工具（留衍生）
-- MFA / 二次验证（由 PAPass 侧负责）
+- 现有用户迁移脚本（v1 用户量极小，上线时用户通过 Pass 重新注册即可）
+- MFA / 二次验证（由 Pass 侧负责）
+- Redis 缓存 Pass `/me` 验证结果（中期优化，留衍生）
+- `forgot-password` / `reset-password` 的 Pass 侧替代方案（密码重置由 PA 平台处理）
+- Pass 管理 API（`/pass-management/*`）的集成（管理操作在 PA 后台完成）
+
+---
+
+### v0.44.16: KB 内部 `tenant_id` 全面重命名为 `kb_id`
+
+**任务版本号：** v0.44.16
+**优先级：** P1
+**前置依赖：** 建议在 v0.44.14 / v0.44.15 解除阻塞前完成（以便 v0.44.14/15 实现时直接使用正确字段名）
+
+---
+
+#### 背景与动机
+
+KB Platform 当前在整个代码库中使用 `tenant_id` 表示"一个 KB 注册账号所对应的独立知识库隔离单元"。在与 PA 中台进行集成（v0.44.14 审计日志上报、v0.44.15 PAPass 登录）时，PA 侧也有自己的 `tenant_id` 概念（代表 PA 中台的租户），两者含义不同，在联调时极易造成混淆。
+
+**产品 Owner 决策（2026-03-28）：**
+- 将 KB 内部的 `tenant_id` 字段统一重命名为 `kb_id`，明确其含义为"KB 平台内的隔离单元 ID"
+- PA 侧字段名不变，KB 侧不得修改 PA 的任何接口或数据结构
+- KB 向 PA 上报数据时（v0.44.14 / v0.44.15），将 KB 的 `kb_id` 值映射到 PA 约定的字段名（该字段名待 PA 提供接口规范后确认，v0.44.14 / v0.44.15 中明确写入映射逻辑）
+
+---
+
+#### 影响范围（全量扫描，执行前必须逐文件核对）
+
+**数据库层（Alembic migration 必须覆盖所有表）：**
+
+| 表名 | 重命名字段 |
+|-----|-----------|
+| `user` | `tenant_id` → `kb_id` |
+| `project` | `tenant_id` → `kb_id` |
+| `asset` | `tenant_id` → `kb_id` |
+| `architecture` | `tenant_id` → `kb_id` |
+| `architecture_node` | `tenant_id` → `kb_id`（若有） |
+| `knowledge_doc` | `tenant_id` → `kb_id` |
+| `knowledge_doc_version` | `tenant_id` → `kb_id`（若有） |
+| `job` | `tenant_id` → `kb_id` |
+| `api_key` | `tenant_id` → `kb_id` |
+| `api_usage_log` | `tenant_id` → `kb_id`（v0.44.11 新建时可直接用 `kb_id`） |
+| `audit_log` | `tenant_id` → `kb_id` |
+| `cross_reference` | `tenant_id` → `kb_id`（若有） |
+| `model_provider` | `tenant_id` → `kb_id`（若有） |
+| `model_route` | `tenant_id` → `kb_id`（若有） |
+| `batch_import` | `tenant_id` → `kb_id`（v0.44.5 新建时可直接用 `kb_id`） |
+
+> ⚠️ **执行前必须先 `grep -rn "tenant_id" packages/shared-models/` 确认完整字段清单，以上列表为预估，实际以代码为准。**
+
+**ORM 模型层（`packages/shared-models/`）：**
+- 每个模型文件中的 `tenant_id: Mapped[uuid.UUID]` 列定义改为 `kb_id: Mapped[uuid.UUID]`
+- `Column("tenant_id", ...)` → `Column("kb_id", ...)`
+- 所有 relationship / backref / FK 引用同步更新
+
+**依赖注入层（`services/api/app/deps.py`）：**
+- `get_tenant_id()` 函数重命名为 `get_kb_id()`
+- 函数内部：`current_user.tenant_id` → `current_user.kb_id`
+- 所有 router 中的 `tenant_id: uuid.UUID = Depends(get_tenant_id)` → `kb_id: uuid.UUID = Depends(get_kb_id)`
+
+**Router 层（`services/api/app/routers/`）：**
+- 所有端点函数参数 `tenant_id` → `kb_id`
+- 所有传给 service 的 `tenant_id=tenant_id` → `kb_id=kb_id`
+- 所有 Query filter `.where(Model.tenant_id == tenant_id)` → `.where(Model.kb_id == kb_id)`
+
+**Service 层（`services/api/app/services/`）：**
+- 所有 service 类 / 方法参数 `tenant_id` → `kb_id`
+- 内部所有 ORM 查询 / 写入字段同步
+
+**JWT Payload（`services/api/app/routers/auth.py` 或 `auth_service.py`）：**
+- JWT 中的 `{"tenant_id": ...}` → `{"kb_id": ...}`
+- `get_current_user()` dep 中解析 JWT 时的字段键同步更新
+- ⚠️ **JWT 字段变更会导致已颁发的旧 token 失效** — 需评估是否需要过渡期（建议：新版本上线时强制全部重新登录，在 v0.44.16 收尾说明中注明）
+
+**前端（`apps/web/`）：**
+- 所有调用后端 API 时传递 `tenant_id` 的请求 body / query param → 改用 `kb_id`（若有）
+- Zustand / Context store 中存储的 `tenant_id` 字段 → `kb_id`
+- TypeScript interface 中的 `tenant_id: string` → `kb_id: string`
+
+**Worker 服务（`services/ingestion-worker/`、`services/pipeline-worker/`）：**
+- 任何从消息队列 / Job 对象读取 `tenant_id` 的代码同步更新
+
+---
+
+#### 执行策略（必须严格遵守）
+
+1. **单独开一个专用分支**：`feature/kb-id-rename`（不在 main 直接执行）
+2. **执行顺序**：
+   a. 先执行全仓库 `grep -rn "tenant_id"` 建立完整影响清单
+   b. 先改 ORM 模型（`shared-models`）+ 写好全部 Alembic migration
+   c. 再改 `deps.py`（`get_tenant_id` → `get_kb_id`）
+   d. 再改所有 router / service（此时 IDE 会报类型错误，逐个修复）
+   e. 再改 JWT payload + `get_current_user` 解析逻辑
+   f. 再改前端 TypeScript 类型 + store + API 调用
+   g. 再改 worker 服务
+   h. 全部改完后运行测试（见验收标准）
+3. **每一步改完后执行 `grep -rn "tenant_id"` 验证是否还有残留**
+4. **禁止搜索替换全局 `sed -i`**：必须逐文件审阅，避免误改注释或 PA 侧变量名
+5. **migration 命名**：`rename_tenant_id_to_kb_id_<table_name>`（每张表单独一个 migration，或一个统一 migration 含所有 `ALTER TABLE`）
+
+---
+
+#### 与 v0.44.14 / v0.44.15 的映射关系
+
+当 KB 向 PA 上报数据时，需将 KB 的 `kb_id` 传给 PA：
+
+| 上报场景 | KB 内部字段 | PA 侧期望字段名 | 映射处理 |
+|---------|-----------|--------------|--------|
+| v0.44.14 审计日志上报 | `kb_id` (UUID) | 待 PA 确认 | 在 `pa-logger.ts` / `audit_service.py` 推送时做字段别名映射 |
+| v0.44.15 Pass 登录 | `kb_id` (UUID) | 不传给 PA（KB 内部字段） | KB 与 Pass 交互只用 `passId`（UUID）+ `productId`，不暴露 `kb_id` |
+
+> **执行建议**：v0.44.16 先完成，v0.44.14/15 实现时直接使用 `kb_id`。v0.44.15 的 Pass 接入不向 PA 传 `kb_id`。
+
+---
+
+#### 验收标准
+
+- [ ] `grep -rn "tenant_id" packages/shared-models/ services/ apps/` 结果为 **0 条**（PA 侧代码除外）
+- [ ] 所有 Alembic migration 可正向执行（`alembic upgrade head` 成功）
+- [ ] 所有 Alembic migration 可回滚（`alembic downgrade -1` 成功）
+- [ ] 现有 API 端点（`/v1/projects`、`/v1/assets`、`/v1/docs` 等）返回正确数据，**tenant 隔离不变**（两个不同 `kb_id` 的账号互相看不到对方数据）
+- [ ] 新注册账号可正常登录，JWT 中包含 `kb_id` 字段，`get_current_user` 正确解析
+- [ ] 旧 JWT（含 `tenant_id` 字段）访问时，服务端返回 401（或明确的 "token 已失效" 提示）— 用户重新登录即可
+- [ ] 前端 TypeScript 编译无错误（`tsc --noEmit` 通过）
+- [ ] 前端 `useProjects`、`useAssets`、`useJobs` 等 hooks 正常工作
+
+---
+
+#### 工作范围
+
+**包含：**
+- `infra/sql/alembic/` — 所有含 `tenant_id` 列的表的 `ALTER TABLE ... RENAME COLUMN` migration
+- `packages/shared-models/` — 所有模型文件
+- `packages/shared-schemas/` — 所有含 `tenant_id` 字段的 Pydantic schema
+- `services/api/app/deps.py` — `get_tenant_id` → `get_kb_id`
+- `services/api/app/routers/` — 所有 router 文件
+- `services/api/app/services/` — 所有 service 文件
+- `services/api/app/routers/auth.py` / `auth_service.py` — JWT payload 字段名
+- `services/ingestion-worker/` 和 `services/pipeline-worker/` — 读取 `tenant_id` 的相关代码
+- `apps/web/src/` — TypeScript 接口定义 + store + API 调用层
+
+**明确不包含：**
+- PA 中台侧的任何代码或 API 字段（PA 侧字段名不变）
+- 修改 `v0.44.14` / `v0.44.15` 中 PA 接口的字段期望（留在那两个任务实现时处理映射）
+- 数据库中已有数据的值（`tenant_id` 的 UUID **值**不变，只改**列名**）
 
 ---
 
@@ -1373,6 +1655,7 @@ v0.44.10 → v0.44.11 ← API 限流 + 统计（v0.44.11 可与 v0.44.10 同步�
 - Asset 状态字段：`parse_status`（不是 `status`）
 - API Key 表名：`api_key`（单数）
 - 新增表命名：遵循单数（`batch_import`、`batch_import_asset`、`api_usage_log`）
+- **KB 内部隔离单元字段**：`kb_id`（v0.44.16 完成后全面替代旧字段名 `tenant_id`；v0.44.16 完成前，现有代码仍使用 `tenant_id`；v0.44.5/11 等新建的表，如 v0.44.16 先于其执行则直接用 `kb_id`，否则先建 `tenant_id` 后在 v0.44.16 统一迁移）
 
 > **V2.3 新增（避免与已有表/字段冲突）：**
 
@@ -1391,7 +1674,7 @@ v0.44.10 → v0.44.11 ← API 限流 + 统计（v0.44.11 可与 v0.44.10 同步�
 ### 6.4 错误码约束
 
 - 新错误码在 `packages/shared-errors/` 中注册
-- 命名前缀：`VERSION_`、`BATCH_`、`GRAPH_`、`RATE_`
+- 命名前缀：`VERSION_`、`BATCH_`、`GRAPH_`、`RATE_`、`PASS_`
 
 ---
 
@@ -1413,7 +1696,7 @@ v0.44.10 → v0.44.11 ← API 限流 + 统计（v0.44.11 可与 v0.44.10 同步�
 ## 第九章 版本号管理
 
 - 参考 `dev-governance-part1-version.md` §1.1–§1.4
-- 本版本 15 个任务，版本号 `0.44.1` ~ `0.44.15`
+- 本版本 16 个任务，版本号 `0.44.1` ~ `0.44.16`
 
 ---
 
@@ -1473,7 +1756,8 @@ v0.44.10 → v0.44.11 ← API 限流 + 统计（v0.44.11 可与 v0.44.10 同步�
 | v0.44.12 | Q&A 对话界面 | P1 | — | Planned |
 | v0.44.13 | 首次体验修复（仪表板统计 + 上传引导 + 表单说明） | P0 | — | Planned |
 | v0.44.14 | 审计日志上报 PA 中台（服务端 + 客户端） | P0 | — | Blocked（待 PA 接口规范） |
-| v0.44.15 | 登录接入 PAPass（OAuth/OIDC 统一账号） | P0 | — | Blocked（待 PAPass 接入文档 + tenant_id 映射方案确认） |
+| v0.44.15 | 登录接入 Pass（REST API 统一账号） | P0 | — | Planned（接入文档已确认，运维前置待完成） |
+| v0.44.16 | KB 内部 `tenant_id` 全面重命名为 `kb_id` | P1 | — | Planned（建议在 v0.44.14/15 解除阻塞前完成） |
 
 ---
 
@@ -1488,6 +1772,8 @@ v0.44.10 → v0.44.11 ← API 限流 + 统计（v0.44.11 可与 v0.44.10 同步�
 | 2026-03-28 | V2.4 冲突修复：v0.44.10 移除新建 `rate_limiter.py`（与已有 `rate_limit.py` 冲突），改为在 `agent.py` 内联 per-key Redis INCR；错误码改用 `SYSTEM_RATE_LIMITED`（不新增 `RATE_LIMIT_EXCEEDED`）。 | 产品 Owner |
 | 2026-03-28 | V2.5 新增任务 + 现状修正：① 新增 v0.44.12（Q&A 对话界面，后端 `POST /v1/qa/ask` SSE 已完整实现，仅缺前端）；② 新增 v0.44.13（首次体验修复：上传后自动触发 ingest job [P0-Critical]、仪表板统计、上传引导、表单说明、OnboardingGuide 修复）；③ v0.44.2 路径修正回滚；总任务数 11 → 13。 | 产品 Owner |
 | 2026-03-28 | V2.6 产品决策 v0.44.2：将"用户管理入口隐藏"替换原"补全邀请/改角色/移除"方案。v1 单用户场景不需要用户管理；页面文件保留供企业版使用；侧边栏同步移除"审计日志"入口。 | 产品 Owner |
+| 2026-03-28 | V2.7 新增 v0.44.16：KB 内部 `tenant_id` 全量重命名为 `kb_id`（DB migration + ORM + 所有 service/router/dep + JWT payload + 前端），PA 侧字段名不变；v0.44.14/15 与 PA 上报时做字段别名映射；总任务数 15 → 16。 | 产品 Owner |
+| 2026-03-28 | V3.0 v0.44.15 全面重写：基于 PA Pass 接入文档 V1.0（2026-03-23）+ Q1-Q6 技术澄清。原 OAuth2/OIDC 假设全部替换为 Pass REST API 方案；认证信任根改为 Pass JWT（KB 不再自签 JWT）；验证方式为 `GET /pass/me`；KB 与 PA 交互只用 passId + productId，不传 tenant_id；状态从 Blocked → Planned。 | Claude Code |
 
 ---
 
@@ -1499,4 +1785,9 @@ v0.44.10 → v0.44.11 ← API 限流 + 统计（v0.44.11 可与 v0.44.10 同步�
 | ASR 端到端发现 bug 超出预估工作量 | 中 | 中 | v0.44.7 设计为"验证+修复"闭环，若 bug 过多则拆为两个任务 |
 | pipeline-worker SSE 推送结构复杂，改动超过 30 行 | 中 | 中 | Phase 1 先读 pipeline-worker 结构；若有统一 stage 回调则仅改一处 |
 | 图谱合并/拆分跨表事务失败导致数据不一致 | 低 | 高 | 严格使用数据库事务，任何步骤失败全部回滚 |
-| 12 个任务体量仍较大 | 中 | 中 | P0 任务（v0.44.1–4）可独立封版；P1 任务可分批推进 |
+| 16 个任务体量较大 | 中 | 中 | P0 任务（v0.44.1/2/13/14/15）可独立封版；P1 任务分批推进 |
+| v0.44.16 tenant_id → kb_id 重命名漏改某处，导致 tenant 隔离失效（P0 安全风险） | 低 | 极高 | 执行前 grep 建立完整清单；每步改后再次 grep 验证；必须覆盖 tenant 隔离回归测试（两账号数据不互见）；必须单独分支独立 review |
+| v0.44.16 JWT payload 字段变更导致所有已颁发 token 失效 | 高 | 低 | 属于预期行为；上线时安排所有用户重新登录；在 v0.44.16 收尾说明中注明并在前端展示"请重新登录"提示 |
+| v0.44.15 Pass API 不可用时 KB 完全无法登录 | 中 | 高 | Pass 调用超时设 3s；错误信息明确提示"认证服务暂时不可用"；不做本地 fallback（Pass 是认证信任根） |
+| v0.44.15 Pass `/me` 调用量随 KB API QPS 线性增长 | 中 | 中 | 短期无限流可直接调；中期加 Redis 缓存（pass_jwt_hash → passId 映射，TTL 5 分钟）；留衍生任务 |
+| v0.44.15 切换后现有 KB 用户 JWT 全部失效 | 高 | 低 | 预期行为：v1 用户量极小，上线时所有用户通过 Pass 重新注册即可 |
