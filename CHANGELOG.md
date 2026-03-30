@@ -16,6 +16,7 @@
 
 ### 修复 (Fixed)
 - ASR 端到端打通：补齐 openai-whisper 依赖、修复 PARSEABLE_ASSET_TYPES 缺少 image/audio、延长 Celery 超时到 300s（v0.44.7）
+- 图谱节点合并/拆分 API：POST merge + POST split 端点，事务安全，project_admin 权限（v0.44.8）
 
 ## [0.43.5] - 2026-03-27
 

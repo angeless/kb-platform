@@ -29,6 +29,9 @@ class ErrorCode(StrEnum):
     ARCH_NODE_NOT_FOUND = "ARCH_NODE_NOT_FOUND"
     ARCH_ALREADY_PUBLISHED = "ARCH_ALREADY_PUBLISHED"
     ARCH_CYCLE_DETECTED = "ARCH_CYCLE_DETECTED"
+    ARCH_INSUFFICIENT_SOURCES = "ARCH_INSUFFICIENT_SOURCES"
+    ARCH_DOC_LIST_INCOMPLETE = "ARCH_DOC_LIST_INCOMPLETE"
+    ARCH_DOC_LIST_OVERLAP = "ARCH_DOC_LIST_OVERLAP"
 
     # Knowledge Doc
     DOC_NOT_FOUND = "DOC_NOT_FOUND"
@@ -93,6 +96,9 @@ ERROR_MESSAGES: dict[str, str] = {
     ErrorCode.ARCH_NODE_NOT_FOUND: "分类节点不存在",
     ErrorCode.ARCH_ALREADY_PUBLISHED: "该架构已发布，无法再次发布",
     ErrorCode.ARCH_CYCLE_DETECTED: "检测到循环引用，请调整节点关系",
+    ErrorCode.ARCH_INSUFFICIENT_SOURCES: "合并至少需要 2 个节点",
+    ErrorCode.ARCH_DOC_LIST_INCOMPLETE: "拆分时文档列表未覆盖节点下全部文档",
+    ErrorCode.ARCH_DOC_LIST_OVERLAP: "拆分时两组文档列表有重叠",
     ErrorCode.DOC_NOT_FOUND: "文档不存在或已被删除",
     ErrorCode.DOC_ALREADY_PUBLISHED: "该文档已发布",
     ErrorCode.DOC_STATUS_INVALID: "文档当前状态不允许此操作",
