@@ -6,6 +6,8 @@ import Link from "next/link";
 import { api, ApiClientError } from "@/lib/api";
 import { StatusBadge } from "@/components/status-badge";
 import { FileUpload } from "@/components/file-upload";
+import { BatchDropzone } from "@/components/batch-import/BatchDropzone";
+import { BatchProgressList } from "@/components/batch-import/BatchProgressList";
 
 interface Asset {
   id: string;
@@ -26,6 +28,8 @@ export default function ProjectAssetsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [showUpload, setShowUpload] = useState(false);
+  const [showBatch, setShowBatch] = useState(false);
+  const [batchId, setBatchId] = useState<string | null>(null);
 
   const fetchAssets = useCallback(async () => {
     setIsLoading(true);
@@ -68,12 +72,20 @@ export default function ProjectAssetsPage() {
           <h1 className="text-2xl font-bold text-gray-900">资料管理</h1>
           <p className="mt-1 text-sm text-gray-500">共 {total} 份资料</p>
         </div>
-        <button
-          onClick={() => setShowUpload(!showUpload)}
-          className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700"
-        >
-          上传资料
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => { setShowBatch(!showBatch); if (showUpload) setShowUpload(false); }}
+            className="rounded-lg border border-primary-600 px-4 py-2 text-sm font-medium text-primary-600 hover:bg-primary-50"
+          >
+            批量导入
+          </button>
+          <button
+            onClick={() => { setShowUpload(!showUpload); if (showBatch) setShowBatch(false); }}
+            className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700"
+          >
+            上传资料
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -83,6 +95,27 @@ export default function ProjectAssetsPage() {
       {showUpload && (
         <div className="mb-6">
           <FileUpload projectId={projectId} onUploadComplete={fetchAssets} />
+        </div>
+      )}
+
+      {showBatch && !batchId && (
+        <div className="mb-6">
+          <BatchDropzone
+            projectId={projectId}
+            onBatchCreated={(id) => setBatchId(id)}
+          />
+        </div>
+      )}
+
+      {batchId && (
+        <div className="mb-6">
+          <BatchProgressList
+            projectId={projectId}
+            batchId={batchId}
+            onComplete={() => {
+              fetchAssets();
+            }}
+          />
         </div>
       )}
 

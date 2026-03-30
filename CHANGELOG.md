@@ -12,6 +12,7 @@
 - 版本历史 API：GET /v1/docs/{id}/versions 列表 + POST rollback 回滚端点（v0.44.3）
 - 前端版本历史 UI：历史版本抽屉面板 + 行级 diff 展示 + 回滚确认（v0.44.4）
 - 批量导入后端：ZIP 上传解压 + 批次跟踪 + Celery 任务调度（v0.44.5）
+- 前端批量导入 UI：BatchDropzone 拖拽上传 + BatchProgressList 轮询进度 + 资产页集成（v0.44.6）
 
 ## [0.43.5] - 2026-03-27
 
