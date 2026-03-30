@@ -9,7 +9,7 @@ from shared_config.settings import Settings
 from shared_schemas.batch_import import BatchImportCreatedOut, BatchImportOut
 from shared_schemas.common import DataResponse, ErrorDetail
 
-from app.deps import get_db, get_settings_dep, get_tenant_id, require_role
+from app.deps import get_db, get_settings_dep, get_kb_id, require_role
 from app.services.batch_import_service import BatchImportService
 from app.utils.storage import StorageClient
 from shared_models import User
@@ -53,12 +53,12 @@ async def create_batch_import(
     file: UploadFile = File(...),
     auto_start: bool = Form(default=True),
     db: AsyncSession = Depends(get_db),
-    tenant_id: uuid.UUID = Depends(get_tenant_id),
+    kb_id: uuid.UUID = Depends(get_kb_id),
     user: User = Depends(require_role("editor")),
     storage: StorageClient | None = Depends(get_storage),
 ):
     content = await file.read()
-    svc = BatchImportService(db, tenant_id, user.id, storage)
+    svc = BatchImportService(db, kb_id, user.id, storage)
     result = await svc.create_batch(
         project_id, content, file.filename or "upload.zip", auto_start
     )
@@ -81,8 +81,8 @@ async def get_batch_import(
     project_id: uuid.UUID,
     batch_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    tenant_id: uuid.UUID = Depends(get_tenant_id),
+    kb_id: uuid.UUID = Depends(get_kb_id),
 ):
-    svc = BatchImportService(db, tenant_id, uuid.UUID(int=0), None)
+    svc = BatchImportService(db, kb_id, uuid.UUID(int=0), None)
     result = await svc.get_batch(batch_id)
     return DataResponse(data=BatchImportOut(**result))

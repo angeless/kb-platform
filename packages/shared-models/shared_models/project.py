@@ -12,10 +12,10 @@ from .base import Base
 class Project(Base):
     __tablename__ = "project"
     __table_args__ = (
-        Index("ix_project_tenant_status", "tenant_id", "status"),
+        Index("ix_project_tenant_status", "kb_id", "status"),
     )
 
-    tenant_id: Mapped[uuid.UUID] = mapped_column(
+    kb_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("tenant.id"), nullable=False
     )
     name: Mapped[str] = mapped_column(String(200), nullable=False)

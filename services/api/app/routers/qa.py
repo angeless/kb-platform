@@ -32,7 +32,7 @@ async def ask(
     db: AsyncSession = Depends(get_db),
     settings: Settings = Depends(get_settings_dep),
 ):
-    svc = QAService(db, current_user.tenant_id, settings)
+    svc = QAService(db, current_user.kb_id, settings)
 
     if body.stream:
         return StreamingResponse(

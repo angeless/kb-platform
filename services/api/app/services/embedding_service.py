@@ -48,10 +48,10 @@ class EmbeddingService(TenantService):
     def __init__(
         self,
         db: AsyncSession,
-        tenant_id: uuid.UUID,
+        kb_id: uuid.UUID,
         embed_fn: Callable | None = None,
     ) -> None:
-        super().__init__(db, tenant_id)
+        super().__init__(db, kb_id)
         self.embed_fn = embed_fn or _default_embed_fn
 
     async def embed_doc(self, doc_id: uuid.UUID) -> DocEmbedding:

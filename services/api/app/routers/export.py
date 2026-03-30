@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared_schemas.common import ErrorDetail
 
-from app.deps import get_db, get_tenant_id
+from app.deps import get_db, get_kb_id
 from app.services.export_service import ExportService
 
 router = APIRouter(tags=["export"])
@@ -33,9 +33,9 @@ _RESP_AUTH = {
 async def export_single_doc(
     doc_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    tenant_id: uuid.UUID = Depends(get_tenant_id),
+    kb_id: uuid.UUID = Depends(get_kb_id),
 ):
-    svc = ExportService(db, tenant_id)
+    svc = ExportService(db, kb_id)
     filename, content = await svc.export_single_doc(doc_id)
     return Response(
         content=content,
@@ -58,9 +58,9 @@ async def export_single_doc(
 async def export_project(
     project_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    tenant_id: uuid.UUID = Depends(get_tenant_id),
+    kb_id: uuid.UUID = Depends(get_kb_id),
 ):
-    svc = ExportService(db, tenant_id)
+    svc = ExportService(db, kb_id)
     zip_filename, zip_bytes = await svc.export_project_zip(project_id)
     return Response(
         content=zip_bytes,

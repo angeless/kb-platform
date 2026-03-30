@@ -56,7 +56,7 @@ async def _check_rate_limit(
     settings: Settings = Depends(get_settings_dep),
 ) -> tuple[ApiKey, uuid.UUID, uuid.UUID]:
     """Per-API-key rate limiting using Redis fixed-window counter."""
-    api_key, project_id, tenant_id = auth
+    api_key, project_id, kb_id = auth
     limit = api_key.rate_limit_per_minute
     if limit == 0:
         return auth  # no limit
@@ -213,9 +213,9 @@ async def agent_search(
     db: AsyncSession = Depends(get_db),
 ):
     t0 = time.monotonic()
-    api_key, project_id, tenant_id = auth
+    api_key, project_id, kb_id = auth
 
-    svc = SearchService(db, tenant_id)
+    svc = SearchService(db, kb_id)
     results, total = await svc.hybrid_search(
         project_id=project_id,
         query=body.query,
@@ -292,9 +292,9 @@ async def agent_ask(
     settings: Settings = Depends(get_settings_dep),
 ):
     t0 = time.monotonic()
-    api_key, project_id, tenant_id = auth
+    api_key, project_id, kb_id = auth
 
-    svc = QAService(db, tenant_id, settings)
+    svc = QAService(db, kb_id, settings)
     result = await svc.ask(project_id, body.question, body.top_k)
 
     latency = int((time.monotonic() - t0) * 1000)
@@ -323,7 +323,7 @@ async def agent_usage(
     end_date: date | None = Query(None, description="End date (YYYY-MM-DD), default today"),
     group_by: UsageGroupBy = Query(UsageGroupBy.day, description="Group by day or endpoint"),
 ):
-    api_key, project_id, tenant_id = auth
+    api_key, project_id, kb_id = auth
 
     today = date.today()
     start = start_date or (today - timedelta(days=6))

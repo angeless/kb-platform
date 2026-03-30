@@ -62,7 +62,7 @@ class AuthService:
 
         user = User(
             id=uuid.uuid4(),
-            tenant_id=tenant.id,
+            kb_id=tenant.id,
             email=email,
             password_hash=hash_password(password),
             role="tenant_admin",
@@ -72,7 +72,7 @@ class AuthService:
         await self.db.flush()
 
         return {
-            "tenant_id": tenant.id,
+            "kb_id": tenant.id,
             "user_id": user.id,
             "email": user.email,
         }
@@ -153,7 +153,7 @@ class AuthService:
 
         token_data = {
             "sub": str(user.id),
-            "tenant_id": str(user.tenant_id),
+            "kb_id": str(user.kb_id),
             "role": user.role,
         }
 
@@ -300,7 +300,7 @@ class AuthService:
 
         token_data = {
             "sub": payload["sub"],
-            "tenant_id": payload["tenant_id"],
+            "kb_id": payload["kb_id"],
             "role": payload["role"],
         }
 

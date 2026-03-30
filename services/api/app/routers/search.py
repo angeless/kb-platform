@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from shared_schemas.common import DataResponse, ErrorDetail, ListResponse, PaginationMeta
 from shared_schemas.search import HybridSearchHit, HybridSearchRequest, SearchHit, SemanticHit, SemanticSearchRequest, TextSearchRequest
 
-from app.deps import get_db, get_tenant_id
+from app.deps import get_db, get_kb_id
 from app.services.embedding_service import EmbeddingService
 from app.services.search_service import SearchService
 
@@ -35,9 +35,9 @@ _RESP_AUTH = {
 async def text_search(
     body: TextSearchRequest,
     db: AsyncSession = Depends(get_db),
-    tenant_id: uuid.UUID = Depends(get_tenant_id),
+    kb_id: uuid.UUID = Depends(get_kb_id),
 ):
-    svc = SearchService(db, tenant_id)
+    svc = SearchService(db, kb_id)
     results, total = await svc.text_search(
         project_id=body.project_id,
         query=body.query,
@@ -69,9 +69,9 @@ async def text_search(
 async def semantic_search(
     body: SemanticSearchRequest,
     db: AsyncSession = Depends(get_db),
-    tenant_id: uuid.UUID = Depends(get_tenant_id),
+    kb_id: uuid.UUID = Depends(get_kb_id),
 ):
-    svc = EmbeddingService(db, tenant_id)
+    svc = EmbeddingService(db, kb_id)
     results = await svc.semantic_search(
         project_id=body.project_id,
         query=body.query,
@@ -94,9 +94,9 @@ async def semantic_search(
 async def hybrid_search(
     body: HybridSearchRequest,
     db: AsyncSession = Depends(get_db),
-    tenant_id: uuid.UUID = Depends(get_tenant_id),
+    kb_id: uuid.UUID = Depends(get_kb_id),
 ):
-    svc = SearchService(db, tenant_id)
+    svc = SearchService(db, kb_id)
     results, total = await svc.hybrid_search(
         project_id=body.project_id,
         query=body.query,
@@ -128,9 +128,9 @@ async def hybrid_search(
 async def embed_doc(
     doc_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    tenant_id: uuid.UUID = Depends(get_tenant_id),
+    kb_id: uuid.UUID = Depends(get_kb_id),
 ):
-    svc = EmbeddingService(db, tenant_id)
+    svc = EmbeddingService(db, kb_id)
     record = await svc.embed_doc(doc_id)
     return DataResponse(data={
         "doc_id": str(record.doc_id),

@@ -17,7 +17,7 @@ async def test_register_success(client: AsyncClient):
     )
     assert resp.status_code == 201
     data = resp.json()["data"]
-    assert "tenant_id" in data
+    assert "kb_id" in data
     assert "user_id" in data
     assert data["email"] == "new-user@example.com"
 

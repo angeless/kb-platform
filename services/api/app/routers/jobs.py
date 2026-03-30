@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from shared_schemas.common import DataResponse, ErrorDetail, ListResponse, PaginationMeta
 from shared_schemas.job import JobCreate, JobOut
 
-from app.deps import get_current_user, get_db, get_tenant_id, require_role
+from app.deps import get_current_user, get_db, get_kb_id, require_role
 from app.services.job_service import JobService
 from shared_models import User
 
@@ -36,10 +36,10 @@ _RESP_AUTH = {
 async def create_job(
     body: JobCreate,
     db: AsyncSession = Depends(get_db),
-    tenant_id: uuid.UUID = Depends(get_tenant_id),
+    kb_id: uuid.UUID = Depends(get_kb_id),
     current_user: User = require_role("editor"),
 ):
-    svc = JobService(db, tenant_id, current_user.id)
+    svc = JobService(db, kb_id, current_user.id)
     job = await svc.create(project_id=body.project_id, job_type=body.job_type, asset_id=body.asset_id)
     return DataResponse(data=JobOut.model_validate(job))
 
@@ -60,10 +60,10 @@ async def list_jobs(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
-    tenant_id: uuid.UUID = Depends(get_tenant_id),
+    kb_id: uuid.UUID = Depends(get_kb_id),
     current_user: User = Depends(get_current_user),
 ):
-    svc = JobService(db, tenant_id, current_user.id)
+    svc = JobService(db, kb_id, current_user.id)
     jobs, total = await svc.list(project_id=project_id, page=page, page_size=page_size)
     return ListResponse(
         data=[JobOut.model_validate(j) for j in jobs],
@@ -86,10 +86,10 @@ async def list_jobs(
 async def get_job(
     job_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    tenant_id: uuid.UUID = Depends(get_tenant_id),
+    kb_id: uuid.UUID = Depends(get_kb_id),
     current_user: User = Depends(get_current_user),
 ):
-    svc = JobService(db, tenant_id, current_user.id)
+    svc = JobService(db, kb_id, current_user.id)
     job = await svc.get(job_id)
     return DataResponse(data=JobOut.model_validate(job))
 
@@ -110,9 +110,9 @@ async def get_job(
 async def retry_job(
     job_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    tenant_id: uuid.UUID = Depends(get_tenant_id),
+    kb_id: uuid.UUID = Depends(get_kb_id),
     current_user: User = Depends(get_current_user),
 ):
-    svc = JobService(db, tenant_id, current_user.id)
+    svc = JobService(db, kb_id, current_user.id)
     job = await svc.retry(job_id)
     return DataResponse(data=JobOut.model_validate(job))

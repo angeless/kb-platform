@@ -26,7 +26,7 @@ class RegisterRequest(BaseModel):
 
 
 class RegisterResponse(BaseModel):
-    tenant_id: UUID
+    kb_id: UUID
     user_id: UUID
     email: str
 

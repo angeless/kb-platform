@@ -12,15 +12,15 @@ from shared_models import Project
 class ProjectService:
     """CRUD operations for projects, scoped to a single tenant."""
 
-    def __init__(self, db: AsyncSession, tenant_id: uuid.UUID) -> None:
+    def __init__(self, db: AsyncSession, kb_id: uuid.UUID) -> None:
         self.db = db
-        self.tenant_id = tenant_id
+        self.kb_id = kb_id
 
     async def create(self, name: str, industry_hint: str | None = None) -> Project:
         """Create a new project."""
         project = Project(
             id=uuid.uuid4(),
-            tenant_id=self.tenant_id,
+            kb_id=self.kb_id,
             name=name,
             industry_hint=industry_hint,
             status="active",
@@ -32,7 +32,7 @@ class ProjectService:
     async def list(self, page: int = 1, page_size: int = 20) -> tuple[list[Project], int]:
         """Return paginated projects (excluding deleted) for the tenant."""
         base = select(Project).where(
-            Project.tenant_id == self.tenant_id,
+            Project.kb_id == self.kb_id,
             Project.status != "deleted",
         )
 
@@ -50,7 +50,7 @@ class ProjectService:
         """Get a single project by ID. Raises NotFoundException."""
         q = select(Project).where(
             Project.id == project_id,
-            Project.tenant_id == self.tenant_id,
+            Project.kb_id == self.kb_id,
             Project.status != "deleted",
         )
         result = await self.db.execute(q)

@@ -81,9 +81,9 @@ async def get_current_user(
     return user
 
 
-async def get_tenant_id(current_user: User = Depends(get_current_user)) -> uuid.UUID:
+async def get_kb_id(current_user: User = Depends(get_current_user)) -> uuid.UUID:
     """Return the tenant ID of the current user."""
-    return current_user.tenant_id
+    return current_user.kb_id
 
 
 # Role hierarchy: higher number = more permissions
@@ -123,7 +123,7 @@ async def get_api_key_project(
     Extracts the token from the Authorization header, SHA-256 hashes it,
     and looks up the corresponding active API key record.
 
-    Returns (api_key_record, project_id, tenant_id).
+    Returns (api_key_record, project_id, kb_id).
     """
     if not authorization:
         raise UnauthorizedException(
@@ -156,4 +156,4 @@ async def get_api_key_project(
     api_key.last_used_at = datetime.now(timezone.utc)
     await db.flush()
 
-    return api_key, api_key.project_id, api_key.tenant_id
+    return api_key, api_key.project_id, api_key.kb_id

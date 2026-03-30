@@ -15,6 +15,7 @@
 - 前端批量导入 UI：BatchDropzone 拖拽上传 + BatchProgressList 轮询进度 + 资产页集成（v0.44.6）
 
 ### 修复 (Fixed)
+- 全仓库 tenant_id → kb_id 重命名：7 表 Alembic migration + ORM + 36 router/service + JWT payload + 前端 store + 14 测试文件（v0.44.16）
 - [P0] 首次体验修复：上传自动触发 ingest job、仪表板真实统计、资产列表运行流水线按钮、上传引导优化、OnboardingGuide 去 localStorage（v0.44.13）
 - ASR 端到端打通：补齐 openai-whisper 依赖、修复 PARSEABLE_ASSET_TYPES 缺少 image/audio、延长 Celery 超时到 300s（v0.44.7）
 - 图谱节点合并/拆分 API：POST merge + POST split 端点，事务安全，project_admin 权限（v0.44.8）

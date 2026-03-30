@@ -17,8 +17,8 @@ from . import TenantService
 class ConflictService(TenantService):
     """Operations for conflict records, scoped to a single tenant."""
 
-    def __init__(self, db: AsyncSession, tenant_id: uuid.UUID, user_id: uuid.UUID) -> None:
-        super().__init__(db, tenant_id)
+    def __init__(self, db: AsyncSession, kb_id: uuid.UUID, user_id: uuid.UUID) -> None:
+        super().__init__(db, kb_id)
         self.user_id = user_id
 
     async def list(

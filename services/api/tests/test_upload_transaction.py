@@ -21,7 +21,7 @@ def _make_asset_service(storage=None):
 
     svc = AssetService.__new__(AssetService)
     svc.db = AsyncMock()
-    svc.tenant_id = uuid.uuid4()
+    svc.kb_id = uuid.uuid4()
     svc.user_id = uuid.uuid4()
     svc.storage = storage
     svc.max_upload_size_bytes = 100 * 1024 * 1024

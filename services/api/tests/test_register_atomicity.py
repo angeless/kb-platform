@@ -100,7 +100,7 @@ class TestRegisterSuccess:
 
         result = await svc.register("Test Tenant", "new@test.com", "password123")
 
-        assert "tenant_id" in result
+        assert "kb_id" in result
         assert "user_id" in result
         assert result["email"] == "new@test.com"
         # db.add should have been called twice (Tenant + User)

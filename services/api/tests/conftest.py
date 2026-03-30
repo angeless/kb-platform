@@ -110,7 +110,7 @@ async def auth_headers(db_session: AsyncSession) -> dict[str, str]:
 
     user = User(
         id=uuid.uuid4(),
-        tenant_id=tenant.id,
+        kb_id=tenant.id,
         email=f"test-{uuid.uuid4().hex[:8]}@example.com",
         password_hash=hash_password("test-password"),
         role="admin",
@@ -120,7 +120,7 @@ async def auth_headers(db_session: AsyncSession) -> dict[str, str]:
     await db_session.flush()
 
     token = create_access_token(
-        data={"sub": str(user.id), "tenant_id": str(tenant.id), "role": user.role},
+        data={"sub": str(user.id), "kb_id": str(tenant.id), "role": user.role},
         secret=settings.jwt_secret,
         algorithm=settings.jwt_algorithm,
     )

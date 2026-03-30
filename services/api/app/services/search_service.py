@@ -209,7 +209,7 @@ class SearchService(TenantService):
         try:
             from . import TenantService
             from .embedding_service import EmbeddingService
-            embed_svc = EmbeddingService(self.db, self.tenant_id)
+            embed_svc = EmbeddingService(self.db, self.kb_id)
             semantic_results = await embed_svc.semantic_search(project_id, query, top_k=50)
         except Exception:
             pass  # No embeddings or pgvector not available — fallback to keyword only

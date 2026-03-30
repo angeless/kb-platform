@@ -17,7 +17,7 @@ class ModelProviderCreate(BaseModel):
 
 class ModelProviderOut(BaseModel):
     id: UUID
-    tenant_id: UUID
+    kb_id: UUID
     provider_name: str
     api_key_masked: str
     base_url: str | None
@@ -49,7 +49,7 @@ class ModelRouteUpdate(BaseModel):
 
 class ModelRouteOut(BaseModel):
     id: UUID
-    tenant_id: UUID
+    kb_id: UUID
     task_type: str
     provider_id: UUID
     model_name: str

@@ -13,14 +13,14 @@ import pytest
 from shared_errors import ConflictException, ForbiddenException
 
 
-def _make_user_service(tenant_id: uuid.UUID | None = None):
+def _make_user_service(kb_id: uuid.UUID | None = None):
     """Create a UserService instance with mocked DB."""
     from app.services.user_service import UserService
 
-    tid = tenant_id or uuid.uuid4()
+    tid = kb_id or uuid.uuid4()
     svc = UserService.__new__(UserService)
     svc.db = AsyncMock()
-    svc.tenant_id = tid
+    svc.kb_id = tid
     svc.db.flush = AsyncMock()
     svc.db.refresh = AsyncMock()
     return svc

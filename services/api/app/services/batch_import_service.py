@@ -64,11 +64,11 @@ class BatchImportService(TenantService):
     def __init__(
         self,
         db: AsyncSession,
-        tenant_id: uuid.UUID,
+        kb_id: uuid.UUID,
         user_id: uuid.UUID,
         storage,
     ) -> None:
-        super().__init__(db, tenant_id)
+        super().__init__(db, kb_id)
         self.user_id = user_id
         self.storage = storage
 
@@ -95,7 +95,7 @@ class BatchImportService(TenantService):
             )
 
         batch_id = uuid.uuid4()
-        zip_path = f"{self.tenant_id}/{project_id}/batches/{batch_id}/original.zip"
+        zip_path = f"{self.kb_id}/{project_id}/batches/{batch_id}/original.zip"
 
         # Upload ZIP to MinIO
         if self.storage is not None:
@@ -162,7 +162,7 @@ class BatchImportService(TenantService):
                     continue
 
                 asset_id = uuid.uuid4()
-                object_path = f"{self.tenant_id}/{project_id}/{asset_id}/{filename}"
+                object_path = f"{self.kb_id}/{project_id}/{asset_id}/{filename}"
 
                 if self.storage is not None:
                     self.storage.upload_file(object_path, file_content)

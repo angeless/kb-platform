@@ -41,21 +41,21 @@ def _make_request(token: str | None = None, client_ip: str = "127.0.0.1"):
     return request
 
 
-def _make_valid_token(tenant_id: str, exp_offset: int = 3600) -> str:
+def _make_valid_token(kb_id: str, exp_offset: int = 3600) -> str:
     """Create a JWT token with given expiry offset from now."""
     payload = {
         "sub": str(uuid.uuid4()),
-        "tenant_id": tenant_id,
+        "kb_id": kb_id,
         "exp": int(time.time()) + exp_offset,
     }
     return jwt.encode(payload, _JWT_SECRET, algorithm=_JWT_ALGORITHM)
 
 
-def _make_expired_token(tenant_id: str) -> str:
+def _make_expired_token(kb_id: str) -> str:
     """Create an expired JWT token."""
     payload = {
         "sub": str(uuid.uuid4()),
-        "tenant_id": tenant_id,
+        "kb_id": kb_id,
         "exp": int(time.time()) - 100,  # expired 100 seconds ago
     }
     return jwt.encode(payload, _JWT_SECRET, algorithm=_JWT_ALGORITHM)
@@ -74,19 +74,19 @@ def _mock_settings():
 class TestExtractIdentity:
     """_extract_identity() JWT expiry handling."""
 
-    def test_valid_jwt_returns_tenant_identity(self, _mock_settings):
+    def test_valid_jwt_returns_kb_identity(self, _mock_settings):
         middleware = _make_middleware()
-        tenant_id = str(uuid.uuid4())
-        token = _make_valid_token(tenant_id)
+        kb_id = str(uuid.uuid4())
+        token = _make_valid_token(kb_id)
         request = _make_request(token=token)
 
         identity = middleware._extract_identity(request)
-        assert identity == f"tenant:{tenant_id}"
+        assert identity == f"tenant:{kb_id}"
 
     def test_expired_jwt_falls_back_to_ip(self, _mock_settings):
         middleware = _make_middleware()
-        tenant_id = str(uuid.uuid4())
-        token = _make_expired_token(tenant_id)
+        kb_id = str(uuid.uuid4())
+        token = _make_expired_token(kb_id)
         request = _make_request(token=token, client_ip="192.168.1.100")
 
         identity = middleware._extract_identity(request)
@@ -104,7 +104,7 @@ class TestExtractIdentity:
         # Create token with wrong secret
         payload = {
             "sub": str(uuid.uuid4()),
-            "tenant_id": str(uuid.uuid4()),
+            "kb_id": str(uuid.uuid4()),
             "exp": int(time.time()) + 3600,
         }
         token = jwt.encode(payload, "wrong-secret", algorithm=_JWT_ALGORITHM)
@@ -113,8 +113,8 @@ class TestExtractIdentity:
         identity = middleware._extract_identity(request)
         assert identity == "ip:172.16.0.1"
 
-    def test_valid_jwt_without_tenant_id_falls_back_to_ip(self, _mock_settings):
-        """JWT is valid but has no tenant_id claim."""
+    def test_valid_jwt_without_kb_id_falls_back_to_ip(self, _mock_settings):
+        """JWT is valid but has no kb_id claim."""
         middleware = _make_middleware()
         payload = {
             "sub": str(uuid.uuid4()),

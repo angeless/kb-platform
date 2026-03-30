@@ -11,7 +11,7 @@ interface User {
   id: string;
   email: string;
   role: string;
-  tenant_id: string;
+  kb_id: string;
 }
 
 interface AuthState {

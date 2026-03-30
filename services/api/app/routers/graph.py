@@ -15,7 +15,7 @@ from shared_schemas.architecture import MergeNodesRequest, NodeOut, SplitNodeReq
 from shared_schemas.common import DataResponse, ERROR_RESPONSES_AUTH
 from shared_schemas.graph import GraphEdge, GraphNode, GraphResponse
 
-from app.deps import get_current_user, get_db, get_tenant_id, require_role
+from app.deps import get_current_user, get_db, get_kb_id, require_role
 from app.services.graph_service import GraphService
 
 router = APIRouter(prefix="/v1/projects", tags=["graph"])
@@ -35,7 +35,7 @@ async def get_project_graph(
 ):
     # Verify project exists and belongs to user's tenant
     proj = await db.get(Project, project_id)
-    if proj is None or proj.tenant_id != current_user.tenant_id:
+    if proj is None or proj.kb_id != current_user.kb_id:
         raise AppException(ErrorCode.PROJECT_NOT_FOUND, "项目不存在", status_code=404)
 
     # 1. Query docs — if > 500 total, restrict to approved only
@@ -141,10 +141,10 @@ async def merge_nodes(
     project_id: uuid.UUID,
     body: MergeNodesRequest,
     db: AsyncSession = Depends(get_db),
-    tenant_id: uuid.UUID = Depends(get_tenant_id),
+    kb_id: uuid.UUID = Depends(get_kb_id),
     current_user: User = Depends(require_role("project_admin")),
 ):
-    svc = GraphService(db, tenant_id)
+    svc = GraphService(db, kb_id)
     new_node = await svc.merge_nodes(
         project_id=project_id,
         source_node_ids=body.source_node_ids,
@@ -170,10 +170,10 @@ async def split_node(
     node_id: uuid.UUID,
     body: SplitNodeRequest,
     db: AsyncSession = Depends(get_db),
-    tenant_id: uuid.UUID = Depends(get_tenant_id),
+    kb_id: uuid.UUID = Depends(get_kb_id),
     current_user: User = Depends(require_role("project_admin")),
 ):
-    svc = GraphService(db, tenant_id)
+    svc = GraphService(db, kb_id)
     node_a, node_b = await svc.split_node(
         project_id=project_id,
         node_id=node_id,

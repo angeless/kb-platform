@@ -16,9 +16,9 @@ from app.utils.math_utils import cosine_similarity
 
 
 class ProjectRouterService:
-    def __init__(self, db: AsyncSession, tenant_id: uuid.UUID):
+    def __init__(self, db: AsyncSession, kb_id: uuid.UUID):
         self.db = db
-        self.tenant_id = tenant_id
+        self.kb_id = kb_id
 
     async def route(
         self,
@@ -38,7 +38,7 @@ class ProjectRouterService:
         """
         projects_result = await self.db.execute(
             select(Project).where(
-                Project.tenant_id == self.tenant_id,
+                Project.kb_id == self.kb_id,
                 Project.status == "active",
             )
         )

@@ -18,9 +18,9 @@ class TenantService:
     from this class to avoid duplicating the _verify_project logic.
     """
 
-    def __init__(self, db: AsyncSession, tenant_id: uuid.UUID) -> None:
+    def __init__(self, db: AsyncSession, kb_id: uuid.UUID) -> None:
         self.db = db
-        self.tenant_id = tenant_id
+        self.kb_id = kb_id
 
     async def _verify_project(self, project_id: uuid.UUID) -> Project:
         """Verify project exists and belongs to tenant.
@@ -29,7 +29,7 @@ class TenantService:
         """
         q = select(Project).where(
             Project.id == project_id,
-            Project.tenant_id == self.tenant_id,
+            Project.kb_id == self.kb_id,
             Project.status != "deleted",
         )
         result = await self.db.execute(q)

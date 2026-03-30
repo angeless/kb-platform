@@ -13,11 +13,11 @@ from .base import Base
 class User(Base):
     __tablename__ = "user"
     __table_args__ = (
-        Index("ix_user_tenant_status", "tenant_id", "status"),
-        UniqueConstraint("email", "tenant_id", name="uq_user_email_tenant"),
+        Index("ix_user_tenant_status", "kb_id", "status"),
+        UniqueConstraint("email", "kb_id", name="uq_user_email_tenant"),
     )
 
-    tenant_id: Mapped[uuid.UUID] = mapped_column(
+    kb_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("tenant.id"), nullable=False
     )
     email: Mapped[str] = mapped_column(String(255), nullable=False)  # M-15: uniqueness per tenant via table constraint

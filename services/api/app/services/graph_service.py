@@ -11,9 +11,9 @@ from shared_models.knowledge import KnowledgeDoc
 
 
 class GraphService:
-    def __init__(self, db: AsyncSession, tenant_id: uuid.UUID):
+    def __init__(self, db: AsyncSession, kb_id: uuid.UUID):
         self.db = db
-        self.tenant_id = tenant_id
+        self.kb_id = kb_id
 
     async def _verify_node(self, node_id: uuid.UUID, project_id: uuid.UUID) -> ArchitectureNode:
         """Verify node exists and belongs to project (via architecture)."""

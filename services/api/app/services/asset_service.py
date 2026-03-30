@@ -29,12 +29,12 @@ class AssetService(TenantService):
     def __init__(
         self,
         db: AsyncSession,
-        tenant_id: uuid.UUID,
+        kb_id: uuid.UUID,
         user_id: uuid.UUID,
         storage: StorageClient | None = None,
         max_upload_size_bytes: int = 100 * 1024 * 1024,
     ) -> None:
-        super().__init__(db, tenant_id)
+        super().__init__(db, kb_id)
         self.user_id = user_id
         self.storage = storage
         self.max_upload_size_bytes = max_upload_size_bytes
@@ -79,7 +79,7 @@ class AssetService(TenantService):
             )
 
         asset_id = uuid.uuid4()
-        object_path = f"{self.tenant_id}/{project_id}/{asset_id}/{filename}"
+        object_path = f"{self.kb_id}/{project_id}/{asset_id}/{filename}"
 
         # Upload to MinIO/S3 if storage client is available
         if self.storage is not None:
@@ -147,7 +147,7 @@ class AssetService(TenantService):
             filename += ".html"
 
         asset_id = uuid.uuid4()
-        object_path = f"{self.tenant_id}/{project_id}/{asset_id}/{filename}"
+        object_path = f"{self.kb_id}/{project_id}/{asset_id}/{filename}"
 
         # Upload to MinIO/S3
         if self.storage is not None:
@@ -284,7 +284,7 @@ class AssetService(TenantService):
                     continue
 
                 asset_id = uuid.uuid4()
-                object_path = f"{self.tenant_id}/{project_id}/{asset_id}/{filename}"
+                object_path = f"{self.kb_id}/{project_id}/{asset_id}/{filename}"
 
                 if self.storage is not None:
                     self.storage.upload_file(object_path, file_content)

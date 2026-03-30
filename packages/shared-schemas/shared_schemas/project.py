@@ -19,7 +19,7 @@ class ProjectUpdate(BaseModel):
 
 class ProjectOut(BaseModel):
     id: UUID
-    tenant_id: UUID
+    kb_id: UUID
     name: str
     industry_hint: str | None
     status: str

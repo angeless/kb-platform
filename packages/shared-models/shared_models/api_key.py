@@ -20,7 +20,7 @@ class ApiKey(Base):
     project_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("project.id", ondelete="CASCADE"), nullable=False
     )
-    tenant_id: Mapped[uuid.UUID] = mapped_column(
+    kb_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("tenant.id"), nullable=False
     )
     name: Mapped[str] = mapped_column(String(100), nullable=False)

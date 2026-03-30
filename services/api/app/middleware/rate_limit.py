@@ -101,7 +101,7 @@ class _LocalRateLimiter:
 class RateLimitMiddleware(BaseHTTPMiddleware):
     """Sliding window rate limiter using Redis sorted sets.
 
-    Uses tenant_id from JWT for authenticated requests,
+    Uses kb_id from JWT for authenticated requests,
     falls back to client IP for unauthenticated requests.
 
     When Redis is unavailable, degrades to a local in-memory fixed-window
@@ -132,7 +132,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             self._last_redis_warning = now
 
     def _extract_identity(self, request: Request) -> str:
-        """Extract rate limit key: tenant_id from auth header, or client IP."""
+        """Extract rate limit key: kb_id from auth header, or client IP."""
         auth = request.headers.get("Authorization", "")
         if auth.startswith("Bearer "):
             try:
@@ -142,7 +142,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                     auth[7:], settings.jwt_secret,
                     algorithms=[settings.jwt_algorithm],
                 )
-                tid = payload.get("tenant_id")
+                tid = payload.get("kb_id")
                 if tid:
                     return f"tenant:{tid}"
             except Exception:

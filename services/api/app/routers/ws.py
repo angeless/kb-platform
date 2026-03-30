@@ -39,15 +39,15 @@ async def ws_job_status(websocket: WebSocket, project_id: str):
         await websocket.close(code=4001, reason="令牌无效或已过期")
         return
 
-    tenant_id = payload.get("tenant_id")
-    if not tenant_id:
+    kb_id = payload.get("kb_id")
+    if not kb_id:
         await websocket.close(code=4001, reason="令牌缺少租户信息")
         return
 
     # Tenant isolation: verify project belongs to this tenant
     try:
         project_uuid = uuid.UUID(project_id)
-        tenant_uuid = uuid.UUID(tenant_id)
+        tenant_uuid = uuid.UUID(kb_id)
     except ValueError:
         await websocket.close(code=4003, reason="项目ID格式无效")
         return
@@ -58,7 +58,7 @@ async def ws_job_status(websocket: WebSocket, project_id: str):
         result = await db.execute(
             select(Project.id).where(
                 Project.id == project_uuid,
-                Project.tenant_id == tenant_uuid,
+                Project.kb_id == tenant_uuid,
             )
         )
         if result.scalar_one_or_none() is None:
@@ -79,7 +79,7 @@ async def ws_job_status(websocket: WebSocket, project_id: str):
         pubsub = redis_client.pubsub()
         await pubsub.subscribe(channel_name)
 
-        logger.info("WebSocket client connected: project=%s tenant=%s", project_id, tenant_id)
+        logger.info("WebSocket client connected: project=%s tenant=%s", project_id, kb_id)
 
         while True:
             message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
