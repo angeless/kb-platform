@@ -10,6 +10,7 @@
 - 前端 RBAC 权限感知：usePermission hook + PermissionGuard 组件，按角色隐藏操作按钮（v0.44.1）
 - 侧边栏精简：移除"用户管理"和"审计日志"入口，v1 单用户场景不需要（v0.44.2）
 - 版本历史 API：GET /v1/docs/{id}/versions 列表 + POST rollback 回滚端点（v0.44.3）
+- 前端版本历史 UI：历史版本抽屉面板 + 行级 diff 展示 + 回滚确认（v0.44.4）
 
 ## [0.43.5] - 2026-03-27
 

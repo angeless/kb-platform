@@ -138,7 +138,7 @@
 | v0.44.1 | 前端 RBAC 感知（角色上下文 + 权限门控 UI） | P0 | Done (0dea90c) |
 | v0.44.2 | 侧边栏隐藏"用户管理"入口（产品决策：v1 单用户场景，企业版再开放） | P0 | Done (a293bd5) |
 | v0.44.3 | 版本历史 API 补全（`GET /versions` 列表 + `POST /rollback`） | P0 | Done (cf085ee) |
-| v0.44.4 | 前端版本历史 UI（版本列表 + diff + 回滚） | P0 | Planned |
+| v0.44.4 | 前端版本历史 UI（版本列表 + diff + 回滚） | P0 | Done (2568ac7) |
 | v0.44.5 | 批量导入后端（ZIP 解压 + 批量任务调度 + batch API） | P1 | Planned |
 | v0.44.6 | 前端批量导入 UI（拖拽上传 + 批次进度列表） | P1 | Planned |
 | v0.44.7 | ASR 端到端打通（验证 + 修复 + 前端状态展示） | P1 | Planned |
