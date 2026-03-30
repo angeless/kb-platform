@@ -7,6 +7,7 @@ from .architecture import Architecture, ArchitectureNode
 from .knowledge import KnowledgeDoc, KnowledgeDocVersion, SourceRef, ConflictRecord
 from .cross_reference import CrossReference
 from .api_key import ApiKey
+from .batch_import import BatchImport, BatchImportAsset
 from .job import Job
 from .model_config import ModelProvider, ModelRoute
 from .audit import AuditLog
@@ -21,6 +22,7 @@ __all__ = [
     "Architecture", "ArchitectureNode",
     "KnowledgeDoc", "KnowledgeDocVersion", "SourceRef", "ConflictRecord",
     "CrossReference",
+    "BatchImport", "BatchImportAsset",
     "ApiKey",
     "Job",
     "ModelProvider", "ModelRoute",

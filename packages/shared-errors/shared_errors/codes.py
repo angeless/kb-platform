@@ -60,6 +60,10 @@ class ErrorCode(StrEnum):
     SEARCH_QUERY_TOO_SHORT = "SEARCH_QUERY_TOO_SHORT"
     QA_MODEL_NOT_CONFIGURED = "QA_MODEL_NOT_CONFIGURED"
 
+    # Batch Import
+    BATCH_NOT_FOUND = "BATCH_NOT_FOUND"
+    EMPTY_ARCHIVE = "EMPTY_ARCHIVE"
+
     # Validation
     VALIDATION_ERROR = "VALIDATION_ERROR"
 
@@ -105,6 +109,8 @@ ERROR_MESSAGES: dict[str, str] = {
     ErrorCode.API_KEY_NOT_FOUND: "API Key 不存在",
     ErrorCode.SEARCH_QUERY_TOO_SHORT: "请输入至少 2 个字的搜索内容",
     ErrorCode.QA_MODEL_NOT_CONFIGURED: "AI 问答功能需要先配置模型服务",
+    ErrorCode.BATCH_NOT_FOUND: "批次不存在",
+    ErrorCode.EMPTY_ARCHIVE: "压缩包中没有支持的文件格式",
     ErrorCode.VALIDATION_ERROR: "提交的信息有误，请检查后重试",
     ErrorCode.SYSTEM_INTERNAL_ERROR: "系统开了个小差，请稍后重试",
     ErrorCode.SYSTEM_RATE_LIMITED: "操作太频繁，请稍后再试",
