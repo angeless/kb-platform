@@ -143,7 +143,7 @@
 | v0.44.6 | 前端批量导入 UI（拖拽上传 + 批次进度列表） | P1 | Done |
 | v0.44.7 | ASR 端到端打通（验证 + 修复 + 前端状态展示） | P1 | Done |
 | v0.44.8 | 图谱 ArchitectureNode 合并/拆分 API | P1 | Done |
-| v0.44.9 | 前端图谱编辑操作（选节点 + 合并/拆分面板） | P1 | Planned |
+| v0.44.9 | 前端图谱编辑操作（选节点 + 合并/拆分面板） | P1 | Done |
 | v0.44.10 | API Key 限流（Redis token bucket，per key 速率限制） | P1 | Planned |
 | v0.44.11 | API 用量统计（`api_usage_log` 表 + 查询端点） | P1 | Planned |
 | v0.44.12 | Q&A 对话界面（`POST /v1/qa/ask` 已有后端，补前端） | P1 | Planned |
@@ -1750,7 +1750,7 @@ KB Platform 当前在整个代码库中使用 `tenant_id` 表示"一个 KB 注�
 | v0.44.6 | 前端批量导入 UI | P1 | — | Done |
 | v0.44.7 | ASR 端到端打通 | P1 | — | Done |
 | v0.44.8 | 图谱 ArchitectureNode 合并/拆分 API | P1 | — | Done |
-| v0.44.9 | 前端图谱编辑操作 | P1 | — | Planned |
+| v0.44.9 | 前端图谱编辑操作 | P1 | — | Done |
 | v0.44.10 | API Key 限流 | P1 | — | Planned |
 | v0.44.11 | API 用量统计 | P1 | — | Planned |
 | v0.44.12 | Q&A 对话界面 | P1 | — | Planned |
