@@ -7,6 +7,7 @@
 
 ### 新增 (Added)
 - 自动化开发工作流（dev-workflow-upgrade v1.3）
+- PA Pass 统一认证接入：登录/注册/刷新代理到 Pass REST API，Pass JWT 为认证信任根，`GET /pass/me` 验证，首次登录自动创建 KB Tenant + User（v0.44.15）
 - 前端 RBAC 权限感知：usePermission hook + PermissionGuard 组件，按角色隐藏操作按钮（v0.44.1）
 - 侧边栏精简：移除"用户管理"和"审计日志"入口，v1 单用户场景不需要（v0.44.2）
 - 版本历史 API：GET /v1/docs/{id}/versions 列表 + POST rollback 回滚端点（v0.44.3）
@@ -16,6 +17,14 @@
 
 ### 修复 (Fixed)
 - 全仓库 tenant_id → kb_id 重命名：7 表 Alembic migration + ORM + 36 router/service + JWT payload + 前端 store + 14 测试文件（v0.44.16）
+- ForbiddenException 支持自定义 error_code 参数，修复封禁账号返回错误码不正确的问题（v0.44.15）
+- 修复 3 处 `Depends(require_role())` 双层包装导致启动崩溃的 pre-existing bug（docs/graph/batch_import 路由）（v0.44.15）
+
+### 变更 (Changed)
+- 认证方式从本地 bcrypt + 自签 JWT 迁移到 PA Pass 代理模式（v0.44.15）
+- 限流身份识别从 JWT 解码降级为 IP-based（KB 无法本地解码 Pass JWT）（v0.44.15）
+- 注册流程：移除"团队名称"字段，新增可选"昵称"，注册后自动登录不再跳转登录页（v0.44.15）
+- `/forgot-password` 和 `/reset-password` 端点标记为 410 Gone（密码管理移至 PA 平台）（v0.44.15）
 - [P0] 首次体验修复：上传自动触发 ingest job、仪表板真实统计、资产列表运行流水线按钮、上传引导优化、OnboardingGuide 去 localStorage（v0.44.13）
 - ASR 端到端打通：补齐 openai-whisper 依赖、修复 PARSEABLE_ASSET_TYPES 缺少 image/audio、延长 Celery 超时到 300s（v0.44.7）
 - 图谱节点合并/拆分 API：POST merge + POST split 端点，事务安全，project_admin 权限（v0.44.8）

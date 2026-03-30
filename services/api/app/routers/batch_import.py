@@ -54,7 +54,7 @@ async def create_batch_import(
     auto_start: bool = Form(default=True),
     db: AsyncSession = Depends(get_db),
     kb_id: uuid.UUID = Depends(get_kb_id),
-    user: User = Depends(require_role("editor")),
+    user: User = require_role("editor"),
     storage: StorageClient | None = Depends(get_storage),
 ):
     content = await file.read()

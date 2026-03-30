@@ -8,7 +8,7 @@ import { useAuthStore } from "@/stores/auth-store";
 export default function RegisterPage() {
   const router = useRouter();
   const { register, isLoading, error } = useAuthStore();
-  const [tenantName, setTenantName] = useState("");
+  const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -18,10 +18,6 @@ export default function RegisterPage() {
     e.preventDefault();
     setLocalError("");
 
-    if (!tenantName.trim()) {
-      setLocalError("请输入组织名称");
-      return;
-    }
     if (!email.trim()) {
       setLocalError("请输入邮箱");
       return;
@@ -52,8 +48,9 @@ export default function RegisterPage() {
     }
 
     try {
-      await register(tenantName, email, password);
-      router.push("/login?registered=true");
+      await register(email, password, displayName || undefined);
+      // Register now auto-logs in, go straight to projects
+      router.push("/projects");
     } catch {
       // error is set in store
     }
@@ -79,19 +76,6 @@ export default function RegisterPage() {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">
-                团队名称
-              </label>
-              <input
-                type="text"
-                value={tenantName}
-                onChange={(e) => setTenantName(e.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
-                placeholder="你的公司或团队名称"
-              />
-            </div>
-
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-700">
                 邮箱
@@ -128,6 +112,19 @@ export default function RegisterPage() {
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
                 placeholder="再次输入密码"
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">
+                昵称 <span className="font-normal text-gray-400">（可选）</span>
+              </label>
+              <input
+                type="text"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                placeholder="你的名字或昵称"
               />
             </div>
 

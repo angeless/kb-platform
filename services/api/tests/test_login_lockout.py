@@ -1,123 +1,88 @@
-"""Tests for login lockout mechanism (H-08)."""
+"""Tests for login via PA Pass.
+
+Verifies that:
+1. Successful login calls PassClient.login() and returns token
+2. First-time Pass login auto-creates KB Tenant + User
+3. Repeat login finds existing User by pass_id
+"""
+
+import uuid
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
 
-from shared_errors import AppException, ErrorCode
-
-# We test the AuthService lockout methods in isolation using mocked Redis
+from shared_errors import UnauthorizedException
 
 
-@pytest.fixture
-def mock_settings():
+def _make_auth_service():
+    """Create an AuthService instance with mocked DB and PassClient."""
+    from app.services.auth_service import AuthService
+
     settings = MagicMock()
-    settings.redis_url = "redis://localhost:6379/0"
-    settings.jwt_secret = "test-secret"
-    settings.jwt_algorithm = "HS256"
-    settings.access_token_expire_minutes = 30
-    settings.refresh_token_expire_days = 7
-    settings.environment = "development"
-    return settings
+    settings.pass_base_url = "http://mock-pass"
+    settings.kb_product_id = "mock-product-id"
+
+    svc = AuthService.__new__(AuthService)
+    svc.db = AsyncMock()
+    svc.settings = settings
+    svc.db.flush = AsyncMock()
+    svc.db.add = MagicMock()
+    svc._pass = AsyncMock()
+    return svc
 
 
-@pytest.fixture
-def mock_db():
-    return AsyncMock()
+class TestLoginViaPass:
+    """Login delegates to Pass and auto-provisions KB User."""
 
+    @pytest.mark.asyncio
+    async def test_login_first_time_creates_user(self):
+        svc = _make_auth_service()
+        svc._pass.login = AsyncMock(return_value={
+            "passId": "pass-uuid-789",
+            "token": "pass-jwt-token",
+            "expiresAt": "2026-03-29T12:00:00Z",
+            "productBindings": [],
+        })
+        # No existing user
+        svc.db.execute = AsyncMock(
+            return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=None))
+        )
 
-@pytest.fixture
-def mock_redis():
-    r = AsyncMock()
-    r.ttl = AsyncMock(return_value=-2)  # key not found
-    r.incr = AsyncMock(return_value=1)
-    r.expire = AsyncMock()
-    r.setex = AsyncMock()
-    r.delete = AsyncMock()
-    return r
+        result = await svc.login("new@test.com", "Password1!")
 
+        assert result["access_token"] == "pass-jwt-token"
+        # Should have created Tenant + User
+        assert svc.db.add.call_count == 2
 
-@pytest.mark.asyncio
-async def test_check_lockout_not_locked(mock_db, mock_settings, mock_redis):
-    """No lockout key → login allowed."""
-    from app.services.auth_service import AuthService
+    @pytest.mark.asyncio
+    async def test_login_existing_user_no_duplicate(self):
+        svc = _make_auth_service()
+        svc._pass.login = AsyncMock(return_value={
+            "passId": "pass-uuid-existing",
+            "token": "pass-jwt-token",
+            "expiresAt": "2026-03-29T12:00:00Z",
+            "productBindings": [],
+        })
+        existing_user = MagicMock()
+        existing_user.id = uuid.uuid4()
+        existing_user.kb_id = uuid.uuid4()
+        svc.db.execute = AsyncMock(
+            return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=existing_user))
+        )
 
-    svc = AuthService(mock_db, mock_settings)
-    svc._redis = mock_redis
-    mock_redis.ttl.return_value = -2  # key does not exist
+        result = await svc.login("existing@test.com", "Password1!")
 
-    # Should not raise
-    await svc._check_lockout("test@example.com")
+        assert result["access_token"] == "pass-jwt-token"
+        # Should NOT have created new Tenant or User
+        svc.db.add.assert_not_called()
 
+    @pytest.mark.asyncio
+    async def test_login_pass_401_raises_unauthorized(self):
+        svc = _make_auth_service()
+        svc._pass.login = AsyncMock(side_effect=UnauthorizedException(
+            error_code="AUTH_INVALID_CREDENTIALS",
+            message="邮箱或密码错误",
+        ))
 
-@pytest.mark.asyncio
-async def test_check_lockout_locked(mock_db, mock_settings, mock_redis):
-    """Active lockout key → 423 raised."""
-    from app.services.auth_service import AuthService
-
-    svc = AuthService(mock_db, mock_settings)
-    svc._redis = mock_redis
-    mock_redis.ttl.return_value = 600  # 10 minutes remaining
-
-    with pytest.raises(AppException) as exc_info:
-        await svc._check_lockout("locked@example.com")
-    assert exc_info.value.status_code == 423
-    assert "锁定" in exc_info.value.message
-
-
-@pytest.mark.asyncio
-async def test_record_failed_attempt_increments(mock_db, mock_settings, mock_redis):
-    """Failed attempts are counted via Redis INCR."""
-    from app.services.auth_service import AuthService
-
-    svc = AuthService(mock_db, mock_settings)
-    svc._redis = mock_redis
-    mock_redis.incr.return_value = 3  # 3rd attempt
-
-    await svc._record_failed_attempt("test@example.com")
-
-    mock_redis.incr.assert_called_once_with("login:attempts:test@example.com")
-    mock_redis.setex.assert_not_called()  # not yet at threshold
-
-
-@pytest.mark.asyncio
-async def test_record_failed_attempt_triggers_lockout(mock_db, mock_settings, mock_redis):
-    """5th failed attempt triggers lockout."""
-    from app.services.auth_service import AuthService
-
-    svc = AuthService(mock_db, mock_settings)
-    svc._redis = mock_redis
-    mock_redis.incr.return_value = 5  # 5th attempt = threshold
-
-    await svc._record_failed_attempt("test@example.com")
-
-    mock_redis.setex.assert_called_once_with("login:lockout:test@example.com", 900, "1")
-    mock_redis.delete.assert_called_once_with("login:attempts:test@example.com")
-
-
-@pytest.mark.asyncio
-async def test_clear_login_attempts(mock_db, mock_settings, mock_redis):
-    """Successful login clears both keys."""
-    from app.services.auth_service import AuthService
-
-    svc = AuthService(mock_db, mock_settings)
-    svc._redis = mock_redis
-
-    await svc._clear_login_attempts("test@example.com")
-
-    mock_redis.delete.assert_called_once_with(
-        "login:attempts:test@example.com",
-        "login:lockout:test@example.com",
-    )
-
-
-@pytest.mark.asyncio
-async def test_lockout_fail_open_when_redis_unavailable(mock_db, mock_settings):
-    """If Redis is unavailable, lockout check passes (fail-open)."""
-    from app.services.auth_service import AuthService
-
-    svc = AuthService(mock_db, mock_settings)
-    svc._redis = None  # will try to connect
-
-    with patch("app.services.auth_service.aioredis.from_url", side_effect=ConnectionError("refused")):
-        # Should not raise — fail-open
-        await svc._check_lockout("test@example.com")
+        with pytest.raises(UnauthorizedException):
+            await svc.login("wrong@test.com", "wrongpass")

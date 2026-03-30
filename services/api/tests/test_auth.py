@@ -1,176 +1,178 @@
-"""Tests for auth endpoints: register, login, refresh."""
+"""Tests for auth endpoints: register, login, refresh (via PA Pass)."""
+
+import uuid
+from unittest.mock import AsyncMock, patch
 
 import pytest
-import pytest_asyncio
 from httpx import AsyncClient
+
+from shared_errors import ConflictException, ErrorCode, ForbiddenException, UnauthorizedException
+
+
+# Mock Pass responses
+_PASS_REGISTER_RESP = {
+    "passId": f"pass:{uuid.uuid4()}",
+    "token": "mock-pass-jwt-token-register",
+    "expiresAt": "2026-03-29T13:00:00Z",
+    "productBinding": {"productId": "mock-product"},
+}
+
+_PASS_LOGIN_RESP = {
+    "passId": f"pass:{uuid.uuid4()}",
+    "token": "mock-pass-jwt-token-login",
+    "expiresAt": "2026-03-29T13:00:00Z",
+    "productBindings": [],
+}
+
+_PASS_REFRESH_RESP = {
+    "token": "mock-pass-jwt-token-refreshed",
+    "expiresAt": "2026-03-29T14:00:00Z",
+}
+
+_PASS_ME_RESP = {
+    "passId": _PASS_LOGIN_RESP["passId"],
+    "email": "test@example.com",
+    "displayName": "Test",
+}
 
 
 @pytest.mark.asyncio
 async def test_register_success(client: AsyncClient):
-    resp = await client.post(
-        "/v1/auth/register",
-        json={
-            "tenant_name": "Acme Corp",
-            "email": "new-user@example.com",
-            "password": "Secure@pass123",
-        },
-    )
+    with patch("app.services.auth_service.PassClient") as MockPassClient:
+        mock_pass = AsyncMock()
+        mock_pass.register = AsyncMock(return_value=_PASS_REGISTER_RESP)
+        MockPassClient.return_value = mock_pass
+
+        resp = await client.post(
+            "/v1/auth/register",
+            json={"email": "new-user@example.com", "password": "Secure@pass123"},
+        )
     assert resp.status_code == 201
     data = resp.json()["data"]
-    assert "kb_id" in data
-    assert "user_id" in data
+    assert "access_token" in data
     assert data["email"] == "new-user@example.com"
 
 
 @pytest.mark.asyncio
 async def test_register_duplicate_email(client: AsyncClient):
-    email = "dup-user@example.com"
-    await client.post(
-        "/v1/auth/register",
-        json={"tenant_name": "T1", "email": email, "password": "Secure@pass123"},
-    )
-    resp = await client.post(
-        "/v1/auth/register",
-        json={"tenant_name": "T2", "email": email, "password": "Secure@pass456"},
-    )
+    with patch("app.services.auth_service.PassClient") as MockPassClient:
+        mock_pass = AsyncMock()
+        mock_pass.register = AsyncMock(side_effect=ConflictException(
+            error_code=ErrorCode.AUTH_EMAIL_ALREADY_EXISTS,
+            message="邮箱已注册",
+        ))
+        MockPassClient.return_value = mock_pass
+
+        resp = await client.post(
+            "/v1/auth/register",
+            json={"email": "dup@example.com", "password": "Secure@pass123"},
+        )
     assert resp.status_code == 409
 
 
 @pytest.mark.asyncio
 async def test_login_success(client: AsyncClient):
-    email = "login-user@example.com"
-    await client.post(
-        "/v1/auth/register",
-        json={"tenant_name": "T", "email": email, "password": "Secure@pass123"},
-    )
-    resp = await client.post(
-        "/v1/auth/login",
-        json={"email": email, "password": "Secure@pass123"},
-    )
+    with patch("app.services.auth_service.PassClient") as MockPassClient:
+        mock_pass = AsyncMock()
+        mock_pass.login = AsyncMock(return_value=_PASS_LOGIN_RESP)
+        MockPassClient.return_value = mock_pass
+
+        resp = await client.post(
+            "/v1/auth/login",
+            json={"email": "login@example.com", "password": "Secure@pass123"},
+        )
     assert resp.status_code == 200
     data = resp.json()["data"]
     assert "access_token" in data
-    assert "refresh_token" in data
 
 
 @pytest.mark.asyncio
 async def test_login_wrong_password(client: AsyncClient):
-    email = "wrongpw-user@example.com"
-    await client.post(
-        "/v1/auth/register",
-        json={"tenant_name": "T", "email": email, "password": "Secure@pass123"},
-    )
-    resp = await client.post(
-        "/v1/auth/login",
-        json={"email": email, "password": "wrongpassword"},
-    )
+    with patch("app.services.auth_service.PassClient") as MockPassClient:
+        mock_pass = AsyncMock()
+        mock_pass.login = AsyncMock(side_effect=UnauthorizedException(
+            error_code=ErrorCode.AUTH_INVALID_CREDENTIALS,
+            message="邮箱或密码错误",
+        ))
+        MockPassClient.return_value = mock_pass
+
+        resp = await client.post(
+            "/v1/auth/login",
+            json={"email": "wrong@example.com", "password": "wrongpassword"},
+        )
     assert resp.status_code == 401
     assert resp.json()["error_code"] == "AUTH_INVALID_CREDENTIALS"
 
 
 @pytest.mark.asyncio
-async def test_refresh_token(client: AsyncClient):
-    email = "refresh-user@example.com"
-    await client.post(
-        "/v1/auth/register",
-        json={"tenant_name": "T", "email": email, "password": "Secure@pass123"},
-    )
-    login_resp = await client.post(
-        "/v1/auth/login",
-        json={"email": email, "password": "Secure@pass123"},
-    )
-    refresh_token = login_resp.json()["data"]["refresh_token"]
+async def test_login_banned_account(client: AsyncClient):
+    with patch("app.services.auth_service.PassClient") as MockPassClient:
+        mock_pass = AsyncMock()
+        mock_pass.login = AsyncMock(side_effect=ForbiddenException(
+            error_code=ErrorCode.AUTH_ACCOUNT_BANNED,
+            message="账号已被封禁，请联系管理员",
+        ))
+        MockPassClient.return_value = mock_pass
 
-    resp = await client.post(
-        "/v1/auth/refresh",
-        json={"refresh_token": refresh_token},
-    )
-    assert resp.status_code == 200
-    data = resp.json()["data"]
-    assert "access_token" in data
+        resp = await client.post(
+            "/v1/auth/login",
+            json={"email": "banned@example.com", "password": "Secure@pass123"},
+        )
+    assert resp.status_code == 403
+    assert resp.json()["error_code"] == "AUTH_ACCOUNT_BANNED"
+    assert "封禁" in resp.json()["message"]
 
 
 @pytest.mark.asyncio
 async def test_register_weak_password_no_uppercase(client: AsyncClient):
-    """Password without uppercase should be rejected."""
     resp = await client.post(
         "/v1/auth/register",
-        json={"tenant_name": "T", "email": "weak1@example.com", "password": "secure@pass123"},
+        json={"email": "weak1@example.com", "password": "secure@pass123"},
     )
     assert resp.status_code == 422
 
 
 @pytest.mark.asyncio
 async def test_register_weak_password_no_special_char(client: AsyncClient):
-    """Password without special character should be rejected."""
     resp = await client.post(
         "/v1/auth/register",
-        json={"tenant_name": "T", "email": "weak2@example.com", "password": "SecurePass123"},
+        json={"email": "weak2@example.com", "password": "SecurePass123"},
     )
     assert resp.status_code == 422
 
 
 @pytest.mark.asyncio
 async def test_register_weak_password_only_digits(client: AsyncClient):
-    """Purely numeric password should be rejected."""
     resp = await client.post(
         "/v1/auth/register",
-        json={"tenant_name": "T", "email": "weak3@example.com", "password": "12345678"},
+        json={"email": "weak3@example.com", "password": "12345678"},
     )
     assert resp.status_code == 422
 
 
-# --- T-38-03: httpOnly cookie tests ---
+# --- httpOnly cookie tests ---
 
 
 @pytest.mark.asyncio
-async def test_login_sets_httponly_cookies(client: AsyncClient):
-    """Login response should set httpOnly access_token and refresh_token cookies."""
-    email = "cookie-user@example.com"
-    await client.post(
-        "/v1/auth/register",
-        json={"tenant_name": "T", "email": email, "password": "Secure@pass123"},
-    )
-    resp = await client.post(
-        "/v1/auth/login",
-        json={"email": email, "password": "Secure@pass123"},
-    )
-    assert resp.status_code == 200
+async def test_login_sets_httponly_cookie(client: AsyncClient):
+    with patch("app.services.auth_service.PassClient") as MockPassClient:
+        mock_pass = AsyncMock()
+        mock_pass.login = AsyncMock(return_value=_PASS_LOGIN_RESP)
+        MockPassClient.return_value = mock_pass
 
+        resp = await client.post(
+            "/v1/auth/login",
+            json={"email": "cookie-user@example.com", "password": "Secure@pass123"},
+        )
+    assert resp.status_code == 200
     cookies = {c.name: c for c in resp.cookies.jar}
     assert "access_token" in cookies
-    # httpx Cookie objects expose params dict for flags
-    # The cookie should exist and be non-empty
     assert cookies["access_token"].value
 
 
 @pytest.mark.asyncio
-async def test_cookie_auth_replaces_header(client: AsyncClient):
-    """Requests with only cookie (no Authorization header) should succeed."""
-    email = "cookieauth-user@example.com"
-    await client.post(
-        "/v1/auth/register",
-        json={"tenant_name": "T", "email": email, "password": "Secure@pass123"},
-    )
-    login_resp = await client.post(
-        "/v1/auth/login",
-        json={"email": email, "password": "Secure@pass123"},
-    )
-    access_token = login_resp.json()["data"]["access_token"]
-
-    # Use cookie instead of Authorization header
-    resp = await client.get(
-        "/v1/auth/me",
-        cookies={"access_token": access_token},
-    )
-    assert resp.status_code == 200
-    data = resp.json()["data"]
-    assert data["email"] == email
-
-
-@pytest.mark.asyncio
 async def test_header_auth_still_works(client: AsyncClient, auth_headers: dict):
-    """Bearer token in Authorization header should still work (backward compat)."""
+    """Bearer token in Authorization header should still work."""
     resp = await client.get("/v1/auth/me", headers=auth_headers)
     assert resp.status_code == 200
     data = resp.json()["data"]
@@ -179,58 +181,9 @@ async def test_header_auth_still_works(client: AsyncClient, auth_headers: dict):
 
 
 @pytest.mark.asyncio
-async def test_refresh_updates_access_cookie(client: AsyncClient):
-    """Refresh endpoint should set a new access_token cookie."""
-    email = "refresh-cookie@example.com"
-    await client.post(
-        "/v1/auth/register",
-        json={"tenant_name": "T", "email": email, "password": "Secure@pass123"},
-    )
-    login_resp = await client.post(
-        "/v1/auth/login",
-        json={"email": email, "password": "Secure@pass123"},
-    )
-    refresh_token = login_resp.json()["data"]["refresh_token"]
-
-    # Refresh via body (backward compat)
-    resp = await client.post(
-        "/v1/auth/refresh",
-        json={"refresh_token": refresh_token},
-    )
-    assert resp.status_code == 200
-    cookies = {c.name: c for c in resp.cookies.jar}
-    assert "access_token" in cookies
-
-
-@pytest.mark.asyncio
-async def test_refresh_via_cookie(client: AsyncClient):
-    """Refresh endpoint should accept refresh_token from cookie when no body is provided."""
-    email = "refresh-cookieonly@example.com"
-    await client.post(
-        "/v1/auth/register",
-        json={"tenant_name": "T", "email": email, "password": "Secure@pass123"},
-    )
-    login_resp = await client.post(
-        "/v1/auth/login",
-        json={"email": email, "password": "Secure@pass123"},
-    )
-    refresh_token = login_resp.json()["data"]["refresh_token"]
-
-    # Refresh via cookie only (no body)
-    resp = await client.post(
-        "/v1/auth/refresh",
-        cookies={"refresh_token": refresh_token},
-    )
-    assert resp.status_code == 200
-    assert "access_token" in resp.json()["data"]
-
-
-@pytest.mark.asyncio
 async def test_logout_clears_cookies(client: AsyncClient):
-    """Logout should clear auth cookies."""
     resp = await client.post("/v1/auth/logout")
     assert resp.status_code == 204
-    # Check that cookies are cleared (max-age=0 or deleted)
     cookie_headers = resp.headers.get_list("set-cookie")
     access_cleared = any("access_token" in h and 'max-age=0' in h.lower() for h in cookie_headers)
     assert access_cleared
@@ -239,5 +192,32 @@ async def test_logout_clears_cookies(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_me_without_auth(client: AsyncClient):
     """/me without any auth should return 401."""
-    resp = await client.get("/v1/auth/me")
-    assert resp.status_code == 401
+    # Remove dependency override for this test
+    from app.deps import get_current_user
+    app = client._transport.app  # type: ignore[union-attr]
+    original = app.dependency_overrides.pop(get_current_user, None)
+    try:
+        with patch("app.services.auth_service.PassClient") as MockPassClient:
+            mock_pass = AsyncMock()
+            mock_pass.me = AsyncMock(side_effect=UnauthorizedException(message="令牌无效或已过期"))
+            MockPassClient.return_value = mock_pass
+
+            resp = await client.get("/v1/auth/me")
+        assert resp.status_code == 401
+    finally:
+        if original is not None:
+            app.dependency_overrides[get_current_user] = original
+
+
+@pytest.mark.asyncio
+async def test_forgot_password_returns_410(client: AsyncClient):
+    """Deprecated endpoint should return 410 Gone."""
+    resp = await client.post("/v1/auth/forgot-password", json={"email": "x@x.com"})
+    assert resp.status_code == 410
+
+
+@pytest.mark.asyncio
+async def test_reset_password_returns_410(client: AsyncClient):
+    """Deprecated endpoint should return 410 Gone."""
+    resp = await client.post("/v1/auth/reset-password", json={"token": "x", "new_password": "y"})
+    assert resp.status_code == 410

@@ -1,6 +1,6 @@
 /**
  * Authentication state managed by zustand.
- * Tokens are stored in httpOnly cookies (managed by the backend).
+ * Tokens are stored in httpOnly cookies (managed by the backend via PA Pass).
  * This store only holds user info in memory.
  */
 
@@ -21,7 +21,7 @@ interface AuthState {
   error: string | null;
 
   login: (email: string, password: string) => Promise<void>;
-  register: (tenantName: string, email: string, password: string) => Promise<void>;
+  register: (email: string, password: string, displayName?: string) => Promise<void>;
   logout: () => Promise<void>;
   checkAuth: () => Promise<void>;
 }
@@ -35,7 +35,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   login: async (email, password) => {
     set({ isLoading: true, error: null });
     try {
-      // Backend sets httpOnly cookies; response body still contains tokens for reference
+      // Backend sets httpOnly cookies via PA Pass
       await api.post("/v1/auth/login", { email, password });
       // Fetch user info via /me endpoint (cookie is now set)
       const meResp = await api.get<User>("/v1/auth/me");
@@ -47,17 +47,21 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
   },
 
-  register: async (tenantName, email, password) => {
+  register: async (email, password, displayName?) => {
     set({ isLoading: true, error: null });
     try {
-      await api.post("/v1/auth/register", { tenant_name: tenantName, email, password });
-      // Register does not return tokens / set cookies — user must login after registration
-      set({ isLoading: false });
+      await api.post("/v1/auth/register", {
+        email,
+        password,
+        display_name: displayName || undefined,
+      });
+      // Register now auto-logs in (Pass sets cookie), fetch user info
+      const meResp = await api.get<User>("/v1/auth/me");
+      set({ user: meResp.data, isLoading: false });
     } catch (e) {
       let msg = "注册失败";
       if (e instanceof ApiClientError) {
         msg = e.message;
-        // If the server returned field-level validation errors, show the first one
         const fields = e.detail?.fields as Record<string, string> | undefined;
         if (fields) {
           const firstField = Object.values(fields)[0];

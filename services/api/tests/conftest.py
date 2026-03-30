@@ -12,10 +12,9 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from shared_config.settings import get_settings
 from shared_models import Base, Tenant, User
 
-from app.deps import get_db
+from app.deps import get_current_user, get_db
 from app.main import create_app
 from app.routers.assets import get_storage
-from app.utils.security import create_access_token, hash_password
 
 from unittest.mock import patch
 
@@ -25,25 +24,13 @@ TEST_DB_URL = settings.database_url + "_test"
 
 
 @pytest.fixture(autouse=True)
-def _disable_login_lockout_and_rate_limit(request):
-    """Disable Redis-based login lockout and rate limiting in all tests.
-
-    The lockout and rate limiter use Redis which may retain state across test
-    runs, causing spurious 429 errors.  We disable lockout entirely (fail-open)
-    and bypass the rate limit middleware's check logic.
-
-    Skipped for test_login_lockout.py which tests lockout logic in isolation
-    with its own mock_redis fixture.
-    """
-    if request.node.fspath.basename == "test_login_lockout.py":
-        yield
-        return
+def _disable_rate_limit(request):
+    """Disable rate limit middleware in all tests."""
 
     async def _passthrough_dispatch(self, request, call_next):
         return await call_next(request)
 
-    with patch("app.services.auth_service.AuthService._get_redis", return_value=None), \
-         patch("app.middleware.rate_limit.RateLimitMiddleware.dispatch", _passthrough_dispatch):
+    with patch("app.middleware.rate_limit.RateLimitMiddleware.dispatch", _passthrough_dispatch):
         yield
 
 
@@ -84,6 +71,10 @@ async def db_session(test_engine) -> AsyncGenerator[AsyncSession, None]:
     await conn.close()
 
 
+# Shared test user for auth_headers fixture
+_test_user: User | None = None
+
+
 @pytest_asyncio.fixture(loop_scope="session")
 async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
     """Create an async test client with DB dependency override."""
@@ -102,8 +93,14 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
 
 
 @pytest_asyncio.fixture(loop_scope="session")
-async def auth_headers(db_session: AsyncSession) -> dict[str, str]:
-    """Create a test tenant and user, return auth headers with valid JWT."""
+async def auth_headers(db_session: AsyncSession, client: AsyncClient) -> dict[str, str]:
+    """Create a test tenant and user, return auth headers.
+
+    Overrides get_current_user to return the test user directly,
+    bypassing Pass /me verification (Pass is not available in tests).
+    """
+    global _test_user
+
     tenant = Tenant(id=uuid.uuid4(), name="Test Tenant", status="active")
     db_session.add(tenant)
     await db_session.flush()
@@ -111,21 +108,21 @@ async def auth_headers(db_session: AsyncSession) -> dict[str, str]:
     user = User(
         id=uuid.uuid4(),
         kb_id=tenant.id,
+        pass_id=f"pass:{uuid.uuid4()}",
         email=f"test-{uuid.uuid4().hex[:8]}@example.com",
-        password_hash=hash_password("test-password"),
+        password_hash=None,
         role="admin",
         status="active",
     )
     db_session.add(user)
     await db_session.flush()
 
-    token = create_access_token(
-        data={"sub": str(user.id), "kb_id": str(tenant.id), "role": user.role},
-        secret=settings.jwt_secret,
-        algorithm=settings.jwt_algorithm,
-    )
+    _test_user = user
+
+    # Override get_current_user to return our test user
+    client._transport.app.dependency_overrides[get_current_user] = lambda: user  # type: ignore[union-attr]
 
     return {
-        "Authorization": f"Bearer {token}",
+        "Authorization": "Bearer test-token",
         "X-Requested-With": "XMLHttpRequest",
     }

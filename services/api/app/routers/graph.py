@@ -142,7 +142,7 @@ async def merge_nodes(
     body: MergeNodesRequest,
     db: AsyncSession = Depends(get_db),
     kb_id: uuid.UUID = Depends(get_kb_id),
-    current_user: User = Depends(require_role("project_admin")),
+    current_user: User = require_role("project_admin"),
 ):
     svc = GraphService(db, kb_id)
     new_node = await svc.merge_nodes(
@@ -171,7 +171,7 @@ async def split_node(
     body: SplitNodeRequest,
     db: AsyncSession = Depends(get_db),
     kb_id: uuid.UUID = Depends(get_kb_id),
-    current_user: User = Depends(require_role("project_admin")),
+    current_user: User = require_role("project_admin"),
 ):
     svc = GraphService(db, kb_id)
     node_a, node_b = await svc.split_node(

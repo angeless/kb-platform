@@ -132,22 +132,12 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             self._last_redis_warning = now
 
     def _extract_identity(self, request: Request) -> str:
-        """Extract rate limit key: kb_id from auth header, or client IP."""
-        auth = request.headers.get("Authorization", "")
-        if auth.startswith("Bearer "):
-            try:
-                import jwt
-                settings = get_settings()
-                payload = jwt.decode(
-                    auth[7:], settings.jwt_secret,
-                    algorithms=[settings.jwt_algorithm],
-                )
-                tid = payload.get("kb_id")
-                if tid:
-                    return f"tenant:{tid}"
-            except Exception:
-                pass
-        # Fallback to IP
+        """Extract rate limit key from client IP.
+
+        Note: Since auth moved to PA Pass (v0.44.15), KB cannot locally decode
+        Pass JWT. Rate limiting uses IP-based identity for all requests.
+        Future: Redis cache of pass_jwt → kb_id mapping for tenant-level limits.
+        """
         client_ip = request.client.host if request.client else "unknown"
         return f"ip:{client_ip}"
 

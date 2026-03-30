@@ -149,7 +149,7 @@
 | v0.44.12 | Q&A 对话界面（`POST /v1/qa/ask` 已有后端，补前端） | P1 | Done |
 | v0.44.13 | 首次体验修复（[P0-Critical] 上传触发 ingest job + 仪表板真实统计 + 上传引导 + 表单说明） | P0 | Done |
 | v0.44.14 | 审计日志上报 PA 中台（服务端 + 客户端） | P0 | Blocked（待 PA 接口规范） |
-| v0.44.15 | 登录接入 PAPass（OAuth/OIDC 统一账号） | P0 | Blocked（待 PAPass 接入文档） |
+| v0.44.15 | 登录接入 PAPass（REST API 统一账号） | P0 | Done |
 | v0.44.16 | KB 内部 `tenant_id` 全面重命名为 `kb_id`（DB migration + ORM + service/router/dep + JWT + 前端） | P1 | Done |
 
 ### 3.3 明确不做的事项
@@ -1756,7 +1756,7 @@ KB Platform 当前在整个代码库中使用 `tenant_id` 表示"一个 KB 注�
 | v0.44.12 | Q&A 对话界面 | P1 | — | Done |
 | v0.44.13 | 首次体验修复（仪表板统计 + 上传引导 + 表单说明） | P0 | — | Done |
 | v0.44.14 | 审计日志上报 PA 中台（服务端 + 客户端） | P0 | — | Blocked（待 PA 接口规范） |
-| v0.44.15 | 登录接入 Pass（REST API 统一账号） | P0 | — | Planned（接入文档已确认，运维前置待完成） |
+| v0.44.15 | 登录接入 Pass（REST API 统一账号） | P0 | — | Done |
 | v0.44.16 | KB 内部 `tenant_id` 全面重命名为 `kb_id` | P1 | — | Done |
 
 ---

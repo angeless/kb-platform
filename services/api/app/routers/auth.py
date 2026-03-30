@@ -1,15 +1,15 @@
 """Auth router: register, login, refresh, logout, me."""
 
+from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Cookie, Depends, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared_config.settings import Settings
-from shared_errors import UnauthorizedException
 from shared_models import User
-from shared_schemas.auth import ForgotPasswordRequest, LoginRequest, RefreshRequest, RegisterRequest, ResetPasswordRequest
+from shared_schemas.auth import LoginRequest, RegisterRequest
 from shared_schemas.common import DataResponse, ErrorDetail
 
 from app.deps import get_current_user, get_db, get_settings_dep
@@ -24,46 +24,45 @@ def _is_secure(settings: Settings) -> bool:
     return "localhost" not in cors and "127.0.0.1" not in cors
 
 
-def _set_token_cookies(
+def _set_access_cookie(
     response: JSONResponse,
-    access_token: str,
-    refresh_token: str | None,
+    token: str,
+    expires_at: str | None,
     settings: Settings,
 ) -> None:
-    """Set httpOnly cookies for access_token and optionally refresh_token."""
+    """Set httpOnly cookie for the Pass access token."""
     secure = _is_secure(settings)
+    # Calculate max_age from expiresAt if available, else default 1 hour
+    max_age = 3600
+    if expires_at:
+        try:
+            exp_dt = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
+            remaining = (exp_dt - datetime.now(timezone.utc)).total_seconds()
+            if remaining > 0:
+                max_age = int(remaining)
+        except (ValueError, TypeError):
+            pass
     response.set_cookie(
         key="access_token",
-        value=access_token,
+        value=token,
         httponly=True,
         secure=secure,
         samesite="lax",
         path="/",
-        max_age=settings.access_token_expire_minutes * 60,
+        max_age=max_age,
     )
-    if refresh_token:
-        response.set_cookie(
-            key="refresh_token",
-            value=refresh_token,
-            httponly=True,
-            secure=secure,
-            samesite="lax",
-            path="/v1/auth",
-            max_age=settings.refresh_token_expire_days * 24 * 60 * 60,
-        )
 
 
 @router.post(
     "/register",
     response_model=DataResponse,
     status_code=201,
-    summary="Register a new tenant and admin user",
-    description="Creates a new tenant organization and its first admin user.",
+    summary="Register via PA Pass and create KB account",
     responses={
-        201: {"description": "Tenant and user created successfully"},
+        201: {"description": "Registered and logged in"},
         409: {"description": "Email already registered", "model": ErrorDetail},
-        422: {"description": "Validation error — invalid email or password format"},
-        500: {"description": "Internal server error", "model": ErrorDetail},
+        422: {"description": "Validation error"},
+        502: {"description": "Pass service unavailable", "model": ErrorDetail},
     },
 )
 async def register(
@@ -72,20 +71,24 @@ async def register(
     settings: Settings = Depends(get_settings_dep),
 ):
     svc = AuthService(db, settings)
-    result = await svc.register(body.tenant_name, body.email, body.password)
-    return DataResponse(data=result)
+    result = await svc.register(body.email, body.password, body.display_name or "")
+    response = JSONResponse(
+        content={"data": result},
+        status_code=201,
+    )
+    _set_access_cookie(response, result["access_token"], result.get("expires_at"), settings)
+    return response
 
 
 @router.post(
     "/login",
     response_model=DataResponse,
-    summary="User login",
-    description="Authenticates a user with email and password. Returns access and refresh JWT tokens, also sets httpOnly cookies.",
+    summary="Login via PA Pass",
     responses={
-        200: {"description": "Login successful, tokens returned"},
-        401: {"description": "Invalid email or password", "model": ErrorDetail},
-        422: {"description": "Validation error"},
-        500: {"description": "Internal server error", "model": ErrorDetail},
+        200: {"description": "Login successful"},
+        401: {"description": "Invalid credentials", "model": ErrorDetail},
+        403: {"description": "Account banned", "model": ErrorDetail},
+        502: {"description": "Pass service unavailable", "model": ErrorDetail},
     },
 )
 async def login(
@@ -96,112 +99,56 @@ async def login(
     svc = AuthService(db, settings)
     result = await svc.login(body.email, body.password)
     response = JSONResponse(content={"data": result})
-    _set_token_cookies(response, result["access_token"], result["refresh_token"], settings)
+    _set_access_cookie(response, result["access_token"], result.get("expires_at"), settings)
     return response
 
 
 @router.post(
     "/refresh",
     response_model=DataResponse,
-    summary="Refresh access token",
-    description="Exchanges a valid refresh token for a new access token. Accepts refresh_token in body or from httpOnly cookie.",
+    summary="Refresh Pass token",
     responses={
-        200: {"description": "New access token returned"},
-        401: {"description": "Invalid or expired refresh token", "model": ErrorDetail},
-        422: {"description": "Validation error"},
-        500: {"description": "Internal server error", "model": ErrorDetail},
+        200: {"description": "New token returned"},
+        401: {"description": "Token invalid or expired", "model": ErrorDetail},
+        502: {"description": "Pass service unavailable", "model": ErrorDetail},
     },
 )
 async def refresh(
     request: Request,
-    body: Optional[RefreshRequest] = None,
     db: AsyncSession = Depends(get_db),
     settings: Settings = Depends(get_settings_dep),
 ):
-    # Priority: body > cookie
-    refresh_token = None
-    if body and body.refresh_token:
-        refresh_token = body.refresh_token
-    else:
-        refresh_token = request.cookies.get("refresh_token")
+    # Get current token from cookie or header
+    token = request.cookies.get("access_token")
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:]
 
-    if not refresh_token:
-        raise UnauthorizedException(message="未提供刷新令牌")
+    if not token:
+        from shared_errors import UnauthorizedException
+        raise UnauthorizedException(message="未提供认证凭据")
 
     svc = AuthService(db, settings)
-    result = await svc.refresh(refresh_token)
+    result = await svc.refresh(token)
     response = JSONResponse(content={"data": result})
-    _set_token_cookies(response, result["access_token"], None, settings)
+    _set_access_cookie(response, result["access_token"], result.get("expires_at"), settings)
     return response
-
-
-@router.post(
-    "/forgot-password",
-    response_model=DataResponse,
-    summary="Request password reset",
-    description="Generates a password reset token. Always returns 200 regardless of email existence (prevents user enumeration).",
-    responses={
-        200: {"description": "Reset request processed"},
-        422: {"description": "Validation error"},
-    },
-)
-async def forgot_password(
-    body: ForgotPasswordRequest,
-    db: AsyncSession = Depends(get_db),
-    settings: Settings = Depends(get_settings_dep),
-):
-    svc = AuthService(db, settings)
-    result = await svc.forgot_password(body.email)
-    return DataResponse(data=result)
-
-
-@router.post(
-    "/reset-password",
-    response_model=DataResponse,
-    summary="Reset password with token",
-    description="Resets the user's password using a valid reset token. Token is single-use and expires after 1 hour.",
-    responses={
-        200: {"description": "Password reset successful"},
-        400: {"description": "Invalid or expired reset token", "model": ErrorDetail},
-        422: {"description": "Validation error"},
-    },
-)
-async def reset_password(
-    body: ResetPasswordRequest,
-    db: AsyncSession = Depends(get_db),
-    settings: Settings = Depends(get_settings_dep),
-):
-    svc = AuthService(db, settings)
-    result = await svc.reset_password(body.token, body.new_password)
-    return DataResponse(data=result)
 
 
 @router.post(
     "/logout",
     status_code=204,
     summary="User logout",
-    description="Revokes the current refresh token and clears authentication cookies.",
+    description="Clears authentication cookies. Pass token invalidation is handled by PA platform.",
     responses={
-        204: {"description": "Logged out, token revoked, cookies cleared"},
-        401: {"description": "Unauthorized"},
-        500: {"description": "Internal server error"},
+        204: {"description": "Logged out, cookies cleared"},
+        401: {"description": "Unauthorized", "model": ErrorDetail},
     },
 )
-async def logout(
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-    settings: Settings = Depends(get_settings_dep),
-):
-    # Revoke refresh token in DB (best-effort: if no token found, still clear cookies)
-    refresh_token = request.cookies.get("refresh_token")
-    if refresh_token:
-        svc = AuthService(db, settings)
-        await svc.revoke_refresh_token(refresh_token)
-
+async def logout(request: Request, settings: Settings = Depends(get_settings_dep)):
     secure = _is_secure(settings)
     response = JSONResponse(content=None, status_code=204)
     response.delete_cookie(key="access_token", path="/", secure=secure, samesite="lax")
-    response.delete_cookie(key="refresh_token", path="/v1/auth", secure=secure, samesite="lax")
     return response
 
 
@@ -209,7 +156,6 @@ async def logout(
     "/me",
     response_model=DataResponse,
     summary="Get current user info",
-    description="Returns the current authenticated user's info. Used by frontend to restore session on page refresh.",
     responses={
         200: {"description": "User info returned"},
         401: {"description": "Not authenticated", "model": ErrorDetail},
@@ -223,4 +169,21 @@ async def me(current_user: User = Depends(get_current_user)):
             "role": current_user.role,
             "kb_id": str(current_user.kb_id),
         }
+    )
+
+
+# Deprecated endpoints — password management is now handled by PA Pass
+@router.post("/forgot-password", status_code=410, include_in_schema=False)
+async def forgot_password():
+    return JSONResponse(
+        status_code=410,
+        content={"message": "密码管理已迁移至 PA 平台，请通过 PA 平台重置密码"},
+    )
+
+
+@router.post("/reset-password", status_code=410, include_in_schema=False)
+async def reset_password():
+    return JSONResponse(
+        status_code=410,
+        content={"message": "密码管理已迁移至 PA 平台，请通过 PA 平台重置密码"},
     )

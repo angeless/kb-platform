@@ -291,7 +291,7 @@ async def rollback_version(
     version: int,
     db: AsyncSession = Depends(get_db),
     kb_id: uuid.UUID = Depends(get_kb_id),
-    user: User = Depends(require_role("editor")),
+    user: User = require_role("editor"),
 ):
     svc = DocService(db, kb_id)
     doc = await svc.rollback(doc_id, version, user.id)

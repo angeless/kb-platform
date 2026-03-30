@@ -5,14 +5,12 @@ import json
 import logging
 import uuid
 
-from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared_config.settings import get_settings
 from shared_models import Project
-from app.deps import get_db
-from app.utils.security import decode_access_token
+from app.services.pass_client import PassClient
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["websocket"])
@@ -22,43 +20,53 @@ router = APIRouter(tags=["websocket"])
 async def ws_job_status(websocket: WebSocket, project_id: str):
     """Subscribe to real-time job status events for a project.
 
-    Authentication: JWT from httpOnly cookie (secure, not exposed in URL/logs).
-    Tenant isolation: verifies project_id belongs to the JWT's tenant.
+    Authentication: Pass JWT from httpOnly cookie verified via Pass /me.
+    Tenant isolation: verifies project_id belongs to the user's tenant.
     Events are published by workers via Redis Pub/Sub.
     """
-    # Authenticate via httpOnly cookie (H-03 fix: no longer via URL query param)
+    # Authenticate via httpOnly cookie → Pass /me
     token = websocket.cookies.get("access_token")
     if not token:
         await websocket.close(code=4001, reason="缺少认证令牌")
         return
 
     settings = get_settings()
+    pass_client = PassClient(settings)
     try:
-        payload = decode_access_token(token, settings.jwt_secret, settings.jwt_algorithm)
+        pass_info = await pass_client.me(token)
     except Exception:
         await websocket.close(code=4001, reason="令牌无效或已过期")
         return
 
-    kb_id = payload.get("kb_id")
-    if not kb_id:
-        await websocket.close(code=4001, reason="令牌缺少租户信息")
+    pass_id = pass_info.get("passId")
+    if not pass_id:
+        await websocket.close(code=4001, reason="令牌缺少用户信息")
         return
+
+    # Look up KB User by pass_id to get kb_id for tenant isolation
+    from shared_models import User
+    from shared_models.database import async_session_factory
+
+    async with async_session_factory() as db:
+        result = await db.execute(select(User).where(User.pass_id == pass_id))
+        user = result.scalar_one_or_none()
+        if user is None:
+            await websocket.close(code=4001, reason="用户未注册")
+            return
+        kb_id = user.kb_id
 
     # Tenant isolation: verify project belongs to this tenant
     try:
         project_uuid = uuid.UUID(project_id)
-        tenant_uuid = uuid.UUID(kb_id)
     except ValueError:
         await websocket.close(code=4003, reason="项目ID格式无效")
         return
 
-    # Use a dedicated DB session for the WebSocket connection
-    from shared_models.database import async_session_factory
     async with async_session_factory() as db:
         result = await db.execute(
             select(Project.id).where(
                 Project.id == project_uuid,
-                Project.kb_id == tenant_uuid,
+                Project.kb_id == kb_id,
             )
         )
         if result.scalar_one_or_none() is None:
@@ -79,7 +87,7 @@ async def ws_job_status(websocket: WebSocket, project_id: str):
         pubsub = redis_client.pubsub()
         await pubsub.subscribe(channel_name)
 
-        logger.info("WebSocket client connected: project=%s tenant=%s", project_id, kb_id)
+        logger.info("WebSocket client connected: project=%s kb_id=%s", project_id, kb_id)
 
         while True:
             message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
