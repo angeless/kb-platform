@@ -1,5 +1,7 @@
 """Pydantic schemas for agent output API."""
 
+from datetime import date
+from enum import Enum
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -46,3 +48,34 @@ class AgentAskResponse(BaseModel):
     answer: str
     sources: list[AgentSourceRef]
     related_questions: list[str]
+
+
+# --- Usage statistics schemas ---
+
+
+class UsageGroupBy(str, Enum):
+    day = "day"
+    endpoint = "endpoint"
+
+
+class DailyUsage(BaseModel):
+    date: date
+    requests: int
+    errors: int
+    avg_latency_ms: int
+
+
+class EndpointUsage(BaseModel):
+    endpoint: str
+    requests: int
+    errors: int
+    avg_latency_ms: int
+
+
+class AgentUsageResponse(BaseModel):
+    api_key_id: UUID
+    period: dict[str, str]  # {"start": "YYYY-MM-DD", "end": "YYYY-MM-DD"}
+    total_requests: int
+    total_errors: int
+    daily: list[DailyUsage] | None = None
+    by_endpoint: list[EndpointUsage] | None = None
