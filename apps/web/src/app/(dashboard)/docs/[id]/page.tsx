@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { api, ApiClientError } from "@/lib/api";
 import { StatusBadge } from "@/components/status-badge";
 import { PermissionGuard } from "@/components/PermissionGuard";
 import { MarkdownView } from "@/components/markdown-view";
+import { VersionPanel } from "@/components/version-history/VersionPanel";
 
 interface SourceRef {
   id: string;
@@ -43,21 +44,23 @@ export default function DocDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [actionMsg, setActionMsg] = useState("");
+  const [showHistory, setShowHistory] = useState(false);
+
+  const fetchDoc = useCallback(async () => {
+    try {
+      const resp = await api.get<DocDetail>(`/v1/docs/${docId}`);
+      setDoc(resp.data);
+      setActiveVersion(resp.data.current_version);
+    } catch (e) {
+      setError(e instanceof ApiClientError ? e.message : "加载失败");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [docId]);
 
   useEffect(() => {
-    const fetchDoc = async () => {
-      try {
-        const resp = await api.get<DocDetail>(`/v1/docs/${docId}`);
-        setDoc(resp.data);
-        setActiveVersion(resp.data.current_version);
-      } catch (e) {
-        setError(e instanceof ApiClientError ? e.message : "加载失败");
-      } finally {
-        setIsLoading(false);
-      }
-    };
     fetchDoc();
-  }, [docId]);
+  }, [fetchDoc]);
 
   const handleAction = async (action: string) => {
     setActionMsg("");
@@ -82,7 +85,8 @@ export default function DocDetailPage() {
   const currentVer = doc.versions.find((v) => v.version === activeVersion);
 
   return (
-    <div className="mx-auto max-w-4xl">
+    <div className="flex gap-0">
+    <div className={`flex-1 ${showHistory ? "" : "mx-auto max-w-4xl"}`}>
       {/* Header */}
       <div className="mb-6">
         <div className="flex items-center gap-3">
@@ -130,6 +134,12 @@ export default function DocDetailPage() {
             版本对比
           </Link>
         )}
+        <button
+          onClick={() => setShowHistory(!showHistory)}
+          className={`rounded-lg border px-4 py-2 text-sm ${showHistory ? "border-primary-300 bg-primary-50 text-primary-700" : "border-gray-300 text-gray-700 hover:bg-gray-50"}`}
+        >
+          历史版本
+        </button>
       </div>
 
       {/* Version Tabs */}
@@ -181,6 +191,22 @@ export default function DocDetailPage() {
       ) : (
         <div className="py-8 text-center text-gray-400">暂无内容</div>
       )}
+    </div>
+
+    {/* Version History Panel */}
+    {showHistory && (
+      <div className="w-96 flex-shrink-0">
+        <VersionPanel
+          docId={docId}
+          currentVersion={doc.current_version}
+          onClose={() => setShowHistory(false)}
+          onRollbackSuccess={() => {
+            setShowHistory(false);
+            fetchDoc();
+          }}
+        />
+      </div>
+    )}
     </div>
   );
 }
