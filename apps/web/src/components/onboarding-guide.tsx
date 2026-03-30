@@ -1,13 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
 import Link from "next/link";
 
 interface OnboardingGuideProps {
   projectId?: string;
 }
-
-const STORAGE_KEY = "kb-onboarding-completed";
 
 const steps = [
   { label: "创建项目", description: "创建你的第一个知识库项目", href: "/projects", icon: "1" },
@@ -17,31 +14,9 @@ const steps = [
 ];
 
 export function OnboardingGuide({ projectId }: OnboardingGuideProps) {
-  const [dismissed, setDismissed] = useState(true);
-
-  useEffect(() => {
-    const completed = localStorage.getItem(STORAGE_KEY);
-    setDismissed(completed === "true");
-  }, []);
-
-  if (dismissed) return null;
-
-  const handleDismiss = () => {
-    localStorage.setItem(STORAGE_KEY, "true");
-    setDismissed(true);
-  };
-
   return (
     <div className="mb-8 rounded-xl border border-blue-200 bg-blue-50 p-6">
-      <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-blue-900">欢迎使用 KB Platform</h2>
-        <button
-          onClick={handleDismiss}
-          className="text-sm text-blue-500 hover:text-blue-700"
-        >
-          不再显示
-        </button>
-      </div>
+      <h2 className="mb-2 text-lg font-semibold text-blue-900">欢迎使用 KB Platform</h2>
       <p className="mb-6 text-sm text-blue-700">
         按以下步骤快速开始，将你的资料转化为结构化知识。
       </p>

@@ -29,6 +29,9 @@ export default function ProjectDetailPage() {
   const [project, setProject] = useState<Project | null>(null);
   const [assets, setAssets] = useState<AssetSummary[]>([]);
   const [assetTotal, setAssetTotal] = useState(0);
+  const [docTotal, setDocTotal] = useState<number | null>(null);
+  const [archTotal, setArchTotal] = useState<number | null>(null);
+  const [jobTotal, setJobTotal] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -36,13 +39,19 @@ export default function ProjectDetailPage() {
     const fetchData = async () => {
       setIsLoading(true);
       try {
-        const [projResp, assetsResp] = await Promise.all([
+        const [projResp, assetsResp, docsResp, archResp, jobsResp] = await Promise.all([
           api.get<Project>(`/v1/projects/${projectId}`),
           api.get<AssetSummary[]>(`/v1/assets?project_id=${projectId}&page_size=5`),
+          api.get<unknown[]>(`/v1/docs?project_id=${projectId}&page=1&page_size=1`).catch(() => null),
+          api.get<unknown[]>(`/v1/projects/${projectId}/architectures`).catch(() => null),
+          api.get<unknown[]>(`/v1/jobs?project_id=${projectId}&page=1&page_size=1`).catch(() => null),
         ]);
         setProject(projResp.data);
         setAssets(assetsResp.data);
         setAssetTotal(assetsResp.meta?.total ?? 0);
+        if (docsResp) setDocTotal(docsResp.meta?.total ?? docsResp.data?.length ?? 0);
+        if (archResp) setArchTotal(archResp.data?.length ?? 0);
+        if (jobsResp) setJobTotal(jobsResp.meta?.total ?? jobsResp.data?.length ?? 0);
       } catch (e) {
         setError(e instanceof ApiClientError ? e.message : "加载失败");
       } finally {
@@ -87,15 +96,15 @@ export default function ProjectDetailPage() {
       <div className="mb-6 grid grid-cols-4 gap-3 lg:grid-cols-8">
         {[
           { label: "资料", count: assetTotal, href: `/projects/${projectId}/assets` },
-          { label: "文档", count: "—", href: `/projects/${projectId}/docs` },
-          { label: "架构", count: "—", href: `/projects/${projectId}/architectures` },
-          { label: "任务", count: "—", href: `/projects/${projectId}/jobs` },
-          { label: "检索", count: "—", href: `/projects/${projectId}/search` },
-          { label: "Wiki", count: "—", href: `/projects/${projectId}/wiki` },
-          { label: "图谱", count: "—", href: `/projects/${projectId}/graph` },
+          { label: "文档", count: docTotal ?? "—", href: `/projects/${projectId}/docs` },
+          { label: "架构", count: archTotal ?? "—", href: `/projects/${projectId}/architectures` },
+          { label: "任务", count: jobTotal ?? "—", href: `/projects/${projectId}/jobs` },
+          { label: "检索", count: "→", href: `/projects/${projectId}/search` },
+          { label: "Wiki", count: "→", href: `/projects/${projectId}/wiki` },
+          { label: "图谱", count: "→", href: `/projects/${projectId}/graph` },
           { label: "问答", count: "→", href: `/projects/${projectId}/qa` },
-          { label: "冲突", count: "—", href: `/projects/${projectId}/conflicts` },
-          { label: "导出", count: "—", href: `/projects/${projectId}/exports` },
+          { label: "冲突", count: "→", href: `/projects/${projectId}/conflicts` },
+          { label: "导出", count: "→", href: `/projects/${projectId}/exports` },
         ].map((stat) => (
           <Link
             key={stat.label}
@@ -120,10 +129,14 @@ export default function ProjectDetailPage() {
           </Link>
         </div>
         {assets.length === 0 ? (
-          <div className="px-5 py-8 text-center text-gray-400">
-            还没有资料，
-            <Link href={`/projects/${projectId}/assets`} className="text-primary-600 hover:underline">
-              去上传
+          <div className="px-5 py-10 text-center">
+            <div className="mb-3 text-3xl">📄</div>
+            <p className="mb-3 text-gray-500">还没有上传任何资料</p>
+            <Link
+              href={`/projects/${projectId}/assets`}
+              className="inline-block rounded-lg bg-primary-600 px-6 py-2.5 text-sm font-medium text-white hover:bg-primary-700"
+            >
+              上传第一份资料
             </Link>
           </div>
         ) : (

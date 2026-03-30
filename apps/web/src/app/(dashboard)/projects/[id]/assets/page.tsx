@@ -136,6 +136,7 @@ export default function ProjectAssetsPage() {
                   <th className="px-5 py-3 text-left font-medium text-gray-600">大小</th>
                   <th className="px-5 py-3 text-left font-medium text-gray-600">状态</th>
                   <th className="px-5 py-3 text-left font-medium text-gray-600">上传时间</th>
+                  <th className="px-5 py-3 text-left font-medium text-gray-600">操作</th>
                 </tr>
               </thead>
               <tbody>
@@ -156,6 +157,33 @@ export default function ProjectAssetsPage() {
                     </td>
                     <td className="px-5 py-3 text-gray-400">
                       {new Date(asset.uploaded_at).toLocaleDateString("zh-CN")}
+                    </td>
+                    <td className="px-5 py-3">
+                      {asset.parse_status === "done" && (
+                        <button
+                          onClick={async () => {
+                            try {
+                              await api.post("/v1/jobs", {
+                                project_id: projectId,
+                                job_type: "pipeline",
+                                asset_id: asset.id,
+                              });
+                              fetchAssets();
+                            } catch {
+                              // silently handled
+                            }
+                          }}
+                          className="text-xs text-primary-600 hover:underline"
+                        >
+                          ▶ 运行流水线
+                        </button>
+                      )}
+                      {asset.parse_status === "processing" && (
+                        <span className="text-xs text-amber-600">⏳ 解析中...</span>
+                      )}
+                      {asset.parse_status === "pending" && (
+                        <span className="text-xs text-gray-400">⏳ 等待解析</span>
+                      )}
                     </td>
                   </tr>
                 ))}
