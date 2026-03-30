@@ -1,5 +1,7 @@
 """Agent output router: API-key-authenticated search and QA for external agents."""
 
+import logging
+import time
 import uuid
 
 from fastapi import APIRouter, Depends
@@ -7,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared_config.settings import Settings
+from shared_errors import AppException, ErrorCode
 from shared_models import ApiKey, ArchitectureNode, Asset, AssetChunk, KnowledgeDoc, KnowledgeDocVersion, SourceRef
 from shared_schemas.agent import (
     AgentAskRequest,
@@ -22,11 +25,49 @@ from app.deps import get_api_key_project, get_db, get_settings_dep
 from app.services.search_service import SearchService
 from app.services.qa_service import QAService
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/v1/agent", tags=["agent"])
 
 _RESP_AUTH = {
     401: {"description": "Unauthorized — invalid or revoked API key", "model": ErrorDetail},
+    429: {"description": "Rate limited", "model": ErrorDetail},
 }
+
+
+async def _check_rate_limit(
+    auth: tuple[ApiKey, uuid.UUID, uuid.UUID] = Depends(get_api_key_project),
+    settings: Settings = Depends(get_settings_dep),
+) -> tuple[ApiKey, uuid.UUID, uuid.UUID]:
+    """Per-API-key rate limiting using Redis fixed-window counter."""
+    api_key, project_id, tenant_id = auth
+    limit = api_key.rate_limit_per_minute
+    if limit == 0:
+        return auth  # no limit
+
+    try:
+        import redis
+        r = redis.from_url(settings.redis_url, decode_responses=True)
+        minute = int(time.time()) // 60
+        key = f"rl:api:{api_key.id}:{minute}"
+        count = r.incr(key)
+        if count == 1:
+            r.expire(key, 120)
+        r.close()
+
+        if count > limit:
+            seconds_left = 60 - (int(time.time()) % 60)
+            raise AppException(
+                ErrorCode.SYSTEM_RATE_LIMITED,
+                status_code=429,
+                detail={"retry_after": seconds_left},
+            )
+    except AppException:
+        raise
+    except Exception as e:
+        logger.warning("Rate limit check failed (allowing request): %s", e)
+
+    return auth
 
 
 async def _batch_load_arch_nodes(
@@ -125,7 +166,7 @@ async def _batch_load_source_assets(
 )
 async def agent_search(
     body: AgentSearchRequest,
-    auth: tuple[ApiKey, uuid.UUID, uuid.UUID] = Depends(get_api_key_project),
+    auth: tuple[ApiKey, uuid.UUID, uuid.UUID] = Depends(_check_rate_limit),
     db: AsyncSession = Depends(get_db),
 ):
     api_key, project_id, tenant_id = auth
@@ -199,7 +240,7 @@ async def agent_search(
 )
 async def agent_ask(
     body: AgentAskRequest,
-    auth: tuple[ApiKey, uuid.UUID, uuid.UUID] = Depends(get_api_key_project),
+    auth: tuple[ApiKey, uuid.UUID, uuid.UUID] = Depends(_check_rate_limit),
     db: AsyncSession = Depends(get_db),
     settings: Settings = Depends(get_settings_dep),
 ):

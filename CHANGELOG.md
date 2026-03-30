@@ -18,6 +18,7 @@
 - ASR 端到端打通：补齐 openai-whisper 依赖、修复 PARSEABLE_ASSET_TYPES 缺少 image/audio、延长 Celery 超时到 300s（v0.44.7）
 - 图谱节点合并/拆分 API：POST merge + POST split 端点，事务安全，project_admin 权限（v0.44.8）
 - 前端图谱编辑：分类管理面板 + NodeMergeModal + NodeSplitPanel，project_admin 专属（v0.44.9）
+- API Key 限流：per-key Redis 固定窗口计数，rate_limit_per_minute 字段 + 429 响应（v0.44.10）
 
 ## [0.43.5] - 2026-03-27
 
