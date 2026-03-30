@@ -14,6 +14,9 @@
 - 批量导入后端：ZIP 上传解压 + 批次跟踪 + Celery 任务调度（v0.44.5）
 - 前端批量导入 UI：BatchDropzone 拖拽上传 + BatchProgressList 轮询进度 + 资产页集成（v0.44.6）
 
+### 修复 (Fixed)
+- ASR 端到端打通：补齐 openai-whisper 依赖、修复 PARSEABLE_ASSET_TYPES 缺少 image/audio、延长 Celery 超时到 300s（v0.44.7）
+
 ## [0.43.5] - 2026-03-27
 
 ### 验收

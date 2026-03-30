@@ -100,7 +100,7 @@ services:
     build:
       context: .
       dockerfile: infra/docker/ingestion-worker.Dockerfile
-    command: celery -A worker.celery_app worker --loglevel=info -Q ingestion -c 2 --soft-time-limit=25 --time-limit=30
+    command: celery -A worker.celery_app worker --loglevel=info -Q ingestion -c 2 --soft-time-limit=300 --time-limit=360
     environment:
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
