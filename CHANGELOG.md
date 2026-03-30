@@ -20,6 +20,7 @@
 - 前端图谱编辑：分类管理面板 + NodeMergeModal + NodeSplitPanel，project_admin 专属（v0.44.9）
 - API Key 限流：per-key Redis 固定窗口计数，rate_limit_per_minute 字段 + 429 响应（v0.44.10）
 - API 用量统计：api_usage_log 表 + BackgroundTask 异步写入 + GET /v1/agent/usage 汇总查询（v0.44.11）
+- Q&A 对话界面：SSE 流式问答页面 + 引用来源展示 + 项目首页问答入口 tile（v0.44.12）
 
 ## [0.43.5] - 2026-03-27
 
