@@ -42,6 +42,23 @@ class DocVersionOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class DocVersionSummaryOut(BaseModel):
+    """Version list item — no content_md to reduce payload."""
+    version: int
+    change_reason: str | None
+    created_by: UUID
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class DocVersionListOut(BaseModel):
+    """Response for GET /v1/docs/{doc_id}/versions."""
+    versions: list[DocVersionSummaryOut]
+    total: int
+    current_version: int
+
+
 class KnowledgeDocDetailOut(BaseModel):
     """Full document detail including versions and source refs."""
     id: UUID

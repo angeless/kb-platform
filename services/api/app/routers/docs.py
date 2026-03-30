@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared_schemas.common import DataResponse, ErrorDetail, ListResponse, PaginationMeta
-from shared_schemas.knowledge import AssignNodeRequest, BatchDocRequest, BatchFailedItem, BatchResultOut, DocRejectRequest, DocUpdateContent, DocVersionOut, KnowledgeDocDetailOut, KnowledgeDocOut, VersionDiffOut
+from shared_schemas.knowledge import AssignNodeRequest, BatchDocRequest, BatchFailedItem, BatchResultOut, DocRejectRequest, DocUpdateContent, DocVersionListOut, DocVersionOut, DocVersionSummaryOut, KnowledgeDocDetailOut, KnowledgeDocOut, VersionDiffOut
 
 from app.deps import get_current_user, get_db, get_tenant_id, require_role
 from app.services.audit_service import AuditService
@@ -202,6 +202,31 @@ async def get_doc(
 
 
 @router.get(
+    "/{doc_id}/versions",
+    response_model=DataResponse[DocVersionListOut],
+    summary="List document versions",
+    description="Returns all versions of a document (descending order) without content.",
+    responses={
+        200: {"description": "Version list returned"},
+        **_RESP_AUTH,
+        404: {"description": "Document not found", "model": ErrorDetail},
+    },
+)
+async def list_doc_versions(
+    doc_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    tenant_id: uuid.UUID = Depends(get_tenant_id),
+):
+    svc = DocService(db, tenant_id)
+    versions, total, current = await svc.list_versions(doc_id)
+    return DataResponse(data=DocVersionListOut(
+        versions=[DocVersionSummaryOut.model_validate(v) for v in versions],
+        total=total,
+        current_version=current,
+    ))
+
+
+@router.get(
     "/{doc_id}/versions/{version}",
     response_model=DataResponse[DocVersionOut],
     summary="Get document version",
@@ -247,6 +272,30 @@ async def diff_versions(
     svc = DocService(db, tenant_id)
     result = await svc.diff_versions(doc_id, from_version, to_version)
     return DataResponse(data=VersionDiffOut(**result))
+
+
+@router.post(
+    "/{doc_id}/versions/{version}/rollback",
+    response_model=DataResponse[KnowledgeDocDetailOut],
+    summary="Rollback document to a version",
+    description="Creates a new version with the content of the specified historical version. Requires editor role.",
+    responses={
+        200: {"description": "Document rolled back, new version created"},
+        **_RESP_AUTH,
+        404: {"description": "Document or version not found", "model": ErrorDetail},
+        409: {"description": "Document status does not allow rollback", "model": ErrorDetail},
+    },
+)
+async def rollback_version(
+    doc_id: uuid.UUID,
+    version: int,
+    db: AsyncSession = Depends(get_db),
+    tenant_id: uuid.UUID = Depends(get_tenant_id),
+    user: User = Depends(require_role("editor")),
+):
+    svc = DocService(db, tenant_id)
+    doc = await svc.rollback(doc_id, version, user.id)
+    return DataResponse(data=KnowledgeDocDetailOut.model_validate(doc))
 
 
 @router.post(

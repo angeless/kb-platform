@@ -34,6 +34,7 @@ class ErrorCode(StrEnum):
     DOC_NOT_FOUND = "DOC_NOT_FOUND"
     DOC_ALREADY_PUBLISHED = "DOC_ALREADY_PUBLISHED"
     DOC_STATUS_INVALID = "DOC_STATUS_INVALID"
+    VERSION_NOT_FOUND = "VERSION_NOT_FOUND"
 
     # Job
     JOB_NOT_FOUND = "JOB_NOT_FOUND"
@@ -91,6 +92,7 @@ ERROR_MESSAGES: dict[str, str] = {
     ErrorCode.DOC_NOT_FOUND: "文档不存在或已被删除",
     ErrorCode.DOC_ALREADY_PUBLISHED: "该文档已发布",
     ErrorCode.DOC_STATUS_INVALID: "文档当前状态不允许此操作",
+    ErrorCode.VERSION_NOT_FOUND: "指定版本不存在",
     ErrorCode.JOB_NOT_FOUND: "任务不存在",
     ErrorCode.JOB_ALREADY_RUNNING: "该任务正在运行中，请等待完成",
     ErrorCode.CONFLICT_NOT_FOUND: "冲突记录不存在",
