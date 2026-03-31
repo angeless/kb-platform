@@ -29,14 +29,25 @@ class PassClient:
         self._product_id = settings.kb_product_id
         self._timeout = 10.0
 
+    async def _request(self, method: str, path: str, context: str, **kwargs) -> dict:
+        """Send HTTP request to Pass with unified network error handling."""
+        try:
+            async with httpx.AsyncClient(timeout=self._timeout) as client:
+                resp = await client.request(method, f"{self._base_url}{path}", **kwargs)
+        except httpx.HTTPError as e:
+            logger.error("Pass API %s network error: %s", context, e)
+            raise AppException(
+                error_code=ErrorCode.AUTH_PASS_UNAVAILABLE,
+                message="认证服务暂时不可用，请稍后重试",
+                status_code=502,
+            ) from e
+        return self._handle_response(resp, context=context)
+
     async def login(self, email: str, password: str) -> dict:
         """POST /api/v1/pass/login → { passId, token, expiresAt, productBindings }"""
-        async with httpx.AsyncClient(timeout=self._timeout) as client:
-            resp = await client.post(
-                f"{self._base_url}/api/v1/pass/login",
-                json={"productId": self._product_id, "email": email, "password": password},
-            )
-        return self._handle_response(resp, context="login")
+        return await self._request("POST", "/api/v1/pass/login", context="login", json={
+            "productId": self._product_id, "email": email, "password": password,
+        })
 
     async def register(self, email: str, password: str, display_name: str = "") -> dict:
         """POST /api/v1/pass/register → { passId, token, expiresAt, productBinding }"""
@@ -47,32 +58,49 @@ class PassClient:
         }
         if display_name:
             body["displayName"] = display_name
-        async with httpx.AsyncClient(timeout=self._timeout) as client:
-            resp = await client.post(f"{self._base_url}/api/v1/pass/register", json=body)
-        return self._handle_response(resp, context="register")
+        return await self._request("POST", "/api/v1/pass/register", context="register", json=body)
 
     async def refresh(self, token: str) -> dict:
         """POST /api/v1/pass/refresh → { token, expiresAt }"""
-        async with httpx.AsyncClient(timeout=self._timeout) as client:
-            resp = await client.post(
-                f"{self._base_url}/api/v1/pass/refresh",
-                headers={"Authorization": f"Bearer {token}"},
-            )
-        return self._handle_response(resp, context="refresh")
+        return await self._request("POST", "/api/v1/pass/refresh", context="refresh",
+                                   headers={"Authorization": f"Bearer {token}"})
 
     async def me(self, token: str) -> dict:
         """GET /api/v1/pass/me → { passId, email, phone, displayName, avatarUrl, productBindings }"""
-        async with httpx.AsyncClient(timeout=self._timeout) as client:
-            resp = await client.get(
-                f"{self._base_url}/api/v1/pass/me",
-                headers={"Authorization": f"Bearer {token}"},
-            )
-        return self._handle_response(resp, context="me")
+        return await self._request("GET", "/api/v1/pass/me", context="me",
+                                   headers={"Authorization": f"Bearer {token}"})
+
+    # Required fields per endpoint for response validation
+    _REQUIRED_FIELDS: dict[str, list[str]] = {
+        "login": ["passId", "token"],
+        "register": ["passId", "token"],
+        "refresh": ["token"],
+        "me": ["passId"],
+    }
 
     def _handle_response(self, resp: httpx.Response, context: str) -> dict:
         """Map Pass HTTP responses to KB exceptions."""
         if resp.status_code in (200, 201):
-            return resp.json()
+            try:
+                data = resp.json()
+            except (ValueError, UnicodeDecodeError) as e:
+                logger.error("Pass API %s: success status %s but invalid JSON: %s", context, resp.status_code, resp.text[:500])
+                raise AppException(
+                    error_code=ErrorCode.AUTH_PASS_UNAVAILABLE,
+                    message="认证服务返回了无效响应",
+                    status_code=502,
+                ) from e
+            # Validate required fields
+            required = self._REQUIRED_FIELDS.get(context, [])
+            missing = [f for f in required if f not in data]
+            if missing:
+                logger.error("Pass API %s: missing fields %s in response", context, missing)
+                raise AppException(
+                    error_code=ErrorCode.AUTH_PASS_UNAVAILABLE,
+                    message="认证服务返回了不完整的响应",
+                    status_code=502,
+                )
+            return data
 
         # Try to extract PA error code from response body
         pa_code = ""
@@ -81,8 +109,8 @@ class PassClient:
             body = resp.json()
             pa_code = body.get("errorCode", body.get("code", ""))
             message = body.get("message", "")
-        except Exception:
-            pass
+        except (ValueError, KeyError):
+            logger.warning("Pass API %s: could not parse error body (status=%s, body=%s)", context, resp.status_code, resp.text[:500])
 
         if pa_code == _PA_ACCOUNT_BANNED or resp.status_code == 403:
             raise ForbiddenException(

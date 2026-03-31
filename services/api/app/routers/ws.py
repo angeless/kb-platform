@@ -9,6 +9,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from sqlalchemy import select
 
 from shared_config.settings import get_settings
+from shared_errors import ForbiddenException, UnauthorizedException
 from shared_models import Project
 from app.services.pass_client import PassClient
 
@@ -34,8 +35,15 @@ async def ws_job_status(websocket: WebSocket, project_id: str):
     pass_client = PassClient(settings)
     try:
         pass_info = await pass_client.me(token)
-    except Exception:
+    except UnauthorizedException:
         await websocket.close(code=4001, reason="令牌无效或已过期")
+        return
+    except ForbiddenException:
+        await websocket.close(code=4003, reason="账号已被封禁")
+        return
+    except Exception as e:
+        logger.error("WebSocket auth: Pass service error: %s", e)
+        await websocket.close(code=4002, reason="认证服务暂时不可用")
         return
 
     pass_id = pass_info.get("passId")
@@ -100,12 +108,12 @@ async def ws_job_status(websocket: WebSocket, project_id: str):
     except WebSocketDisconnect:
         logger.info("WebSocket client disconnected: project=%s", project_id)
     except Exception as e:
-        logger.warning("WebSocket error: %s", e)
+        logger.error("WebSocket error: project=%s", project_id, exc_info=True)
     finally:
         try:
             if pubsub is not None:
                 await pubsub.unsubscribe(channel_name)
             if redis_client is not None:
                 await redis_client.aclose()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("WebSocket cleanup error: %s", e)

@@ -146,6 +146,11 @@ class Settings(BaseSettings):
                     "kb_product_id must be set in production. "
                     "Set KB_PRODUCT_ID environment variable to the UUID from PA product management."
                 )
+            if "localhost" in self.pass_base_url or "127.0.0.1" in self.pass_base_url:
+                raise ValueError(
+                    "pass_base_url must not point to localhost in production. "
+                    "Set PASS_BASE_URL environment variable to the PA Pass service URL."
+                )
         return self
 
 

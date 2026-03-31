@@ -1,5 +1,6 @@
 """Auth router: register, login, refresh, logout, me."""
 
+import logging
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -8,6 +9,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared_config.settings import Settings
+from shared_errors import UnauthorizedException
 from shared_models import User
 from shared_schemas.auth import LoginRequest, RegisterRequest
 from shared_schemas.common import DataResponse, ErrorDetail
@@ -15,6 +17,7 @@ from shared_schemas.common import DataResponse, ErrorDetail
 from app.deps import get_current_user, get_db, get_settings_dep
 from app.services.auth_service import AuthService
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/v1/auth", tags=["auth"])
 
 
@@ -40,8 +43,8 @@ def _set_access_cookie(
             remaining = (exp_dt - datetime.now(timezone.utc)).total_seconds()
             if remaining > 0:
                 max_age = int(remaining)
-        except (ValueError, TypeError):
-            pass
+        except (ValueError, TypeError) as e:
+            logger.warning("Could not parse Pass expiresAt '%s': %s — defaulting to 3600s", expires_at, e)
     response.set_cookie(
         key="access_token",
         value=token,
@@ -125,7 +128,6 @@ async def refresh(
         token = auth_header[7:]
 
     if not token:
-        from shared_errors import UnauthorizedException
         raise UnauthorizedException(message="未提供认证凭据")
 
     svc = AuthService(db, settings)
