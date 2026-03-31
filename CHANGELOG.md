@@ -8,6 +8,8 @@
 ### 新增 (Added)
 - 自动化开发工作流（dev-workflow-upgrade v1.3）
 - PA Pass 统一认证接入：登录/注册/刷新代理到 Pass REST API，Pass JWT 为认证信任根，`GET /pass/me` 验证，首次登录自动创建 KB Tenant + User（v0.44.15）
+- AI 摘要与标签推荐 API：`POST /v1/docs/{id}/ai-summarize` 和 `POST /v1/docs/{id}/ai-suggest-tags`，Celery 异步调用 LLM 生成摘要写入 summary 字段、推荐关键词写入 keywords 字段（v0.45.5）
+- knowledge_doc 表新增 summary 字段（Alembic 迁移 p5d6e7f8g9h0）（v0.45.4）
 - 前端 RBAC 权限感知：usePermission hook + PermissionGuard 组件，按角色隐藏操作按钮（v0.44.1）
 - 侧边栏精简：移除"用户管理"和"审计日志"入口，v1 单用户场景不需要（v0.44.2）
 - 版本历史 API：GET /v1/docs/{id}/versions 列表 + POST rollback 回滚端点（v0.44.3）

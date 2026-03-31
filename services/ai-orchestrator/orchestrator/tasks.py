@@ -15,7 +15,13 @@ from shared_models import (
 
 from .celery_app import celery_app
 from .llm_client import call_llm, parse_json_response
-from .prompts import build_propose_prompt, build_generate_doc_prompt, build_classify_prompt
+from .prompts import (
+    build_propose_prompt,
+    build_generate_doc_prompt,
+    build_classify_prompt,
+    build_summary_prompt,
+    build_suggest_tags_prompt,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -675,3 +681,103 @@ def _update_job_failed(session: Session, job_id: uuid.UUID, error_message: str) 
         job.error_message = error_message
         job.finished_at = datetime.now(timezone.utc)
         _publish_job_event(job, error_message)
+
+
+# ---------------------------------------------------------------------------
+# AI summary / tag suggestion tasks (v0.45.5)
+# ---------------------------------------------------------------------------
+
+
+@celery_app.task(bind=True, name="orchestrator.generate_summary")
+def generate_summary(self, doc_id: str) -> dict:
+    """Generate an AI summary for a knowledge document.
+
+    Reads the latest version's content_md, calls LLM, and writes
+    the result to KnowledgeDoc.summary.
+    """
+    doc_uuid = uuid.UUID(doc_id)
+
+    with _get_sync_session() as session:
+        doc = session.execute(
+            select(KnowledgeDoc).where(KnowledgeDoc.id == doc_uuid)
+        ).scalar_one_or_none()
+
+        if doc is None:
+            return {"status": "error", "message": "Document not found"}
+
+        # Get latest version content
+        latest_version = session.execute(
+            select(KnowledgeDocVersion)
+            .where(KnowledgeDocVersion.doc_id == doc_uuid)
+            .order_by(KnowledgeDocVersion.version.desc())
+        ).scalar_one_or_none()
+
+        if latest_version is None or not latest_version.content_md:
+            return {"status": "error", "message": "Document has no content"}
+
+        try:
+            system_prompt, user_prompt = build_summary_prompt(latest_version.content_md)
+            llm_response = call_llm(prompt=user_prompt, system_prompt=system_prompt)
+            result = parse_json_response(llm_response)
+
+            summary = result.get("summary", "")
+            if not summary:
+                return {"status": "error", "message": "LLM returned empty summary"}
+
+            doc.summary = summary
+            session.commit()
+
+            logger.info("Generated summary for doc %s (%d chars)", doc_id, len(summary))
+            return {"status": "success", "summary": summary}
+
+        except Exception as e:
+            session.rollback()
+            logger.error("Failed to generate summary for doc %s: %s", doc_id, e)
+            return {"status": "error", "message": str(e)}
+
+
+@celery_app.task(bind=True, name="orchestrator.suggest_tags")
+def suggest_tags(self, doc_id: str) -> dict:
+    """Suggest keyword tags for a knowledge document.
+
+    Reads the latest version's content_md, calls LLM, and writes
+    the result to KnowledgeDoc.keywords.
+    """
+    doc_uuid = uuid.UUID(doc_id)
+
+    with _get_sync_session() as session:
+        doc = session.execute(
+            select(KnowledgeDoc).where(KnowledgeDoc.id == doc_uuid)
+        ).scalar_one_or_none()
+
+        if doc is None:
+            return {"status": "error", "message": "Document not found"}
+
+        latest_version = session.execute(
+            select(KnowledgeDocVersion)
+            .where(KnowledgeDocVersion.doc_id == doc_uuid)
+            .order_by(KnowledgeDocVersion.version.desc())
+        ).scalar_one_or_none()
+
+        if latest_version is None or not latest_version.content_md:
+            return {"status": "error", "message": "Document has no content"}
+
+        try:
+            system_prompt, user_prompt = build_suggest_tags_prompt(latest_version.content_md)
+            llm_response = call_llm(prompt=user_prompt, system_prompt=system_prompt)
+            result = parse_json_response(llm_response)
+
+            keywords = result.get("keywords", [])
+            if not keywords:
+                return {"status": "error", "message": "LLM returned empty keywords"}
+
+            doc.keywords = keywords
+            session.commit()
+
+            logger.info("Suggested %d tags for doc %s", len(keywords), doc_id)
+            return {"status": "success", "keywords": keywords}
+
+        except Exception as e:
+            session.rollback()
+            logger.error("Failed to suggest tags for doc %s: %s", doc_id, e)
+            return {"status": "error", "message": str(e)}

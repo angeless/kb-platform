@@ -1,6 +1,12 @@
 """Tests for prompt construction."""
 
-from orchestrator.prompts import build_propose_prompt, build_generate_doc_prompt, build_classify_prompt
+from orchestrator.prompts import (
+    build_propose_prompt,
+    build_generate_doc_prompt,
+    build_classify_prompt,
+    build_summary_prompt,
+    build_suggest_tags_prompt,
+)
 
 
 class TestBuildProposePrompt:
@@ -132,3 +138,57 @@ class TestBuildClassifyPrompt:
         assert "supplement" in user
         assert "correction" in user
         assert "conflict" in user
+
+
+class TestBuildSummaryPrompt:
+    def test_includes_content(self):
+        """Prompt should contain the document content."""
+        system, user = build_summary_prompt("这是一份关于退款政策的文档")
+        assert "退款政策" in user
+        assert "200" in user  # mentions the 200-char limit
+
+    def test_truncates_long_content(self):
+        """Content exceeding max_content_chars should be truncated."""
+        system, user = build_summary_prompt("x" * 10000, max_content_chars=500)
+        assert "截断" in user
+
+    def test_system_prompt_constraints(self):
+        """System prompt should enforce no fabrication."""
+        system, user = build_summary_prompt("content")
+        assert "不得编造" in system
+        assert "摘要" in system
+
+    def test_json_output_format(self):
+        """User prompt should request JSON output with summary key."""
+        system, user = build_summary_prompt("content")
+        assert "summary" in user
+        assert "JSON" in user
+
+
+class TestBuildSuggestTagsPrompt:
+    def test_includes_content(self):
+        """Prompt should contain the document content."""
+        system, user = build_suggest_tags_prompt("退货政策说明")
+        assert "退货政策" in user
+
+    def test_truncates_long_content(self):
+        """Content exceeding max_content_chars should be truncated."""
+        system, user = build_suggest_tags_prompt("y" * 10000, max_content_chars=500)
+        assert "截断" in user
+
+    def test_system_prompt_constraints(self):
+        """System prompt should enforce no fabrication."""
+        system, user = build_suggest_tags_prompt("content")
+        assert "不得编造" in system
+        assert "关键词" in system
+
+    def test_json_output_format(self):
+        """User prompt should request JSON output with keywords key."""
+        system, user = build_suggest_tags_prompt("content")
+        assert "keywords" in user
+        assert "JSON" in user
+
+    def test_keyword_count_guidance(self):
+        """Prompt should specify 3-8 keywords."""
+        system, user = build_suggest_tags_prompt("content")
+        assert "3-8" in user or "3" in user

@@ -255,6 +255,74 @@ relation_type 说明：
 输出 restructure 时需补充 restructure_suggestion 字段说明建议"""
 
 
+# ---------------------------------------------------------------------------
+# AI summary prompts
+# ---------------------------------------------------------------------------
+
+SYSTEM_PROMPT_SUMMARY = """你是一个知识文档摘要专家。你的任务是为给定的知识文档生成简洁准确的摘要。
+
+你必须：
+- 严格基于文档内容概括，不得编造文档中不存在的信息
+- 摘要应覆盖文档的核心观点和关键信息
+- 使用中文，不超过 200 字"""
+
+USER_PROMPT_SUMMARY_TEMPLATE = """请为以下知识文档生成一份不超过 200 字的摘要。
+
+--- 文档内容 ---
+{content}
+--- 文档内容结束 ---
+
+请以如下 JSON 格式输出（不要输出其他内容）：
+{{
+  "summary": "不超过200字的摘要文本"
+}}"""
+
+
+SYSTEM_PROMPT_SUGGEST_TAGS = """你是一个知识标签专家。你的任务是为给定的知识文档推荐准确的关键词标签。
+
+你必须：
+- 严格基于文档内容提取关键词，不得编造文档中不存在的概念
+- 关键词应涵盖核心主题、关键实体和领域术语
+- 返回 3-8 个关键词"""
+
+USER_PROMPT_SUGGEST_TAGS_TEMPLATE = """请为以下知识文档推荐 3-8 个关键词标签。
+
+--- 文档内容 ---
+{content}
+--- 文档内容结束 ---
+
+请以如下 JSON 格式输出（不要输出其他内容）：
+{{
+  "keywords": ["关键词1", "关键词2", "关键词3"]
+}}"""
+
+
+def build_summary_prompt(content: str, max_content_chars: int = 6000) -> tuple[str, str]:
+    """Build prompts for generating a document summary.
+
+    Returns (system_prompt, user_prompt).
+    """
+    truncated = content[:max_content_chars]
+    if len(content) > max_content_chars:
+        truncated += "...(截断)"
+
+    user_prompt = USER_PROMPT_SUMMARY_TEMPLATE.format(content=truncated)
+    return SYSTEM_PROMPT_SUMMARY, user_prompt
+
+
+def build_suggest_tags_prompt(content: str, max_content_chars: int = 6000) -> tuple[str, str]:
+    """Build prompts for suggesting document tags/keywords.
+
+    Returns (system_prompt, user_prompt).
+    """
+    truncated = content[:max_content_chars]
+    if len(content) > max_content_chars:
+        truncated += "...(截断)"
+
+    user_prompt = USER_PROMPT_SUGGEST_TAGS_TEMPLATE.format(content=truncated)
+    return SYSTEM_PROMPT_SUGGEST_TAGS, user_prompt
+
+
 def build_classify_prompt(
     existing_docs: list[dict],
     new_chunks: list[dict],
