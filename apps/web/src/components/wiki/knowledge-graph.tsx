@@ -91,19 +91,23 @@ export default function KnowledgeGraph({ nodes, edges, projectId, onEdgeClick }:
     () =>
       edges.map((e, i) => {
         const isCrossRef = e.edge_type === "cross_ref";
+        const isContradiction = isCrossRef && e.relation_type === "contradicts";
         const label = isCrossRef
           ? RELATION_LABELS[e.relation_type ?? ""] ?? e.relation_type ?? "关联"
           : undefined;
+        const edgeColor = isContradiction ? "#dc2626" : isCrossRef ? "#3b82f6" : "#94a3b8";
         return {
           id: e.id || `e-${i}`,
           source: e.source,
           target: e.target,
           animated: isCrossRef,
           style: isCrossRef
-            ? { stroke: "#3b82f6", strokeDasharray: "5 5", cursor: "pointer" }
+            ? { stroke: edgeColor, strokeDasharray: "5 5", strokeWidth: isContradiction ? 2.5 : 1.5, cursor: "pointer" }
             : { stroke: "#94a3b8" },
           label,
-          labelStyle: isCrossRef ? { fontSize: 11, fill: "#3b82f6" } : undefined,
+          labelStyle: isCrossRef
+            ? { fontSize: 11, fill: edgeColor, fontWeight: isContradiction ? 600 : 400 }
+            : undefined,
         };
       }),
     [edges],

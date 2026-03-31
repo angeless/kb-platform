@@ -82,6 +82,9 @@ export default function GraphPage() {
   const [edgeDetail, setEdgeDetail] = useState<EdgeDetail | null>(null);
   const [deletingEdge, setDeletingEdge] = useState(false);
 
+  // Contradiction detection
+  const [detectingContradictions, setDetectingContradictions] = useState(false);
+
   // Add cross-ref modal
   const [showAddCrossRef, setShowAddCrossRef] = useState(false);
   const [addSearchQuery, setAddSearchQuery] = useState("");
@@ -237,6 +240,25 @@ export default function GraphPage() {
     }
   };
 
+  const handleDetectContradictions = async () => {
+    setDetectingContradictions(true);
+    setActionMsg("");
+    try {
+      const resp = await api.post<{
+        contradictions_found: number;
+        total_pairs_checked: number;
+      }>(`/v1/projects/${projectId}/ai-detect-contradictions`, {});
+      setActionMsg(
+        `检测完成：检查了 ${resp.data.total_pairs_checked} 对文档，发现 ${resp.data.contradictions_found} 处矛盾`,
+      );
+      fetchGraph();
+    } catch (e) {
+      setActionMsg(e instanceof ApiClientError ? e.message : "矛盾检测失败");
+    } finally {
+      setDetectingContradictions(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex h-[70vh] items-center justify-center">
@@ -266,6 +288,13 @@ export default function GraphPage() {
         <div className="flex items-center gap-3">
           <PermissionGuard action="edit">
             <button
+              onClick={handleDetectContradictions}
+              disabled={detectingContradictions}
+              className="rounded-lg border border-red-200 px-4 py-2 text-sm text-red-600 hover:bg-red-50 disabled:opacity-50"
+            >
+              {detectingContradictions ? "检测中..." : "检测矛盾"}
+            </button>
+            <button
               onClick={() => setShowAddCrossRef(true)}
               className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
             >
@@ -282,7 +311,9 @@ export default function GraphPage() {
       </div>
 
       {actionMsg && (
-        <div className="mb-3 rounded-lg bg-red-50 p-3 text-sm text-red-600">
+        <div className={`mb-3 rounded-lg p-3 text-sm ${
+          actionMsg.startsWith("检测完成") ? "bg-green-50 text-green-600" : "bg-red-50 text-red-600"
+        }`}>
           {actionMsg}
         </div>
       )}
