@@ -32,6 +32,9 @@ interface DocDetail {
   title: string;
   current_version: number;
   status: string;
+  summary: string | null;
+  keywords: string[] | null;
+  knowledge_type: string | null;
   versions: DocVersion[];
 }
 
@@ -47,6 +50,8 @@ export default function DocDetailPage() {
   const [showHistory, setShowHistory] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [summarizing, setSummarizing] = useState(false);
+  const [suggestingTags, setSuggestingTags] = useState(false);
   const exportRef = useRef<HTMLDivElement>(null);
 
   const fetchDoc = useCallback(async () => {
@@ -105,6 +110,34 @@ export default function DocDetailPage() {
       setActionMsg(e instanceof Error ? e.message : "导出失败");
     } finally {
       setExporting(false);
+    }
+  };
+
+  const handleAiSummarize = async () => {
+    setSummarizing(true);
+    setActionMsg("");
+    try {
+      await api.post(`/v1/docs/${docId}/ai-summarize`, {});
+      await fetchDoc();
+      setActionMsg("操作成功");
+    } catch (e) {
+      setActionMsg(e instanceof ApiClientError ? e.message : "摘要生成失败");
+    } finally {
+      setSummarizing(false);
+    }
+  };
+
+  const handleAiSuggestTags = async () => {
+    setSuggestingTags(true);
+    setActionMsg("");
+    try {
+      await api.post(`/v1/docs/${docId}/ai-suggest-tags`, {});
+      await fetchDoc();
+      setActionMsg("操作成功");
+    } catch (e) {
+      setActionMsg(e instanceof ApiClientError ? e.message : "标签推荐失败");
+    } finally {
+      setSuggestingTags(false);
     }
   };
 
@@ -209,6 +242,52 @@ export default function DocDetailPage() {
         >
           历史版本
         </button>
+      </div>
+
+      {/* Summary */}
+      <div className="mb-4 rounded-lg border border-gray-200 bg-white p-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-gray-600">摘要</h3>
+          <PermissionGuard action="edit">
+            <button
+              onClick={handleAiSummarize}
+              disabled={summarizing}
+              className="rounded border border-gray-300 px-3 py-1 text-xs text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+            >
+              {summarizing ? "生成中..." : doc.summary ? "重新生成" : "生成摘要"}
+            </button>
+          </PermissionGuard>
+        </div>
+        <p className="mt-2 text-sm text-gray-700">
+          {doc.summary || <span className="text-gray-400">暂无摘要</span>}
+        </p>
+      </div>
+
+      {/* Keywords */}
+      <div className="mb-4 rounded-lg border border-gray-200 bg-white p-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-gray-600">关键词</h3>
+          <PermissionGuard action="edit">
+            <button
+              onClick={handleAiSuggestTags}
+              disabled={suggestingTags}
+              className="rounded border border-gray-300 px-3 py-1 text-xs text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+            >
+              {suggestingTags ? "推荐中..." : doc.keywords?.length ? "刷新标签" : "推荐标签"}
+            </button>
+          </PermissionGuard>
+        </div>
+        <div className="mt-2 flex flex-wrap gap-2">
+          {doc.keywords && doc.keywords.length > 0 ? (
+            doc.keywords.map((kw) => (
+              <span key={kw} className="rounded-full bg-gray-100 px-3 py-1 text-xs text-gray-600">
+                {kw}
+              </span>
+            ))
+          ) : (
+            <span className="text-sm text-gray-400">暂无关键词</span>
+          )}
+        </div>
       </div>
 
       {/* Version Tabs */}

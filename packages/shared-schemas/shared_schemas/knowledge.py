@@ -14,6 +14,9 @@ class KnowledgeDocOut(BaseModel):
     title: str
     current_version: int
     status: str
+    summary: str | None = None
+    keywords: list[str] | None = None
+    knowledge_type: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -68,6 +71,9 @@ class KnowledgeDocDetailOut(BaseModel):
     title: str
     current_version: int
     status: str
+    summary: str | None = None
+    keywords: list[str] | None = None
+    knowledge_type: str | None = None
     created_at: datetime
     updated_at: datetime
     versions: list[DocVersionOut] = []
