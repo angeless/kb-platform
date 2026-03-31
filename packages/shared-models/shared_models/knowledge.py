@@ -37,6 +37,7 @@ class KnowledgeDoc(Base):
     title: Mapped[str] = mapped_column(String(500), nullable=False)
     current_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="draft")
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     keywords: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     knowledge_type: Mapped[str | None] = mapped_column(String(30), nullable=True)
     search_vector = mapped_column(TSVector(), nullable=True)
