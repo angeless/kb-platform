@@ -8,6 +8,7 @@
 ### 新增 (Added)
 - 自动化开发工作流（dev-workflow-upgrade v1.3）
 - PA Pass 统一认证接入：登录/注册/刷新代理到 Pass REST API，Pass JWT 为认证信任根，`GET /pass/me` 验证，首次登录自动创建 KB Tenant + User（v0.44.15）
+- 前端 Pipeline 配置页：项目设置新增"知识提取配置" Tab，7 个 stage 卡片含启用/禁用开关，classify 支持置信度滑块 + 自定义实体类型标签输入，quality_check 支持最小内容长度 + 要求标题，conflict_detect 支持相似度阈值滑块，核心 stage 标注"核心"标签，支持重置为默认（v0.46.4）
 - 跨文档模式发现：`POST /v1/projects/{id}/ai-discover-patterns`，LLM 分析项目文档的 summary/keywords 生成主题聚类、高频关联和知识缺口，结果 Redis 缓存 24h（v0.46.6）
 - 跨文档矛盾检测：`POST /v1/projects/{id}/ai-detect-contradictions`，LLM 逐对比较文档事实一致性，检测到矛盾自动创建 contradicts 类型 CrossReference，severity 分三级，note 含证据（v0.46.5）
 - 用户自定义实体类型支持：classify/doc_generate/suggest_tags prompt 动态注入 entity_types 指引，通过 pipeline config params 管理，未设置时行为不变（v0.46.3）

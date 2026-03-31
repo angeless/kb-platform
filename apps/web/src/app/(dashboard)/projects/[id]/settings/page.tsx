@@ -22,11 +22,32 @@ interface ApiKeyItem {
   last_used_at: string | null;
 }
 
+interface StageConfig {
+  stage_name: string;
+  enabled: boolean;
+  params: Record<string, unknown>;
+}
+
+const STAGE_LABELS: Record<string, { label: string; desc: string }> = {
+  classify: { label: "内容分类", desc: "将原始片段分类为新增/补充/修正/冲突" },
+  architecture_draft: { label: "架构生成", desc: "AI 自动生成知识体系架构" },
+  doc_generate: { label: "文档生成", desc: "AI 将片段整合为结构化知识文档" },
+  quality_check: { label: "质量检查", desc: "校验生成内容的基本质量" },
+  conflict_detect: { label: "冲突检测", desc: "检测跨文档的内容冲突" },
+  embed: { label: "向量嵌入", desc: "生成语义向量用于检索" },
+  review_notify: { label: "审核通知", desc: "通知审核者新生成的内容" },
+};
+
+const CORE_STAGES = new Set(["doc_generate", "embed"]);
+
+type TabKey = "general" | "pipeline";
+
 export default function ProjectSettingsPage() {
   const params = useParams();
   const router = useRouter();
   const projectId = params.id as string;
 
+  const [activeTab, setActiveTab] = useState<TabKey>("general");
   const [project, setProject] = useState<Project | null>(null);
   const [name, setName] = useState("");
   const [industry, setIndustry] = useState("");
@@ -35,6 +56,12 @@ export default function ProjectSettingsPage() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+
+  // Pipeline config state
+  const [stages, setStages] = useState<StageConfig[]>([]);
+  const [pipelineLoading, setPipelineLoading] = useState(false);
+  const [pipelineSaving, setPipelineSaving] = useState(false);
+  const [entityInput, setEntityInput] = useState("");
 
   // API Key state
   const [apiKeys, setApiKeys] = useState<ApiKeyItem[]>([]);
@@ -51,6 +78,20 @@ export default function ProjectSettingsPage() {
     } catch (e) { console.error("Failed to load API keys", e); }
   }, [projectId]);
 
+  const fetchPipelineConfig = useCallback(async () => {
+    setPipelineLoading(true);
+    try {
+      const resp = await api.get<{ stages: StageConfig[] }>(
+        `/v1/projects/${projectId}/pipeline-config`,
+      );
+      setStages(resp.data.stages);
+    } catch (e) {
+      console.error("Failed to load pipeline config", e);
+    } finally {
+      setPipelineLoading(false);
+    }
+  }, [projectId]);
+
   useEffect(() => {
     const fetchProject = async () => {
       try {
@@ -64,7 +105,8 @@ export default function ProjectSettingsPage() {
     };
     fetchProject();
     fetchApiKeys();
-  }, [projectId, fetchApiKeys]);
+    fetchPipelineConfig();
+  }, [projectId, fetchApiKeys, fetchPipelineConfig]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -123,6 +165,76 @@ export default function ProjectSettingsPage() {
     }
   };
 
+  // --- Pipeline config helpers ---
+  const updateStage = (stageName: string, patch: Partial<StageConfig>) => {
+    setStages((prev) =>
+      prev.map((s) => (s.stage_name === stageName ? { ...s, ...patch } : s)),
+    );
+  };
+
+  const updateStageParam = (stageName: string, key: string, value: unknown) => {
+    setStages((prev) =>
+      prev.map((s) =>
+        s.stage_name === stageName
+          ? { ...s, params: { ...s.params, [key]: value } }
+          : s,
+      ),
+    );
+  };
+
+  const handleSavePipeline = async () => {
+    setPipelineSaving(true);
+    setMessage("");
+    setError("");
+    try {
+      for (const stage of stages) {
+        await api.put(`/v1/projects/${projectId}/pipeline-config/${stage.stage_name}`, {
+          enabled: stage.enabled,
+          params: stage.params,
+        });
+      }
+      setMessage("知识提取配置已保存");
+    } catch (e) {
+      setError(e instanceof ApiClientError ? e.message : "保存配置失败");
+    } finally {
+      setPipelineSaving(false);
+    }
+  };
+
+  const handleResetPipeline = async () => {
+    setMessage("");
+    setError("");
+    try {
+      await api.post(`/v1/projects/${projectId}/pipeline-config/reset`, {});
+      await fetchPipelineConfig();
+      setMessage("已重置为默认配置");
+    } catch (e) {
+      setError(e instanceof ApiClientError ? e.message : "重置失败");
+    }
+  };
+
+  const addEntityType = (stageName: string) => {
+    const val = entityInput.trim();
+    if (!val) return;
+    const stage = stages.find((s) => s.stage_name === stageName);
+    if (!stage) return;
+    const existing = (stage.params.entity_types as string[] | undefined) || [];
+    if (existing.includes(val)) return;
+    updateStageParam(stageName, "entity_types", [...existing, val]);
+    setEntityInput("");
+  };
+
+  const removeEntityType = (stageName: string, tag: string) => {
+    const stage = stages.find((s) => s.stage_name === stageName);
+    if (!stage) return;
+    const existing = (stage.params.entity_types as string[] | undefined) || [];
+    updateStageParam(
+      stageName,
+      "entity_types",
+      existing.filter((t) => t !== tag),
+    );
+  };
+
   if (!project && !error) {
     return <div className="py-12 text-center text-gray-400">加载中...</div>;
   }
@@ -136,6 +248,26 @@ export default function ProjectSettingsPage() {
         <h1 className="mt-2 text-2xl font-bold text-gray-900">项目设置</h1>
       </div>
 
+      {/* Tab switcher */}
+      <div className="mb-6 flex gap-1 rounded-lg bg-gray-100 p-1">
+        {[
+          { key: "general" as TabKey, label: "基本设置" },
+          { key: "pipeline" as TabKey, label: "知识提取配置" },
+        ].map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => { setActiveTab(tab.key); setMessage(""); setError(""); }}
+            className={`flex-1 rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+              activeTab === tab.key
+                ? "bg-white text-gray-900 shadow-sm"
+                : "text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
       {message && (
         <div className="mb-4 rounded-lg bg-green-50 p-3 text-sm text-green-600">{message}</div>
       )}
@@ -143,6 +275,7 @@ export default function ProjectSettingsPage() {
         <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-600">{error}</div>
       )}
 
+      {activeTab === "general" && (<>
       {/* Basic Settings */}
       <div className="mb-6 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
         <h2 className="mb-4 text-lg font-semibold">基本信息</h2>
@@ -300,6 +433,182 @@ export default function ProjectSettingsPage() {
         )}
       </div>
       </PermissionGuard>
+      </>)}
+
+      {activeTab === "pipeline" && (
+        <PermissionGuard action="manage_project">
+        <div className="space-y-4">
+          {pipelineLoading ? (
+            <div className="py-8 text-center text-gray-400">加载配置中...</div>
+          ) : (
+            <>
+              {stages.map((stage) => {
+                const meta = STAGE_LABELS[stage.stage_name];
+                const isCore = CORE_STAGES.has(stage.stage_name);
+                return (
+                  <div
+                    key={stage.stage_name}
+                    className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm"
+                  >
+                    {/* Header: label + toggle */}
+                    <div className="mb-2 flex items-center justify-between">
+                      <div>
+                        <span className="text-sm font-semibold text-gray-900">
+                          {meta?.label ?? stage.stage_name}
+                        </span>
+                        {isCore && (
+                          <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-700">
+                            核心
+                          </span>
+                        )}
+                        <p className="mt-0.5 text-xs text-gray-500">{meta?.desc}</p>
+                      </div>
+                      <label className="relative inline-flex cursor-pointer items-center">
+                        <input
+                          type="checkbox"
+                          checked={stage.enabled}
+                          onChange={(e) => updateStage(stage.stage_name, { enabled: e.target.checked })}
+                          className="peer sr-only"
+                        />
+                        <div className="h-6 w-11 rounded-full bg-gray-200 after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:bg-white after:transition-all peer-checked:bg-primary-600 peer-checked:after:translate-x-full" />
+                      </label>
+                    </div>
+
+                    {/* Stage-specific params */}
+                    {stage.stage_name === "classify" && stage.enabled && (
+                      <div className="mt-3 space-y-3 border-t border-gray-100 pt-3">
+                        <div>
+                          <label className="mb-1 block text-xs font-medium text-gray-600">
+                            置信度阈值: {Number(stage.params.confidence_threshold ?? 0.7).toFixed(2)}
+                          </label>
+                          <input
+                            type="range"
+                            min={0}
+                            max={1}
+                            step={0.05}
+                            value={Number(stage.params.confidence_threshold ?? 0.7)}
+                            onChange={(e) =>
+                              updateStageParam(stage.stage_name, "confidence_threshold", parseFloat(e.target.value))
+                            }
+                            className="w-full accent-primary-600"
+                          />
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-xs font-medium text-gray-600">
+                            自定义实体类型
+                          </label>
+                          <div className="mb-2 flex flex-wrap gap-1.5">
+                            {((stage.params.entity_types as string[] | undefined) || []).map((tag) => (
+                              <span
+                                key={tag}
+                                className="inline-flex items-center gap-1 rounded-full bg-primary-50 px-2.5 py-1 text-xs text-primary-700"
+                              >
+                                {tag}
+                                <button
+                                  onClick={() => removeEntityType(stage.stage_name, tag)}
+                                  className="text-primary-400 hover:text-primary-600"
+                                >
+                                  ×
+                                </button>
+                              </span>
+                            ))}
+                          </div>
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              value={entityInput}
+                              onChange={(e) => setEntityInput(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") { e.preventDefault(); addEntityType(stage.stage_name); }
+                              }}
+                              placeholder="输入实体类型，回车添加"
+                              className="flex-1 rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                            />
+                            <button
+                              onClick={() => addEntityType(stage.stage_name)}
+                              className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50"
+                            >
+                              添加
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {stage.stage_name === "quality_check" && stage.enabled && (
+                      <div className="mt-3 space-y-3 border-t border-gray-100 pt-3">
+                        <div>
+                          <label className="mb-1 block text-xs font-medium text-gray-600">
+                            最小内容长度
+                          </label>
+                          <input
+                            type="number"
+                            min={0}
+                            max={1000}
+                            value={Number(stage.params.min_content_length ?? 50)}
+                            onChange={(e) =>
+                              updateStageParam(stage.stage_name, "min_content_length", parseInt(e.target.value) || 0)
+                            }
+                            className="w-32 rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                          />
+                        </div>
+                        <label className="flex items-center gap-2 text-sm text-gray-700">
+                          <input
+                            type="checkbox"
+                            checked={stage.params.require_title !== false}
+                            onChange={(e) =>
+                              updateStageParam(stage.stage_name, "require_title", e.target.checked)
+                            }
+                            className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                          />
+                          要求标题
+                        </label>
+                      </div>
+                    )}
+
+                    {stage.stage_name === "conflict_detect" && stage.enabled && (
+                      <div className="mt-3 border-t border-gray-100 pt-3">
+                        <label className="mb-1 block text-xs font-medium text-gray-600">
+                          相似度阈值: {Number(stage.params.similarity_threshold ?? 0.85).toFixed(2)}
+                        </label>
+                        <input
+                          type="range"
+                          min={0}
+                          max={1}
+                          step={0.05}
+                          value={Number(stage.params.similarity_threshold ?? 0.85)}
+                          onChange={(e) =>
+                            updateStageParam(stage.stage_name, "similarity_threshold", parseFloat(e.target.value))
+                          }
+                          className="w-full accent-primary-600"
+                        />
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              {/* Actions */}
+              <div className="flex items-center justify-between pt-2">
+                <button
+                  onClick={handleResetPipeline}
+                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50"
+                >
+                  重置为默认
+                </button>
+                <button
+                  onClick={handleSavePipeline}
+                  disabled={pipelineSaving}
+                  className="rounded-lg bg-primary-600 px-5 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50"
+                >
+                  {pipelineSaving ? "保存中..." : "保存配置"}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+        </PermissionGuard>
+      )}
     </div>
   );
 }
