@@ -3,14 +3,24 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { usePermission } from "@/hooks/usePermission";
 
-const navItems = [
+interface NavItem {
+  label: string;
+  href: string;
+  icon: string;
+  minRole?: string;
+}
+
+const navItems: NavItem[] = [
   { label: "项目", href: "/projects", icon: "📁" },
   { label: "模型配置", href: "/settings/models", icon: "🤖" },
+  { label: "操作日志", href: "/admin/audit-logs", icon: "📋", minRole: "tenant_admin" },
 ];
 
 export function Sidebar() {
   const pathname = usePathname();
+  const { hasRole } = usePermission();
 
   return (
     <aside className="flex h-screen w-56 flex-col border-r border-gray-200 bg-white">
@@ -22,7 +32,9 @@ export function Sidebar() {
 
       <nav className="flex-1 overflow-y-auto p-3">
         <ul className="space-y-1">
-          {navItems.map((item) => {
+          {navItems
+            .filter((item) => !item.minRole || hasRole(item.minRole))
+            .map((item) => {
             const isActive = pathname.startsWith(item.href);
             return (
               <li key={item.href}>
