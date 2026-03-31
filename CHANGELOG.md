@@ -8,6 +8,7 @@
 ### 新增 (Added)
 - 自动化开发工作流（dev-workflow-upgrade v1.3）
 - PA Pass 统一认证接入：登录/注册/刷新代理到 Pass REST API，Pass JWT 为认证信任根，`GET /pass/me` 验证，首次登录自动创建 KB Tenant + User（v0.44.15）
+- Pipeline stage 运行时加载用户配置：run_pipeline 开头查询 PipelineStageConfig，disabled stage 跳过并发布 skipped 事件，config.params 传入各 stage 函数，quality_check 已参数化 min_content_length/require_title（v0.46.2）
 - Pipeline stage 配置 DB 模型 + CRUD API：`pipeline_stage_config` 表（project_id + stage_name 联合唯一），GET 返回 7 stage 含默认值、PUT 更新单个 stage、POST reset 恢复默认，Alembic 迁移（v0.46.1）
 - 前端文档列表虚拟滚动：@tanstack/react-virtual 虚拟化文档列表，pageSize 提升至 100，仅渲染可视区域行 + 10 行 overscan，快速滚动无白屏（v0.45.9）
 - 摘要/标签置信度展示：ConfidenceBadge 组件（高/中/低三档颜色），低置信度时"重新生成"按钮高亮提示，旧数据无 confidence 时降级兼容（v0.45.14）

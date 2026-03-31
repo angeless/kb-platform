@@ -20,6 +20,7 @@ def notify_review(
     project_id: uuid.UUID,
     doc_ids: list[uuid.UUID],
     conflict_ids: list[uuid.UUID],
+    config: dict | None = None,
 ) -> None:
     """Publish notification about documents ready for review."""
     settings = get_settings()

@@ -20,6 +20,7 @@ MIN_CONTENT_LENGTH = 50
 def quality_check(
     db: Session,
     doc_ids: list[uuid.UUID],
+    config: dict | None = None,
 ) -> dict:
     """Run quality checks on generated documents.
 
@@ -28,9 +29,17 @@ def quality_check(
     - Title presence check
     - Empty content detection
 
+    Config params (via pipeline_stage_config):
+    - min_content_length: int (default 50)
+    - require_title: bool (default True)
+
     Returns:
         {"passed": [doc_id, ...], "flagged": [{"doc_id": ..., "issues": [...]}, ...]}
     """
+    cfg = config or {}
+    min_length = cfg.get("min_content_length", MIN_CONTENT_LENGTH)
+    require_title = cfg.get("require_title", True)
+
     passed = []
     flagged = []
 
@@ -51,10 +60,10 @@ def quality_check(
         issues = []
         if version is None:
             issues.append("文档缺少版本内容")
-        elif len(version.content_md.strip()) < MIN_CONTENT_LENGTH:
-            issues.append(f"文档内容过短（{len(version.content_md.strip())}字符，最少{MIN_CONTENT_LENGTH}）")
+        elif len(version.content_md.strip()) < min_length:
+            issues.append(f"文档内容过短（{len(version.content_md.strip())}字符，最少{min_length}）")
 
-        if not doc.title or doc.title.strip() == "":
+        if require_title and (not doc.title or doc.title.strip() == ""):
             issues.append("文档缺少标题")
 
         if issues:

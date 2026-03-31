@@ -22,6 +22,7 @@ FALLBACK_DIMENSIONS = 256
 def generate_embeddings(
     db: Session,
     doc_ids: list[uuid.UUID],
+    config: dict | None = None,
 ) -> int:
     """Generate embeddings for the given documents.
 

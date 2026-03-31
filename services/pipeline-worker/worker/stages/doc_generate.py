@@ -22,6 +22,7 @@ def generate_documents(
     architecture_id: uuid.UUID,
     classification: dict,
     user_id: uuid.UUID,
+    config: dict | None = None,
 ) -> list[uuid.UUID]:
     """Generate knowledge documents for new/supplement chunks.
 

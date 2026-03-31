@@ -20,6 +20,7 @@ def classify_chunks(
     db: Session,
     project_id: uuid.UUID,
     asset_ids: list[uuid.UUID],
+    config: dict | None = None,
 ) -> dict:
     """Classify all chunks from the given assets.
 
