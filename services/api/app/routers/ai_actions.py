@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared_schemas.common import DataResponse, ErrorDetail
 from shared_errors import AppException, ErrorCode, NotFoundException
-from shared_models import KnowledgeDoc, User
+from shared_models import KnowledgeDoc, Project, User
 
 from app.deps import get_db, get_kb_id, require_role
 
@@ -177,6 +177,12 @@ async def ai_detect_contradictions(
     kb_id: uuid.UUID = Depends(get_kb_id),
     current_user: User = require_role("editor"),
 ):
+    # Tenant isolation: verify project belongs to caller's tenant
+    proj = (await db.execute(
+        select(Project.id).where(Project.id == project_id, Project.kb_id == kb_id)
+    )).scalar_one_or_none()
+    if proj is None:
+        raise NotFoundException(ErrorCode.PROJECT_NOT_FOUND, "Project not found")
     max_pairs = body.max_pairs if body else 50
 
     celery = _get_celery_app()
@@ -231,6 +237,12 @@ async def ai_discover_patterns(
     kb_id: uuid.UUID = Depends(get_kb_id),
     current_user: User = require_role("editor"),
 ):
+    # Tenant isolation: verify project belongs to caller's tenant
+    proj = (await db.execute(
+        select(Project.id).where(Project.id == project_id, Project.kb_id == kb_id)
+    )).scalar_one_or_none()
+    if proj is None:
+        raise NotFoundException(ErrorCode.PROJECT_NOT_FOUND, "Project not found")
     celery = _get_celery_app()
     if celery is None:
         raise AppException(ErrorCode.SYSTEM_INTERNAL_ERROR, "AI 服务不可用", status_code=500)

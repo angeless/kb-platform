@@ -87,8 +87,10 @@ export default function GraphPage() {
 
   // Add cross-ref modal
   const [showAddCrossRef, setShowAddCrossRef] = useState(false);
-  const [addSearchQuery, setAddSearchQuery] = useState("");
-  const [addSearchResults, setAddSearchResults] = useState<Array<{ id: string; title: string }>>([]);
+  const [srcSearchQuery, setSrcSearchQuery] = useState("");
+  const [srcSearchResults, setSrcSearchResults] = useState<Array<{ id: string; title: string }>>([]);
+  const [tgtSearchQuery, setTgtSearchQuery] = useState("");
+  const [tgtSearchResults, setTgtSearchResults] = useState<Array<{ id: string; title: string }>>([]);
   const [addSearching, setAddSearching] = useState(false);
   const [addSelectedSource, setAddSelectedSource] = useState<{ id: string; title: string } | null>(null);
   const [addSelectedTarget, setAddSelectedTarget] = useState<{ id: string; title: string } | null>(null);
@@ -96,6 +98,7 @@ export default function GraphPage() {
   const [addNote, setAddNote] = useState("");
   const [addCreating, setAddCreating] = useState(false);
   const [actionMsg, setActionMsg] = useState("");
+  const [actionMsgType, setActionMsgType] = useState<"success" | "error">("error");
 
   const fetchGraph = useCallback(async () => {
     setIsLoading(true);
@@ -198,16 +201,18 @@ export default function GraphPage() {
     }
   };
 
-  const handleAddSearch = async () => {
-    if (!addSearchQuery.trim() || !data) return;
+  const handleAddSearch = async (which: "source" | "target") => {
+    const query = which === "source" ? srcSearchQuery : tgtSearchQuery;
+    if (!query.trim() || !data) return;
     setAddSearching(true);
     try {
-      // Use graph nodes as search source (they're already loaded)
-      const q = addSearchQuery.toLowerCase();
+      const q = query.toLowerCase();
       const filtered = data.nodes
         .filter((n) => n.label.toLowerCase().includes(q))
         .map((n) => ({ id: n.id, title: n.label }));
-      setAddSearchResults(filtered.slice(0, 10));
+      const results = filtered.slice(0, 10);
+      if (which === "source") setSrcSearchResults(results);
+      else setTgtSearchResults(results);
     } finally {
       setAddSearching(false);
     }
@@ -228,8 +233,10 @@ export default function GraphPage() {
       setShowAddCrossRef(false);
       setAddSelectedSource(null);
       setAddSelectedTarget(null);
-      setAddSearchQuery("");
-      setAddSearchResults([]);
+      setSrcSearchQuery("");
+      setSrcSearchResults([]);
+      setTgtSearchQuery("");
+      setTgtSearchResults([]);
       setAddNote("");
       setAddRelationType("related");
       fetchGraph();
@@ -248,11 +255,13 @@ export default function GraphPage() {
         contradictions_found: number;
         total_pairs_checked: number;
       }>(`/v1/projects/${projectId}/ai-detect-contradictions`, {});
+      setActionMsgType("success");
       setActionMsg(
         `检测完成：检查了 ${resp.data.total_pairs_checked} 对文档，发现 ${resp.data.contradictions_found} 处矛盾`,
       );
       fetchGraph();
     } catch (e) {
+      setActionMsgType("error");
       setActionMsg(e instanceof ApiClientError ? e.message : "矛盾检测失败");
     } finally {
       setDetectingContradictions(false);
@@ -312,7 +321,7 @@ export default function GraphPage() {
 
       {actionMsg && (
         <div className={`mb-3 rounded-lg p-3 text-sm ${
-          actionMsg.startsWith("检测完成") ? "bg-green-50 text-green-600" : "bg-red-50 text-red-600"
+          actionMsgType === "success" ? "bg-green-50 text-green-600" : "bg-red-50 text-red-600"
         }`}>
           {actionMsg}
         </div>
@@ -461,20 +470,20 @@ export default function GraphPage() {
                   <div className="flex gap-2">
                     <input
                       type="text"
-                      value={!addSelectedSource ? addSearchQuery : ""}
-                      onChange={(e) => setAddSearchQuery(e.target.value)}
-                      onKeyDown={(e) => e.key === "Enter" && handleAddSearch()}
+                      value={srcSearchQuery}
+                      onChange={(e) => setSrcSearchQuery(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && handleAddSearch("source")}
                       placeholder="搜索文档标题..."
                       className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
                     />
-                    <button onClick={handleAddSearch} disabled={addSearching} className="rounded-lg bg-gray-100 px-3 py-2 text-sm text-gray-700 hover:bg-gray-200 disabled:opacity-50">
+                    <button onClick={() => handleAddSearch("source")} disabled={addSearching} className="rounded-lg bg-gray-100 px-3 py-2 text-sm text-gray-700 hover:bg-gray-200 disabled:opacity-50">
                       {addSearching ? "..." : "搜索"}
                     </button>
                   </div>
-                  {addSearchResults.length > 0 && !addSelectedSource && (
+                  {srcSearchResults.length > 0 && (
                     <ul className="mt-2 max-h-32 overflow-y-auto rounded-lg border border-gray-200">
-                      {addSearchResults.map((d) => (
-                        <li key={d.id} onClick={() => { setAddSelectedSource(d); setAddSearchResults([]); setAddSearchQuery(""); }}
+                      {srcSearchResults.map((d) => (
+                        <li key={d.id} onClick={() => { setAddSelectedSource(d); setSrcSearchResults([]); setSrcSearchQuery(""); }}
                           className="cursor-pointer px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">
                           {d.title}
                         </li>
@@ -498,20 +507,20 @@ export default function GraphPage() {
                   <div className="flex gap-2">
                     <input
                       type="text"
-                      value={!addSelectedTarget ? addSearchQuery : ""}
-                      onChange={(e) => setAddSearchQuery(e.target.value)}
-                      onKeyDown={(e) => e.key === "Enter" && handleAddSearch()}
+                      value={tgtSearchQuery}
+                      onChange={(e) => setTgtSearchQuery(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && handleAddSearch("target")}
                       placeholder="搜索文档标题..."
                       className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
                     />
-                    <button onClick={handleAddSearch} disabled={addSearching} className="rounded-lg bg-gray-100 px-3 py-2 text-sm text-gray-700 hover:bg-gray-200 disabled:opacity-50">
+                    <button onClick={() => handleAddSearch("target")} disabled={addSearching} className="rounded-lg bg-gray-100 px-3 py-2 text-sm text-gray-700 hover:bg-gray-200 disabled:opacity-50">
                       {addSearching ? "..." : "搜索"}
                     </button>
                   </div>
-                  {addSearchResults.length > 0 && !addSelectedTarget && (
+                  {tgtSearchResults.length > 0 && (
                     <ul className="mt-2 max-h-32 overflow-y-auto rounded-lg border border-gray-200">
-                      {addSearchResults.map((d) => (
-                        <li key={d.id} onClick={() => { setAddSelectedTarget(d); setAddSearchResults([]); setAddSearchQuery(""); }}
+                      {tgtSearchResults.map((d) => (
+                        <li key={d.id} onClick={() => { setAddSelectedTarget(d); setTgtSearchResults([]); setTgtSearchQuery(""); }}
                           className="cursor-pointer px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">
                           {d.title}
                         </li>
@@ -541,7 +550,7 @@ export default function GraphPage() {
             </div>
 
             <div className="mt-6 flex justify-end gap-3">
-              <button onClick={() => { setShowAddCrossRef(false); setAddSelectedSource(null); setAddSelectedTarget(null); setAddSearchQuery(""); setAddSearchResults([]); setAddNote(""); }}
+              <button onClick={() => { setShowAddCrossRef(false); setAddSelectedSource(null); setAddSelectedTarget(null); setSrcSearchQuery(""); setSrcSearchResults([]); setTgtSearchQuery(""); setTgtSearchResults([]); setAddNote(""); }}
                 className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
                 取消
               </button>

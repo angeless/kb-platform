@@ -187,13 +187,22 @@ export default function ProjectSettingsPage() {
     setMessage("");
     setError("");
     try {
-      for (const stage of stages) {
-        await api.put(`/v1/projects/${projectId}/pipeline-config/${stage.stage_name}`, {
-          enabled: stage.enabled,
-          params: stage.params,
-        });
+      const results = await Promise.allSettled(
+        stages.map((stage) =>
+          api.put(`/v1/projects/${projectId}/pipeline-config/${stage.stage_name}`, {
+            enabled: stage.enabled,
+            params: stage.params,
+          }),
+        ),
+      );
+      const failed = results
+        .map((r, i) => (r.status === "rejected" ? stages[i].stage_name : null))
+        .filter(Boolean);
+      if (failed.length > 0) {
+        setError(`部分 stage 保存失败: ${failed.join(", ")}`);
+      } else {
+        setMessage("知识提取配置已保存");
       }
-      setMessage("知识提取配置已保存");
     } catch (e) {
       setError(e instanceof ApiClientError ? e.message : "保存配置失败");
     } finally {
@@ -201,7 +210,11 @@ export default function ProjectSettingsPage() {
     }
   };
 
+  const [resetting, setResetting] = useState(false);
+
   const handleResetPipeline = async () => {
+    if (resetting) return;
+    setResetting(true);
     setMessage("");
     setError("");
     try {
@@ -210,6 +223,8 @@ export default function ProjectSettingsPage() {
       setMessage("已重置为默认配置");
     } catch (e) {
       setError(e instanceof ApiClientError ? e.message : "重置失败");
+    } finally {
+      setResetting(false);
     }
   };
 
@@ -592,9 +607,10 @@ export default function ProjectSettingsPage() {
               <div className="flex items-center justify-between pt-2">
                 <button
                   onClick={handleResetPipeline}
-                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50"
+                  disabled={resetting}
+                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-50"
                 >
-                  重置为默认
+                  {resetting ? "重置中..." : "重置为默认"}
                 </button>
                 <button
                   onClick={handleSavePipeline}

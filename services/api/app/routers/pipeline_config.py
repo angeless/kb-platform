@@ -17,10 +17,21 @@ from shared_schemas.pipeline_stage_config import (
 )
 
 from app.deps import get_db, get_kb_id, require_role
-from shared_models import User
+from shared_models import Project, User
 from shared_models.pipeline_stage_config import PipelineStageConfig
 
 router = APIRouter(prefix="/v1/projects", tags=["pipeline-config"])
+
+
+async def _verify_project_tenant(
+    db: AsyncSession, project_id: uuid.UUID, kb_id: uuid.UUID,
+) -> None:
+    """Ensure project belongs to the caller's tenant."""
+    result = await db.execute(
+        select(Project.id).where(Project.id == project_id, Project.kb_id == kb_id)
+    )
+    if result.scalar_one_or_none() is None:
+        raise HTTPException(status_code=404, detail="Project not found")
 
 
 def _build_stage_out(stage_name: str, row: PipelineStageConfig | None) -> PipelineStageConfigOut:
@@ -42,6 +53,7 @@ def _build_stage_out(stage_name: str, row: PipelineStageConfig | None) -> Pipeli
     "/{project_id}/pipeline-config",
     response_model=DataResponse[PipelineConfigListOut],
     summary="Get pipeline stage config for a project",
+    description="Returns all 7 pipeline stages with their enabled/disabled state and params. Stages without DB overrides return defaults.",
 )
 async def get_pipeline_config(
     project_id: uuid.UUID,
@@ -49,6 +61,7 @@ async def get_pipeline_config(
     kb_id: uuid.UUID = Depends(get_kb_id),
     _user: User = require_role("viewer"),
 ):
+    await _verify_project_tenant(db, project_id, kb_id)
     result = await db.execute(
         select(PipelineStageConfig).where(PipelineStageConfig.project_id == project_id)
     )
@@ -61,6 +74,7 @@ async def get_pipeline_config(
     "/{project_id}/pipeline-config/{stage_name}",
     response_model=DataResponse[PipelineStageConfigDetailOut],
     summary="Update a specific stage config",
+    description="Upsert enabled state and params for a single pipeline stage. Creates a config row if none exists.",
 )
 async def update_stage_config(
     project_id: uuid.UUID,
@@ -70,6 +84,7 @@ async def update_stage_config(
     kb_id: uuid.UUID = Depends(get_kb_id),
     _user: User = require_role("editor"),
 ):
+    await _verify_project_tenant(db, project_id, kb_id)
     if stage_name not in STAGE_NAMES:
         raise HTTPException(status_code=404, detail=f"Unknown stage: {stage_name}")
 
@@ -102,6 +117,7 @@ async def update_stage_config(
     "/{project_id}/pipeline-config/reset",
     response_model=DataResponse[PipelineConfigListOut],
     summary="Reset pipeline config to defaults",
+    description="Deletes all custom stage config for the project, reverting every stage to built-in defaults.",
 )
 async def reset_pipeline_config(
     project_id: uuid.UUID,
@@ -109,11 +125,11 @@ async def reset_pipeline_config(
     kb_id: uuid.UUID = Depends(get_kb_id),
     _user: User = require_role("editor"),
 ):
-    result = await db.execute(
-        select(PipelineStageConfig).where(PipelineStageConfig.project_id == project_id)
+    await _verify_project_tenant(db, project_id, kb_id)
+    from sqlalchemy import delete as sa_delete
+    await db.execute(
+        sa_delete(PipelineStageConfig).where(PipelineStageConfig.project_id == project_id)
     )
-    for row in result.scalars().all():
-        await db.delete(row)
     await db.commit()
 
     stages = [_build_stage_out(name, None) for name in STAGE_NAMES]

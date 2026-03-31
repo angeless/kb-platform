@@ -20,7 +20,14 @@ from unittest.mock import patch
 
 settings = get_settings()
 
-TEST_DB_URL = settings.database_url + "_test"
+def _make_test_db_url(url: str) -> str:
+    """Append '_test' to database name, handling query params like ?ssl=require."""
+    if "?" in url:
+        base, query = url.rsplit("?", 1)
+        return f"{base}_test?{query}"
+    return url + "_test"
+
+TEST_DB_URL = _make_test_db_url(settings.database_url)
 
 
 @pytest.fixture(autouse=True)
