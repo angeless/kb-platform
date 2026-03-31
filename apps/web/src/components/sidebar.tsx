@@ -14,7 +14,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { label: "项目", href: "/projects", icon: "📁" },
-  { label: "模型配置", href: "/settings/models", icon: "🤖" },
+  { label: "全局设置", href: "/settings/models", icon: "⚙️", minRole: "tenant_admin" },
   { label: "操作日志", href: "/admin/audit-logs", icon: "📋", minRole: "tenant_admin" },
 ];
 
