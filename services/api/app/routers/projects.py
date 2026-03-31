@@ -9,8 +9,9 @@ from shared_schemas.common import DataResponse, ErrorDetail, ListResponse, Pagin
 from shared_schemas.cross_reference import RouteContentRequest
 from shared_schemas.project import ProjectCreate, ProjectOut, ProjectUpdate
 
-from app.deps import get_db, get_kb_id, require_role
+from app.deps import get_current_user, get_db, get_kb_id, require_role
 from shared_models import User
+from app.services.audit_service import AuditService
 from app.services.project_service import ProjectService
 
 router = APIRouter(prefix="/v1/projects", tags=["projects"])
@@ -38,9 +39,12 @@ async def create_project(
     body: ProjectCreate,
     db: AsyncSession = Depends(get_db),
     kb_id: uuid.UUID = Depends(get_kb_id),
+    current_user: User = Depends(get_current_user),
 ):
     svc = ProjectService(db, kb_id)
     project = await svc.create(name=body.name, industry_hint=body.industry_hint)
+    audit = AuditService(db, kb_id, current_user.id)
+    await audit.log("create_project", "project", project.id)
     return DataResponse(data=ProjectOut.model_validate(project))
 
 
@@ -109,6 +113,7 @@ async def update_project(
     body: ProjectUpdate,
     db: AsyncSession = Depends(get_db),
     kb_id: uuid.UUID = Depends(get_kb_id),
+    current_user: User = Depends(get_current_user),
 ):
     svc = ProjectService(db, kb_id)
     project = await svc.update(
@@ -117,6 +122,8 @@ async def update_project(
         industry_hint=body.industry_hint,
         status=body.status,
     )
+    audit = AuditService(db, kb_id, current_user.id)
+    await audit.log("update_project", "project", project_id, project_id=project_id)
     return DataResponse(data=ProjectOut.model_validate(project))
 
 
@@ -136,10 +143,12 @@ async def delete_project(
     project_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     kb_id: uuid.UUID = Depends(get_kb_id),
-    _user: User = require_role("tenant_admin"),
+    current_user: User = require_role("tenant_admin"),
 ):
     svc = ProjectService(db, kb_id)
     await svc.delete(project_id)
+    audit = AuditService(db, kb_id, current_user.id)
+    await audit.log("delete_project", "project", project_id, project_id=project_id)
     return DataResponse(data={"deleted": True})
 
 

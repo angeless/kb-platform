@@ -9,6 +9,7 @@ from shared_schemas.common import DataResponse, ErrorDetail, ListResponse, Pagin
 from shared_schemas.user import UserInviteRequest, UserOut, UserUpdate
 
 from app.deps import get_db, get_kb_id, require_role
+from app.services.audit_service import AuditService
 from app.services.user_service import UserService
 from shared_models import User
 
@@ -67,6 +68,8 @@ async def invite_user(
 ):
     svc = UserService(db, kb_id)
     user = await svc.invite(email=body.email, role=body.role, operator_role=_user.role)
+    audit = AuditService(db, kb_id, _user.id)
+    await audit.log("invite_user", "user", user.id)
     return DataResponse(data=UserOut.model_validate(user))
 
 
@@ -92,6 +95,8 @@ async def update_user(
 ):
     svc = UserService(db, kb_id)
     user = await svc.update(user_id, operator_role=_user.role, role=body.role, status=body.status)
+    audit = AuditService(db, kb_id, _user.id)
+    await audit.log("update_user_role", "user", user_id)
     return DataResponse(data=UserOut.model_validate(user))
 
 
@@ -115,4 +120,6 @@ async def delete_user(
 ):
     svc = UserService(db, kb_id)
     user = await svc.delete(user_id, operator_id=_user.id)
+    audit = AuditService(db, kb_id, _user.id)
+    await audit.log("remove_user", "user", user_id)
     return DataResponse(data=UserOut.model_validate(user))

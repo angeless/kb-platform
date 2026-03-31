@@ -11,6 +11,7 @@
 - AI 摘要与标签推荐 API：`POST /v1/docs/{id}/ai-summarize` 和 `POST /v1/docs/{id}/ai-suggest-tags`，Celery 异步调用 LLM 生成摘要写入 summary 字段、推荐关键词写入 keywords 字段（v0.45.5）
 - 文档导出支持 PDF/DOCX 格式：`GET /v1/docs/{id}/export?format=pdf|docx|markdown`，weasyprint PDF 渲染 + python-docx DOCX 生成，支持 CJK 字符（v0.45.2）
 - 文档详情页导出下拉菜单：Markdown / PDF / DOCX 三格式选择，浏览器直接下载（v0.45.3）
+- 审计日志写入集成：docs/projects/users 核心 CRUD 操作写入 audit_log 表（v0.45.10）
 - knowledge_doc 表新增 summary 字段（Alembic 迁移 p5d6e7f8g9h0）（v0.45.4）
 - 前端 RBAC 权限感知：usePermission hook + PermissionGuard 组件，按角色隐藏操作按钮（v0.44.1）
 - 侧边栏精简：移除"用户管理"和"审计日志"入口，v1 单用户场景不需要（v0.44.2）

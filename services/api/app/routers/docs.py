@@ -295,6 +295,8 @@ async def rollback_version(
 ):
     svc = DocService(db, kb_id)
     doc = await svc.rollback(doc_id, version, user.id)
+    audit = AuditService(db, kb_id, user.id)
+    await audit.log("rollback_doc", "knowledge_doc", doc_id, project_id=doc.project_id)
     return DataResponse(data=KnowledgeDocDetailOut.model_validate(doc))
 
 
