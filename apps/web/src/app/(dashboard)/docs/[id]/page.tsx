@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { api, ApiClientError } from "@/lib/api";
@@ -45,6 +45,9 @@ export default function DocDetailPage() {
   const [error, setError] = useState("");
   const [actionMsg, setActionMsg] = useState("");
   const [showHistory, setShowHistory] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const exportRef = useRef<HTMLDivElement>(null);
 
   const fetchDoc = useCallback(async () => {
     try {
@@ -61,6 +64,49 @@ export default function DocDetailPage() {
   useEffect(() => {
     fetchDoc();
   }, [fetchDoc]);
+
+  // Close export menu on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (exportRef.current && !exportRef.current.contains(e.target as Node)) {
+        setShowExportMenu(false);
+      }
+    };
+    if (showExportMenu) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
+    }
+  }, [showExportMenu]);
+
+  const handleExport = async (fmt: "markdown" | "pdf" | "docx") => {
+    setShowExportMenu(false);
+    setExporting(true);
+    setActionMsg("");
+    try {
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      const resp = await fetch(`${apiBase}/v1/docs/${docId}/export?format=${fmt}`, {
+        credentials: "include",
+      });
+      if (!resp.ok) {
+        throw new Error(`导出失败 (${resp.status})`);
+      }
+      const blob = await resp.blob();
+      const disposition = resp.headers.get("Content-Disposition") || "";
+      const filenameMatch = disposition.match(/filename="?([^"]+)"?/);
+      const filename = filenameMatch ? filenameMatch[1] : `document.${fmt === "markdown" ? "md" : fmt}`;
+
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setActionMsg(e instanceof Error ? e.message : "导出失败");
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const handleAction = async (action: string) => {
     setActionMsg("");
@@ -134,6 +180,29 @@ export default function DocDetailPage() {
             版本对比
           </Link>
         )}
+        {/* Export dropdown */}
+        <div ref={exportRef} className="relative">
+          <button
+            onClick={() => setShowExportMenu(!showExportMenu)}
+            disabled={exporting}
+            className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+          >
+            {exporting ? "导出中..." : "导出 ▾"}
+          </button>
+          {showExportMenu && (
+            <div className="absolute left-0 top-full z-10 mt-1 w-40 rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
+              <button onClick={() => handleExport("markdown")} className="block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50">
+                Markdown (.md)
+              </button>
+              <button onClick={() => handleExport("pdf")} className="block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50">
+                PDF (.pdf)
+              </button>
+              <button onClick={() => handleExport("docx")} className="block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50">
+                Word (.docx)
+              </button>
+            </div>
+          )}
+        </div>
         <button
           onClick={() => setShowHistory(!showHistory)}
           className={`rounded-lg border px-4 py-2 text-sm ${showHistory ? "border-primary-300 bg-primary-50 text-primary-700" : "border-gray-300 text-gray-700 hover:bg-gray-50"}`}
