@@ -18,6 +18,7 @@ class KnowledgeDocOut(BaseModel):
     summary_confidence: float | None = None
     keywords: list[str] | None = None
     knowledge_type: str | None = None
+    update_type: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -76,6 +77,7 @@ class KnowledgeDocDetailOut(BaseModel):
     summary_confidence: float | None = None
     keywords: list[str] | None = None
     knowledge_type: str | None = None
+    update_type: str | None = None
     created_at: datetime
     updated_at: datetime
     versions: list[DocVersionOut] = []

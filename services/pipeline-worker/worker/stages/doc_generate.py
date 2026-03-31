@@ -34,10 +34,24 @@ def generate_documents(
     """
     new_chunk_ids = classification.get("new", [])
     supplement_chunk_ids = classification.get("supplement", [])
-    all_ids = [uuid.UUID(cid) for cid in new_chunk_ids + supplement_chunk_ids]
+    correction_chunk_ids = classification.get("correction", [])
+    new_set = set(new_chunk_ids)
+    supplement_set = set(supplement_chunk_ids)
+    correction_set = set(correction_chunk_ids)
+    all_ids = [uuid.UUID(cid) for cid in new_chunk_ids + supplement_chunk_ids + correction_chunk_ids]
 
     if not all_ids:
         return []
+
+    def _resolve_update_type(chunk_id_str: str) -> str:
+        """Determine update_type from classification result."""
+        if chunk_id_str in new_set:
+            return "new"
+        if chunk_id_str in supplement_set:
+            return "supplement"
+        if chunk_id_str in correction_set:
+            return "correction"
+        return "new"
 
     # Try AI Orchestrator via Celery
     try:
@@ -60,6 +74,11 @@ def generate_documents(
                     KnowledgeDoc.status == "draft",
                 )
             ).scalars().all()
+            # Backfill update_type for docs missing it (orchestrator may not set it)
+            for d in created_docs:
+                if d.update_type is None:
+                    d.update_type = "new"
+            db.flush()
             return [d.id for d in created_docs]
     except Exception as e:
         logger.warning("Doc generation via Celery failed, using fallback: %s", e)
@@ -79,6 +98,7 @@ def generate_documents(
             title=f"文档-{c.id.hex[:8]}",
             current_version=1,
             status="draft",
+            update_type=_resolve_update_type(str(c.id)),
         )
         db.add(doc)
         db.flush()

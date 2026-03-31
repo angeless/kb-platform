@@ -41,6 +41,9 @@ class KnowledgeDoc(Base):
     summary_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
     keywords: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     knowledge_type: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    update_type: Mapped[str | None] = mapped_column(
+        String(20), nullable=True, doc="new | supplement | correction | conflict"
+    )
     search_vector = mapped_column(TSVector(), nullable=True)
 
     # Relationships
