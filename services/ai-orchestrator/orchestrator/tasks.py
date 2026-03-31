@@ -26,6 +26,7 @@ from .prompts import (
     build_summary_reflection_prompt,
     build_tags_reflection_prompt,
     build_contradiction_prompt,
+    build_pattern_discovery_prompt,
 )
 
 logger = logging.getLogger(__name__)
@@ -1023,4 +1024,92 @@ def detect_contradictions(self, project_id: str, max_pairs: int = 50) -> dict:
         except Exception as e:
             session.rollback()
             logger.error("Failed contradiction detection for project %s: %s", project_id, e)
+            return {"status": "error", "message": str(e)}
+
+
+# ---------------------------------------------------------------------------
+# Cross-document pattern discovery (v0.46.6)
+# ---------------------------------------------------------------------------
+
+@celery_app.task(bind=True, name="orchestrator.discover_patterns")
+def discover_patterns(self, project_id: str) -> dict:
+    """Discover cross-document patterns: theme clusters, associations, knowledge gaps.
+
+    1. Load all docs' summary + keywords (lightweight)
+    2. Call LLM with pattern discovery prompt
+    3. Cache result in Redis (24h TTL)
+    """
+    import json
+    import redis as redis_lib
+
+    project_uuid = uuid.UUID(project_id)
+    cache_key = f"patterns:{project_id}"
+
+    # Check Redis cache first
+    try:
+        r = redis_lib.from_url(settings.redis_url)
+        cached = r.get(cache_key)
+        if cached:
+            logger.info("Returning cached patterns for project %s", project_id)
+            return json.loads(cached)
+    except Exception:
+        r = None
+
+    with _get_sync_session() as session:
+        try:
+            docs = session.execute(
+                select(KnowledgeDoc).where(
+                    KnowledgeDoc.project_id == project_uuid,
+                )
+            ).scalars().all()
+
+            if not docs:
+                return {
+                    "status": "success",
+                    "clusters": [],
+                    "frequent_associations": [],
+                    "knowledge_gaps": [],
+                    "analyzed_docs_count": 0,
+                }
+
+            doc_summaries = [
+                {
+                    "doc_id": str(doc.id),
+                    "title": doc.title,
+                    "summary": doc.summary or "",
+                    "keywords": doc.keywords or [],
+                }
+                for doc in docs
+            ]
+
+            system_prompt, user_prompt = build_pattern_discovery_prompt(doc_summaries)
+            llm_response = call_llm(prompt=user_prompt, system_prompt=system_prompt)
+            result = parse_json_response(llm_response)
+
+            output = {
+                "status": "success",
+                "clusters": result.get("clusters", []),
+                "frequent_associations": result.get("frequent_associations", []),
+                "knowledge_gaps": result.get("knowledge_gaps", []),
+                "analyzed_docs_count": len(docs),
+            }
+
+            # Cache in Redis (24h TTL)
+            try:
+                if r:
+                    r.setex(cache_key, 86400, json.dumps(output))
+            except Exception:
+                pass
+
+            logger.info(
+                "Pattern discovery for project %s: %d docs, %d clusters, %d gaps",
+                project_id, len(docs),
+                len(output["clusters"]),
+                len(output["knowledge_gaps"]),
+            )
+            return output
+
+        except Exception as e:
+            session.rollback()
+            logger.error("Failed pattern discovery for project %s: %s", project_id, e)
             return {"status": "error", "message": str(e)}

@@ -482,6 +482,80 @@ severity 说明：
 如果没有矛盾，返回 {{"contradictions": []}}"""
 
 
+# ---------------------------------------------------------------------------
+# Cross-document pattern discovery prompts (v0.46.6)
+# ---------------------------------------------------------------------------
+
+SYSTEM_PROMPT_PATTERN_DISCOVERY = """你是一个知识分析专家。你的任务是对一组知识文档进行跨文档模式分析，
+发现隐藏的主题聚类、高频关联和知识缺口。
+
+你必须：
+- 基于文档的摘要和关键词进行分析，不要编造不存在的信息
+- 主题聚类应反映文档内容的真实分组，不是简单的关键词匹配
+- 知识缺口应基于现有文档内容推断，是"基于已有知识，合理期望但缺失的"领域
+- 如果文档数量太少（<5篇），分析维度适当简化"""
+
+USER_PROMPT_PATTERN_DISCOVERY_TEMPLATE = """请对以下知识文档集合进行跨文档模式分析。
+
+--- 文档列表 ---
+{docs_text}
+--- 文档列表结束 ---
+
+请从以下三个维度分析，以 JSON 格式输出（不要输出其他内容）：
+{{
+  "clusters": [
+    {{
+      "theme": "主题名称",
+      "doc_ids": ["文档ID1", "文档ID2"],
+      "keywords": ["共有关键词1", "共有关键词2"],
+      "description": "该聚类的一句话描述"
+    }}
+  ],
+  "frequent_associations": [
+    {{
+      "entity_a": "实体/概念A",
+      "entity_b": "实体/概念B",
+      "co_occurrence": 5,
+      "relationship": "简要描述关联关系"
+    }}
+  ],
+  "knowledge_gaps": [
+    "基于已有知识，缺少关于X的文档",
+    "Y和Z之间的关系未被记录"
+  ]
+}}
+
+注意：
+- clusters 中每篇文档只归入一个最匹配的聚类
+- frequent_associations 列出出现次数 >= 2 的共现对
+- knowledge_gaps 最多 5 条，避免泛泛之谈"""
+
+
+def build_pattern_discovery_prompt(
+    doc_summaries: list[dict],
+    max_total_chars: int = 8000,
+) -> tuple[str, str]:
+    """Build prompts for cross-document pattern discovery.
+
+    doc_summaries: list of {doc_id, title, summary, keywords} dicts.
+    Returns (system_prompt, user_prompt).
+    """
+    doc_texts = []
+    total = 0
+    for doc in doc_summaries:
+        keywords_str = ", ".join(doc.get("keywords") or [])
+        entry = f"[{doc['doc_id']}] {doc['title']}\n摘要: {doc.get('summary') or '无'}\n关键词: {keywords_str or '无'}"
+        if total + len(entry) > max_total_chars:
+            break
+        doc_texts.append(entry)
+        total += len(entry)
+
+    docs_text = "\n\n".join(doc_texts) if doc_texts else "(无文档)"
+
+    user_prompt = USER_PROMPT_PATTERN_DISCOVERY_TEMPLATE.format(docs_text=docs_text)
+    return SYSTEM_PROMPT_PATTERN_DISCOVERY, user_prompt
+
+
 def build_contradiction_prompt(
     doc_a_title: str,
     doc_a_summary: str,

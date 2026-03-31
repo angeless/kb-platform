@@ -66,7 +66,7 @@
 | v0.46.3 | 用户自定义实体类型支持 | P1 | Done | W-025 |
 | v0.46.4 | 前端 Pipeline 配置页 | P1 | Planned | W-025 |
 | v0.46.5 | 跨文档矛盾检测 — 后端 API + AI task | P1 | Done | W-026 |
-| v0.46.6 | 跨文档模式发现 — 后端 API + AI task | P1 | Planned | W-026 |
+| v0.46.6 | 跨文档模式发现 — 后端 API + AI task | P1 | Done | W-026 |
 | v0.46.7 | 前端图谱页矛盾/模式展示 | P1 | Planned | W-026 |
 
 ### 3.2 北极星三问校验

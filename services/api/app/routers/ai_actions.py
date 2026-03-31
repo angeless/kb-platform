@@ -207,3 +207,55 @@ async def ai_detect_contradictions(
         "contradictions_found": task_result.get("contradictions_found", 0),
         "cross_refs_created": task_result.get("cross_refs_created", []),
     })
+
+
+# ---------------------------------------------------------------------------
+# Cross-document pattern discovery (v0.46.6)
+# ---------------------------------------------------------------------------
+
+@router.post(
+    "/v1/projects/{project_id}/ai-discover-patterns",
+    response_model=DataResponse[dict],
+    summary="Discover cross-document patterns in a project",
+    description="Analyzes all documents to find theme clusters, frequent associations, "
+                "and knowledge gaps. Results are cached for 24h.",
+    responses={
+        200: {"description": "Pattern analysis completed"},
+        **_RESP_AUTH,
+        500: {"description": "AI analysis failed", "model": ErrorDetail},
+    },
+)
+async def ai_discover_patterns(
+    project_id: uuid.UUID = Path(...),
+    db: AsyncSession = Depends(get_db),
+    kb_id: uuid.UUID = Depends(get_kb_id),
+    current_user: User = require_role("editor"),
+):
+    celery = _get_celery_app()
+    if celery is None:
+        raise AppException(ErrorCode.SYSTEM_INTERNAL_ERROR, "AI 服务不可用", status_code=500)
+
+    result = celery.send_task(
+        "orchestrator.discover_patterns",
+        args=[str(project_id)],
+    )
+
+    try:
+        task_result = result.get(timeout=120)
+    except Exception as e:
+        logger.error("Pattern discovery failed for project %s: %s", project_id, e)
+        raise AppException(ErrorCode.SYSTEM_INTERNAL_ERROR, "AI 模式发现失败", status_code=500)
+
+    if task_result.get("status") == "error":
+        raise AppException(
+            ErrorCode.SYSTEM_INTERNAL_ERROR,
+            task_result.get("message", "AI 模式发现失败"),
+            status_code=500,
+        )
+
+    return DataResponse(data={
+        "clusters": task_result.get("clusters", []),
+        "frequent_associations": task_result.get("frequent_associations", []),
+        "knowledge_gaps": task_result.get("knowledge_gaps", []),
+        "analyzed_docs_count": task_result.get("analyzed_docs_count", 0),
+    })
