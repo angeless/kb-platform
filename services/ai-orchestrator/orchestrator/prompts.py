@@ -164,6 +164,7 @@ def build_generate_doc_prompt(
     node_level: int,
     chunks: list[dict],
     max_chunk_chars: int = 8000,
+    entity_types: list[str] | None = None,
 ) -> tuple[str, str]:
     """Build prompts for generating a knowledge document for a single node.
 
@@ -171,6 +172,7 @@ def build_generate_doc_prompt(
 
     Each chunk dict should have 'index', 'content_text', and optionally
     'page_or_timestamp'.
+    entity_types: optional user-defined entity types to guide keyword extraction.
     """
     chunk_texts = []
     total_chars = 0
@@ -193,13 +195,18 @@ def build_generate_doc_prompt(
 
     chunks_text = "\n\n".join(chunk_texts) if chunk_texts else "(无相关资料片段)"
 
+    entity_hint = ""
+    if entity_types:
+        types_str = "、".join(entity_types[:20])
+        entity_hint = f"\n\n【实体类型指引】生成文档时请优先识别和标注以下用户定义的实体类型作为 keywords：{types_str}"
+
     user_prompt = USER_PROMPT_GENERATE_DOC_TEMPLATE.format(
         node_name=node_name,
         node_type=node_type,
         node_description=node_description or "未指定",
         node_level=node_level,
         chunks_text=chunks_text,
-    )
+    ) + entity_hint
 
     return SYSTEM_PROMPT_GENERATE_DOC, user_prompt
 
@@ -310,16 +317,24 @@ def build_summary_prompt(content: str, max_content_chars: int = 6000) -> tuple[s
     return SYSTEM_PROMPT_SUMMARY, user_prompt
 
 
-def build_suggest_tags_prompt(content: str, max_content_chars: int = 6000) -> tuple[str, str]:
+def build_suggest_tags_prompt(
+    content: str, max_content_chars: int = 6000, entity_types: list[str] | None = None,
+) -> tuple[str, str]:
     """Build prompts for suggesting document tags/keywords.
 
     Returns (system_prompt, user_prompt).
+    entity_types: optional user-defined entity types to guide tag suggestion.
     """
     truncated = content[:max_content_chars]
     if len(content) > max_content_chars:
         truncated += "...(截断)"
 
-    user_prompt = USER_PROMPT_SUGGEST_TAGS_TEMPLATE.format(content=truncated)
+    entity_hint = ""
+    if entity_types:
+        types_str = "、".join(entity_types[:20])
+        entity_hint = f"\n\n【实体类型指引】推荐标签时请优先从以下用户定义的实体类型中提取：{types_str}"
+
+    user_prompt = USER_PROMPT_SUGGEST_TAGS_TEMPLATE.format(content=truncated) + entity_hint
     return SYSTEM_PROMPT_SUGGEST_TAGS, user_prompt
 
 
@@ -420,11 +435,13 @@ def build_classify_prompt(
     new_chunks: list[dict],
     max_existing_chars: int = 4000,
     max_new_chars: int = 4000,
+    entity_types: list[str] | None = None,
 ) -> tuple[str, str]:
     """Build prompts for classifying new chunks against existing knowledge.
 
     existing_docs: list of {doc_id, title, summary} dicts
     new_chunks: list of {index, content_text, page_or_timestamp} dicts
+    entity_types: optional user-defined entity types to guide classification
 
     Returns (system_prompt, user_prompt).
     """
@@ -460,9 +477,14 @@ def build_classify_prompt(
         total += len(entry)
     new_chunks_text = "\n\n".join(chunk_texts) if chunk_texts else "(无新资料片段)"
 
+    entity_hint = ""
+    if entity_types:
+        types_str = "、".join(entity_types[:20])
+        entity_hint = f"\n\n【实体类型指引】分类时请优先关注以下用户定义的实体类型：{types_str}"
+
     user_prompt = USER_PROMPT_CLASSIFY_TEMPLATE.format(
         existing_docs_text=existing_docs_text,
         new_chunks_text=new_chunks_text,
-    )
+    ) + entity_hint
 
     return SYSTEM_PROMPT_CLASSIFY, user_prompt

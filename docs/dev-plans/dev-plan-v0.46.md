@@ -63,7 +63,7 @@
 |----------|--------|------|------|------------|
 | v0.46.1 | Pipeline stage 配置 DB 模型 + CRUD API | P1 | Done | W-025 |
 | v0.46.2 | Pipeline stage 运行时加载用户配置 | P1 | Done | W-025 |
-| v0.46.3 | 用户自定义实体类型支持 | P1 | Planned | W-025 |
+| v0.46.3 | 用户自定义实体类型支持 | P1 | Done | W-025 |
 | v0.46.4 | 前端 Pipeline 配置页 | P1 | Planned | W-025 |
 | v0.46.5 | 跨文档矛盾检测 — 后端 API + AI task | P1 | Planned | W-026 |
 | v0.46.6 | 跨文档模式发现 — 后端 API + AI task | P1 | Planned | W-026 |

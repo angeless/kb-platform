@@ -12,6 +12,7 @@ from shared_models import (
     Architecture, ArchitectureNode, AssetChunk, Asset, Job, Project,
     KnowledgeDoc, KnowledgeDocVersion, SourceRef, ConflictRecord,
 )
+from shared_models.pipeline_stage_config import PipelineStageConfig
 
 from .celery_app import celery_app
 from .llm_client import call_llm, parse_json_response
@@ -34,6 +35,23 @@ _sync_engine = create_engine(settings.database_url_sync, pool_size=5, max_overfl
 
 def _get_sync_session() -> Session:
     return Session(_sync_engine)
+
+
+def _get_entity_types(session: Session, project_id: uuid.UUID, stage_name: str) -> list[str] | None:
+    """Load entity_types from pipeline stage config for a project.
+
+    Returns None if not configured or empty, so callers can use default behavior.
+    """
+    row = session.execute(
+        select(PipelineStageConfig).where(
+            PipelineStageConfig.project_id == project_id,
+            PipelineStageConfig.stage_name == stage_name,
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        return None
+    types = row.params.get("entity_types", [])
+    return types if types else None
 
 
 @celery_app.task(bind=True, name="orchestrator.propose_architecture")
@@ -305,6 +323,9 @@ def generate_docs(self, project_id: str, job_id: str) -> dict:
             ).scalar_one_or_none()
             created_by = job.created_by if job else project_uuid  # fallback
 
+            # Load entity_types from pipeline config (v0.46.3)
+            doc_gen_entity_types = _get_entity_types(session, project_uuid, "doc_generate")
+
             for node in nodes:
                 # Skip category nodes (they are containers, not content)
                 if node.node_type == "category":
@@ -317,6 +338,7 @@ def generate_docs(self, project_id: str, job_id: str) -> dict:
                     node_description=node.description,
                     node_level=node.level,
                     chunks=chunk_dicts,
+                    entity_types=doc_gen_entity_types,
                 )
 
                 # Call LLM
@@ -493,10 +515,14 @@ def classify_incremental(self, project_id: str, job_id: str, asset_ids: list[str
                     "summary": summary,
                 })
 
+            # Load entity_types from pipeline config (v0.46.3)
+            classify_entity_types = _get_entity_types(session, project_uuid, "classify")
+
             # Build prompt and call LLM
             system_prompt, user_prompt = build_classify_prompt(
                 existing_docs=existing_doc_dicts,
                 new_chunks=new_chunk_dicts,
+                entity_types=classify_entity_types,
             )
 
             llm_response = call_llm(prompt=user_prompt, system_prompt=system_prompt)
@@ -805,8 +831,13 @@ def suggest_tags(self, doc_id: str) -> dict:
             return {"status": "error", "message": "Document has no content"}
 
         try:
+            # Load entity_types from pipeline config (v0.46.3)
+            tags_entity_types = _get_entity_types(session, doc.project_id, "classify")
+
             # Step 1: Initial generation
-            system_prompt, user_prompt = build_suggest_tags_prompt(latest_version.content_md)
+            system_prompt, user_prompt = build_suggest_tags_prompt(
+                latest_version.content_md, entity_types=tags_entity_types,
+            )
             llm_response = call_llm(prompt=user_prompt, system_prompt=system_prompt)
             result = parse_json_response(llm_response)
 
