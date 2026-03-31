@@ -37,6 +37,7 @@ from .routers.agent import router as agent_router
 from .routers.graph import router as graph_router
 from .routers.batch_import import router as batch_import_router
 from .routers.ai_actions import router as ai_actions_router
+from .routers.pipeline_config import router as pipeline_config_router
 
 logger = logging.getLogger(__name__)
 
@@ -115,6 +116,7 @@ def create_app() -> FastAPI:
     app.include_router(graph_router)
     app.include_router(batch_import_router)
     app.include_router(ai_actions_router)
+    app.include_router(pipeline_config_router)
 
     # Custom OpenAPI schema: add Bearer security scheme
     _PUBLIC_PATHS = {"/api/health", "/healthz", "/readyz", "/metrics", "/api/versions", "/api/health/ready"}
