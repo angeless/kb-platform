@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from shared_schemas.common import DataResponse, ErrorDetail, ListResponse, PaginationMeta
 from shared_schemas.cross_reference import AutoSuggestRequest, CrossRefCreate, CrossRefOut
 
-from app.deps import get_db, get_tenant_id, require_role
+from app.deps import get_db, get_kb_id, require_role
 from shared_models import User
 from app.services.cross_ref_service import CrossRefService
 
@@ -30,10 +30,10 @@ _RESP_AUTH = {
 async def create_cross_ref(
     body: CrossRefCreate,
     db: AsyncSession = Depends(get_db),
-    tenant_id: uuid.UUID = Depends(get_tenant_id),
+    kb_id: uuid.UUID = Depends(get_kb_id),
     _user: User = require_role("editor"),
 ):
-    svc = CrossRefService(db, tenant_id)
+    svc = CrossRefService(db, kb_id)
     ref = await svc.create(
         source_doc_id=body.source_doc_id,
         target_doc_id=body.target_doc_id,
@@ -56,9 +56,9 @@ async def create_cross_ref(
 async def get_doc_cross_refs(
     doc_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    tenant_id: uuid.UUID = Depends(get_tenant_id),
+    kb_id: uuid.UUID = Depends(get_kb_id),
 ):
-    svc = CrossRefService(db, tenant_id)
+    svc = CrossRefService(db, kb_id)
     refs = await svc.list_for_doc(doc_id)
     return ListResponse(
         data=[CrossRefOut(**r) for r in refs],
@@ -76,10 +76,10 @@ async def get_doc_cross_refs(
 async def delete_cross_ref(
     ref_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    tenant_id: uuid.UUID = Depends(get_tenant_id),
+    kb_id: uuid.UUID = Depends(get_kb_id),
     _user: User = require_role("editor"),
 ):
-    svc = CrossRefService(db, tenant_id)
+    svc = CrossRefService(db, kb_id)
     deleted = await svc.delete(ref_id)
     await db.commit()
     return DataResponse(data={"deleted": deleted})
@@ -95,9 +95,9 @@ async def delete_cross_ref(
 async def get_cross_ref_graph(
     project_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    tenant_id: uuid.UUID = Depends(get_tenant_id),
+    kb_id: uuid.UUID = Depends(get_kb_id),
 ):
-    svc = CrossRefService(db, tenant_id)
+    svc = CrossRefService(db, kb_id)
     graph = await svc.get_project_graph(project_id)
     return DataResponse(data=graph)
 
@@ -112,9 +112,9 @@ async def get_cross_ref_graph(
 async def auto_suggest_cross_refs(
     body: AutoSuggestRequest,
     db: AsyncSession = Depends(get_db),
-    tenant_id: uuid.UUID = Depends(get_tenant_id),
+    kb_id: uuid.UUID = Depends(get_kb_id),
 ):
-    svc = CrossRefService(db, tenant_id)
+    svc = CrossRefService(db, kb_id)
     suggestions = await svc.auto_suggest(body.doc_id, body.max_results)
     return ListResponse(
         data=suggestions,

@@ -32,11 +32,20 @@ interface KnowledgeGraphProps {
   nodes: GraphNode[];
   edges: GraphEdge[];
   projectId: string;
+  onEdgeClick?: (edgeId: string, edgeData: GraphEdge) => void;
 }
 
 const DEPTH_COLORS = ["#1e40af", "#3b82f6", "#60a5fa", "#93c5fd", "#bfdbfe"];
 
-export default function KnowledgeGraph({ nodes, edges, projectId }: KnowledgeGraphProps) {
+const RELATION_LABELS: Record<string, string> = {
+  related: "相关",
+  depends_on: "依赖",
+  extends: "扩展",
+  contradicts: "矛盾",
+  supersedes: "替代",
+};
+
+export default function KnowledgeGraph({ nodes, edges, projectId, onEdgeClick }: KnowledgeGraphProps) {
   const router = useRouter();
 
   const flowNodes: Node[] = useMemo(() => {
@@ -82,18 +91,37 @@ export default function KnowledgeGraph({ nodes, edges, projectId }: KnowledgeGra
     () =>
       edges.map((e, i) => {
         const isCrossRef = e.edge_type === "cross_ref";
+        const isContradiction = isCrossRef && e.relation_type === "contradicts";
+        const label = isCrossRef
+          ? RELATION_LABELS[e.relation_type ?? ""] ?? e.relation_type ?? "关联"
+          : undefined;
+        const edgeColor = isContradiction ? "#dc2626" : isCrossRef ? "#3b82f6" : "#94a3b8";
         return {
           id: e.id || `e-${i}`,
           source: e.source,
           target: e.target,
           animated: isCrossRef,
           style: isCrossRef
-            ? { stroke: "#3b82f6", strokeDasharray: "5 5" }
+            ? { stroke: edgeColor, strokeDasharray: "5 5", strokeWidth: isContradiction ? 2.5 : 1.5, cursor: "pointer" }
             : { stroke: "#94a3b8" },
-          label: isCrossRef ? "cross_ref" : undefined,
+          label,
+          labelStyle: isCrossRef
+            ? { fontSize: 11, fill: edgeColor, fontWeight: isContradiction ? 600 : 400 }
+            : undefined,
         };
       }),
     [edges],
+  );
+
+  const handleEdgeClick = useCallback(
+    (_event: React.MouseEvent, edge: Edge) => {
+      if (!onEdgeClick) return;
+      const original = edges.find((e) => (e.id || "") === edge.id);
+      if (original && original.edge_type === "cross_ref") {
+        onEdgeClick(edge.id, original);
+      }
+    },
+    [onEdgeClick, edges],
   );
 
   const onNodeClick = useCallback(
@@ -108,6 +136,7 @@ export default function KnowledgeGraph({ nodes, edges, projectId }: KnowledgeGra
       nodes={flowNodes}
       edges={flowEdges}
       onNodeClick={onNodeClick}
+      onEdgeClick={handleEdgeClick}
       fitView
       minZoom={0.2}
       maxZoom={2}

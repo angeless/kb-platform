@@ -164,6 +164,7 @@ def build_generate_doc_prompt(
     node_level: int,
     chunks: list[dict],
     max_chunk_chars: int = 8000,
+    entity_types: list[str] | None = None,
 ) -> tuple[str, str]:
     """Build prompts for generating a knowledge document for a single node.
 
@@ -171,6 +172,7 @@ def build_generate_doc_prompt(
 
     Each chunk dict should have 'index', 'content_text', and optionally
     'page_or_timestamp'.
+    entity_types: optional user-defined entity types to guide keyword extraction.
     """
     chunk_texts = []
     total_chars = 0
@@ -193,13 +195,18 @@ def build_generate_doc_prompt(
 
     chunks_text = "\n\n".join(chunk_texts) if chunk_texts else "(无相关资料片段)"
 
+    entity_hint = ""
+    if entity_types:
+        types_str = "、".join(entity_types[:20])
+        entity_hint = f"\n\n【实体类型指引】生成文档时请优先识别和标注以下用户定义的实体类型作为 keywords：{types_str}"
+
     user_prompt = USER_PROMPT_GENERATE_DOC_TEMPLATE.format(
         node_name=node_name,
         node_type=node_type,
         node_description=node_description or "未指定",
         node_level=node_level,
         chunks_text=chunks_text,
-    )
+    ) + entity_hint
 
     return SYSTEM_PROMPT_GENERATE_DOC, user_prompt
 
@@ -255,16 +262,346 @@ relation_type 说明：
 输出 restructure 时需补充 restructure_suggestion 字段说明建议"""
 
 
+# ---------------------------------------------------------------------------
+# AI summary prompts
+# ---------------------------------------------------------------------------
+
+SYSTEM_PROMPT_SUMMARY = """你是一个知识文档摘要专家。你的任务是为给定的知识文档生成简洁准确的摘要。
+
+你必须：
+- 严格基于文档内容概括，不得编造文档中不存在的信息
+- 摘要应覆盖文档的核心观点和关键信息
+- 使用中文，不超过 200 字"""
+
+USER_PROMPT_SUMMARY_TEMPLATE = """请为以下知识文档生成一份不超过 200 字的摘要。
+
+--- 文档内容 ---
+{content}
+--- 文档内容结束 ---
+
+请以如下 JSON 格式输出（不要输出其他内容）：
+{{
+  "summary": "不超过200字的摘要文本"
+}}"""
+
+
+SYSTEM_PROMPT_SUGGEST_TAGS = """你是一个知识标签专家。你的任务是为给定的知识文档推荐准确的关键词标签。
+
+你必须：
+- 严格基于文档内容提取关键词，不得编造文档中不存在的概念
+- 关键词应涵盖核心主题、关键实体和领域术语
+- 返回 3-8 个关键词"""
+
+USER_PROMPT_SUGGEST_TAGS_TEMPLATE = """请为以下知识文档推荐 3-8 个关键词标签。
+
+--- 文档内容 ---
+{content}
+--- 文档内容结束 ---
+
+请以如下 JSON 格式输出（不要输出其他内容）：
+{{
+  "keywords": ["关键词1", "关键词2", "关键词3"]
+}}"""
+
+
+def build_summary_prompt(content: str, max_content_chars: int = 6000) -> tuple[str, str]:
+    """Build prompts for generating a document summary.
+
+    Returns (system_prompt, user_prompt).
+    """
+    truncated = content[:max_content_chars]
+    if len(content) > max_content_chars:
+        truncated += "...(截断)"
+
+    user_prompt = USER_PROMPT_SUMMARY_TEMPLATE.format(content=truncated)
+    return SYSTEM_PROMPT_SUMMARY, user_prompt
+
+
+def build_suggest_tags_prompt(
+    content: str, max_content_chars: int = 6000, entity_types: list[str] | None = None,
+) -> tuple[str, str]:
+    """Build prompts for suggesting document tags/keywords.
+
+    Returns (system_prompt, user_prompt).
+    entity_types: optional user-defined entity types to guide tag suggestion.
+    """
+    truncated = content[:max_content_chars]
+    if len(content) > max_content_chars:
+        truncated += "...(截断)"
+
+    entity_hint = ""
+    if entity_types:
+        types_str = "、".join(entity_types[:20])
+        entity_hint = f"\n\n【实体类型指引】推荐标签时请优先从以下用户定义的实体类型中提取：{types_str}"
+
+    user_prompt = USER_PROMPT_SUGGEST_TAGS_TEMPLATE.format(content=truncated) + entity_hint
+    return SYSTEM_PROMPT_SUGGEST_TAGS, user_prompt
+
+
+# ---------------------------------------------------------------------------
+# Reflection prompts (v0.45.13)
+# ---------------------------------------------------------------------------
+
+SYSTEM_PROMPT_REFLECTION = """你是一个严格的知识文档质量审查专家。你的任务是评审 AI 生成的摘要或标签，
+判断其质量并给出置信度评分。
+
+你必须：
+- 严格对照原文内容评审，不偏袒生成结果
+- 列出具体问题，不能只说"质量很好"
+- 置信度评分 0.0-1.0，标准如下：
+  - 0.9+：完全忠于原文、覆盖核心内容、无幻觉
+  - 0.7-0.9：基本准确，有小问题
+  - 0.5-0.7：有明显遗漏或不准确
+  - <0.5：严重问题（幻觉、偏题、遗漏关键内容）"""
+
+USER_PROMPT_SUMMARY_REFLECTION_TEMPLATE = """请评审以下 AI 生成的摘要是否准确。
+
+--- 原文内容 ---
+{original_content}
+--- 原文内容结束 ---
+
+--- AI 生成的摘要 ---
+{generated_summary}
+--- 摘要结束 ---
+
+评审维度：
+1. 忠实度：摘要是否忠于原文？是否存在幻觉（原文中不存在的信息）？
+2. 覆盖度：摘要是否覆盖了原文的核心观点？
+3. 简洁度：摘要是否控制在 200 字以内？是否有冗余？
+
+请以如下 JSON 格式输出（不要输出其他内容）：
+{{
+  "confidence": 0.85,
+  "issues": ["问题1", "问题2"],
+  "revised_summary": "如果 confidence < 0.7，提供修正后的摘要；否则为 null"
+}}"""
+
+USER_PROMPT_TAGS_REFLECTION_TEMPLATE = """请评审以下 AI 推荐的关键词标签是否准确。
+
+--- 原文内容 ---
+{original_content}
+--- 原文内容结束 ---
+
+--- AI 推荐的标签 ---
+{generated_tags}
+--- 标签结束 ---
+
+评审维度：
+1. 准确性：每个标签是否真实反映原文主题？
+2. 覆盖度：是否遗漏了重要的核心概念？
+3. 冗余度：是否有含义重复或过于模糊的标签？
+
+请以如下 JSON 格式输出（不要输出其他内容）：
+{{
+  "confidence": 0.85,
+  "issues": ["问题1", "问题2"],
+  "revised_tags": ["修正后的标签列表（如果 confidence < 0.7），否则为 null"]
+}}"""
+
+
+def build_summary_reflection_prompt(
+    original_content: str, generated_summary: str, max_content_chars: int = 4000
+) -> tuple[str, str]:
+    """Build prompts for reflecting on a generated summary."""
+    truncated = original_content[:max_content_chars]
+    if len(original_content) > max_content_chars:
+        truncated += "...(截断)"
+
+    user_prompt = USER_PROMPT_SUMMARY_REFLECTION_TEMPLATE.format(
+        original_content=truncated,
+        generated_summary=generated_summary,
+    )
+    return SYSTEM_PROMPT_REFLECTION, user_prompt
+
+
+def build_tags_reflection_prompt(
+    original_content: str, generated_tags: list[str], max_content_chars: int = 4000
+) -> tuple[str, str]:
+    """Build prompts for reflecting on suggested tags."""
+    truncated = original_content[:max_content_chars]
+    if len(original_content) > max_content_chars:
+        truncated += "...(截断)"
+
+    tags_text = ", ".join(generated_tags)
+    user_prompt = USER_PROMPT_TAGS_REFLECTION_TEMPLATE.format(
+        original_content=truncated,
+        generated_tags=tags_text,
+    )
+    return SYSTEM_PROMPT_REFLECTION, user_prompt
+
+
+# ---------------------------------------------------------------------------
+# Cross-document contradiction detection prompts (v0.46.5)
+# ---------------------------------------------------------------------------
+
+SYSTEM_PROMPT_CONTRADICTION = """你是一个知识一致性审查专家。你的任务是检测两篇知识文档之间是否存在矛盾。
+
+矛盾类型包括：
+- 数字/数据矛盾：同一事实在两篇文档中给出了不同的数字（日期、金额、数量等）
+- 因果矛盾：同一事件的原因或结果描述不一致
+- 定义矛盾：同一概念在两篇文档中有不同的定义
+- 流程矛盾：同一操作流程的步骤不一致
+- 时间矛盾：同一事件的时间线不一致
+
+你必须：
+- 只报告确定的矛盾，不报告可能的差异或互补信息
+- 每条矛盾必须给出两端的具体证据原文
+- 如果两篇文档没有矛盾，返回空列表"""
+
+USER_PROMPT_CONTRADICTION_TEMPLATE = """请检测以下两篇知识文档之间是否存在矛盾。
+
+--- 文档 A ---
+标题：{doc_a_title}
+摘要：{doc_a_summary}
+正文片段：{doc_a_content}
+--- 文档 A 结束 ---
+
+--- 文档 B ---
+标题：{doc_b_title}
+摘要：{doc_b_summary}
+正文片段：{doc_b_content}
+--- 文档 B 结束 ---
+
+请以如下 JSON 格式输出（不要输出其他内容）：
+{{
+  "contradictions": [
+    {{
+      "description": "矛盾的简要描述",
+      "severity": "high|medium|low",
+      "evidence_a": "文档 A 中的原文证据",
+      "evidence_b": "文档 B 中的原文证据"
+    }}
+  ]
+}}
+
+severity 说明：
+- high：核心事实矛盾（数字、日期、因果关系）
+- medium：定义或流程描述不一致
+- low：措辞差异但可能指同一事实
+
+如果没有矛盾，返回 {{"contradictions": []}}"""
+
+
+# ---------------------------------------------------------------------------
+# Cross-document pattern discovery prompts (v0.46.6)
+# ---------------------------------------------------------------------------
+
+SYSTEM_PROMPT_PATTERN_DISCOVERY = """你是一个知识分析专家。你的任务是对一组知识文档进行跨文档模式分析，
+发现隐藏的主题聚类、高频关联和知识缺口。
+
+你必须：
+- 基于文档的摘要和关键词进行分析，不要编造不存在的信息
+- 主题聚类应反映文档内容的真实分组，不是简单的关键词匹配
+- 知识缺口应基于现有文档内容推断，是"基于已有知识，合理期望但缺失的"领域
+- 如果文档数量太少（<5篇），分析维度适当简化"""
+
+USER_PROMPT_PATTERN_DISCOVERY_TEMPLATE = """请对以下知识文档集合进行跨文档模式分析。
+
+--- 文档列表 ---
+{docs_text}
+--- 文档列表结束 ---
+
+请从以下三个维度分析，以 JSON 格式输出（不要输出其他内容）：
+{{
+  "clusters": [
+    {{
+      "theme": "主题名称",
+      "doc_ids": ["文档ID1", "文档ID2"],
+      "keywords": ["共有关键词1", "共有关键词2"],
+      "description": "该聚类的一句话描述"
+    }}
+  ],
+  "frequent_associations": [
+    {{
+      "entity_a": "实体/概念A",
+      "entity_b": "实体/概念B",
+      "co_occurrence": 5,
+      "relationship": "简要描述关联关系"
+    }}
+  ],
+  "knowledge_gaps": [
+    "基于已有知识，缺少关于X的文档",
+    "Y和Z之间的关系未被记录"
+  ]
+}}
+
+注意：
+- clusters 中每篇文档只归入一个最匹配的聚类
+- frequent_associations 列出出现次数 >= 2 的共现对
+- knowledge_gaps 最多 5 条，避免泛泛之谈"""
+
+
+def build_pattern_discovery_prompt(
+    doc_summaries: list[dict],
+    max_total_chars: int = 8000,
+) -> tuple[str, str]:
+    """Build prompts for cross-document pattern discovery.
+
+    doc_summaries: list of {doc_id, title, summary, keywords} dicts.
+    Returns (system_prompt, user_prompt).
+    """
+    doc_texts = []
+    total = 0
+    for doc in doc_summaries:
+        keywords_str = ", ".join(doc.get("keywords") or [])
+        entry = f"[{doc['doc_id']}] {doc['title']}\n摘要: {doc.get('summary') or '无'}\n关键词: {keywords_str or '无'}"
+        if total + len(entry) > max_total_chars:
+            break
+        doc_texts.append(entry)
+        total += len(entry)
+
+    docs_text = "\n\n".join(doc_texts) if doc_texts else "(无文档)"
+
+    user_prompt = USER_PROMPT_PATTERN_DISCOVERY_TEMPLATE.format(docs_text=docs_text)
+    return SYSTEM_PROMPT_PATTERN_DISCOVERY, user_prompt
+
+
+def build_contradiction_prompt(
+    doc_a_title: str,
+    doc_a_summary: str,
+    doc_a_content: str,
+    doc_b_title: str,
+    doc_b_summary: str,
+    doc_b_content: str,
+    max_content_chars: int = 500,
+) -> tuple[str, str]:
+    """Build prompts for detecting contradictions between two documents.
+
+    Returns (system_prompt, user_prompt).
+    Content is truncated to max_content_chars to control token usage.
+    """
+    a_content = doc_a_content[:max_content_chars]
+    if len(doc_a_content) > max_content_chars:
+        a_content += "...(截断)"
+
+    b_content = doc_b_content[:max_content_chars]
+    if len(doc_b_content) > max_content_chars:
+        b_content += "...(截断)"
+
+    user_prompt = USER_PROMPT_CONTRADICTION_TEMPLATE.format(
+        doc_a_title=doc_a_title,
+        doc_a_summary=doc_a_summary or "无摘要",
+        doc_a_content=a_content,
+        doc_b_title=doc_b_title,
+        doc_b_summary=doc_b_summary or "无摘要",
+        doc_b_content=b_content,
+    )
+
+    return SYSTEM_PROMPT_CONTRADICTION, user_prompt
+
+
 def build_classify_prompt(
     existing_docs: list[dict],
     new_chunks: list[dict],
     max_existing_chars: int = 4000,
     max_new_chars: int = 4000,
+    entity_types: list[str] | None = None,
 ) -> tuple[str, str]:
     """Build prompts for classifying new chunks against existing knowledge.
 
     existing_docs: list of {doc_id, title, summary} dicts
     new_chunks: list of {index, content_text, page_or_timestamp} dicts
+    entity_types: optional user-defined entity types to guide classification
 
     Returns (system_prompt, user_prompt).
     """
@@ -300,9 +637,14 @@ def build_classify_prompt(
         total += len(entry)
     new_chunks_text = "\n\n".join(chunk_texts) if chunk_texts else "(无新资料片段)"
 
+    entity_hint = ""
+    if entity_types:
+        types_str = "、".join(entity_types[:20])
+        entity_hint = f"\n\n【实体类型指引】分类时请优先关注以下用户定义的实体类型：{types_str}"
+
     user_prompt = USER_PROMPT_CLASSIFY_TEMPLATE.format(
         existing_docs_text=existing_docs_text,
         new_chunks_text=new_chunks_text,
-    )
+    ) + entity_hint
 
     return SYSTEM_PROMPT_CLASSIFY, user_prompt

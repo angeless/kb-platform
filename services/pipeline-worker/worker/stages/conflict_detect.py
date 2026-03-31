@@ -17,6 +17,7 @@ def detect_conflicts(
     db: Session,
     project_id: uuid.UUID,
     classification: dict,
+    config: dict | None = None,
 ) -> list[uuid.UUID]:
     """Create conflict records for chunks classified as conflicting.
 

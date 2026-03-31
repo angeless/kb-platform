@@ -7,6 +7,7 @@ import uuid
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import load_only
 
 from shared_errors import ConflictException, ErrorCode, NotFoundException
 from shared_models import Architecture, ArchitectureNode, KnowledgeDoc, KnowledgeDocVersion, SourceRef
@@ -46,6 +47,59 @@ class DocService(TenantService):
         await self._verify_project(doc.project_id)
         return doc
 
+    async def list_versions(self, doc_id: uuid.UUID) -> tuple[list[KnowledgeDocVersion], int, int]:
+        """Return all versions of a document (descending), total count, and current_version."""
+        doc = await self.get(doc_id)
+        q = (
+            select(KnowledgeDocVersion)
+            .options(load_only(
+                KnowledgeDocVersion.version,
+                KnowledgeDocVersion.change_reason,
+                KnowledgeDocVersion.created_by,
+                KnowledgeDocVersion.created_at,
+            ))
+            .where(KnowledgeDocVersion.doc_id == doc.id)
+            .order_by(KnowledgeDocVersion.version.desc())
+        )
+        rows = (await self.db.execute(q)).scalars().all()
+        return list(rows), len(rows), doc.current_version
+
+    async def rollback(
+        self, doc_id: uuid.UUID, target_version: int, user_id: uuid.UUID
+    ) -> KnowledgeDoc:
+        """Rollback document to a previous version by creating a new version with old content."""
+        doc = await self.get(doc_id)
+        if doc.status != "draft":
+            raise ConflictException(
+                error_code=ErrorCode.DOC_STATUS_INVALID,
+                message="只有草稿状态的文档可以回滚",
+            )
+        q = select(KnowledgeDocVersion).where(
+            KnowledgeDocVersion.doc_id == doc.id,
+            KnowledgeDocVersion.version == target_version,
+        )
+        result = await self.db.execute(q)
+        snapshot = result.scalar_one_or_none()
+        if snapshot is None:
+            raise NotFoundException(
+                error_code=ErrorCode.VERSION_NOT_FOUND,
+                message=f"版本 {target_version} 不存在",
+            )
+        new_ver_num = doc.current_version + 1
+        version = KnowledgeDocVersion(
+            id=uuid.uuid4(),
+            doc_id=doc.id,
+            version=new_ver_num,
+            content_md=snapshot.content_md,
+            change_reason=f"回滚到版本 {target_version}",
+            created_by=user_id,
+        )
+        self.db.add(version)
+        doc.current_version = new_ver_num
+        await self.db.flush()
+        await self.db.refresh(doc)
+        return doc
+
     async def get_version(self, doc_id: uuid.UUID, version: int) -> KnowledgeDocVersion:
         """Get a specific version of a document."""
         doc = await self.get(doc_id)
@@ -57,7 +111,7 @@ class DocService(TenantService):
         ver = result.scalar_one_or_none()
         if ver is None:
             raise NotFoundException(
-                error_code=ErrorCode.DOC_NOT_FOUND,
+                error_code=ErrorCode.VERSION_NOT_FOUND,
                 message=f"版本 {version} 不存在",
             )
         return ver

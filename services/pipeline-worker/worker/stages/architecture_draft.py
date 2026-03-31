@@ -96,6 +96,7 @@ def generate_architecture_draft(
     db: Session,
     project_id: uuid.UUID,
     classification: dict,
+    config: dict | None = None,
 ) -> uuid.UUID:
     """Generate or update architecture draft based on classification results.
 

@@ -24,7 +24,7 @@ def _make_doc_service(doc_status: str):
 
     svc = DocService.__new__(DocService)
     svc.db = AsyncMock()
-    svc.tenant_id = uuid.uuid4()
+    svc.kb_id = uuid.uuid4()
     svc.get = AsyncMock(return_value=doc)
     svc.db.flush = AsyncMock()
     svc.db.refresh = AsyncMock()

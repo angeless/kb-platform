@@ -16,9 +16,9 @@ from app.utils.crypto import encrypt, mask_api_key
 class ModelProviderService:
     """Operations for model providers and routes, scoped to a single tenant."""
 
-    def __init__(self, db: AsyncSession, tenant_id: uuid.UUID) -> None:
+    def __init__(self, db: AsyncSession, kb_id: uuid.UUID) -> None:
         self.db = db
-        self.tenant_id = tenant_id
+        self.kb_id = kb_id
         self._settings = get_settings()
 
     async def create_provider(self, data: dict) -> dict:
@@ -29,7 +29,7 @@ class ModelProviderService:
 
         provider = ModelProvider(
             id=uuid.uuid4(),
-            tenant_id=self.tenant_id,
+            kb_id=self.kb_id,
             provider_name=data["provider_name"],
             api_key_encrypted=encrypted_b64,
             base_url=data.get("base_url"),
@@ -47,7 +47,7 @@ class ModelProviderService:
         masked = mask_api_key(original_api_key) if original_api_key else "****"
         return {
             "id": provider.id,
-            "tenant_id": provider.tenant_id,
+            "kb_id": provider.kb_id,
             "provider_name": provider.provider_name,
             "api_key_masked": masked,
             "base_url": provider.base_url,
@@ -60,7 +60,7 @@ class ModelProviderService:
     async def list_providers(self) -> list[dict]:
         """List providers with masked API keys."""
         q = select(ModelProvider).where(
-            ModelProvider.tenant_id == self.tenant_id,
+            ModelProvider.kb_id == self.kb_id,
         ).order_by(ModelProvider.created_at.desc())
         rows = (await self.db.execute(q)).scalars().all()
         return [self._provider_to_dict(p) for p in rows]
@@ -69,7 +69,7 @@ class ModelProviderService:
         """Stub test for provider connectivity."""
         q = select(ModelProvider).where(
             ModelProvider.id == provider_id,
-            ModelProvider.tenant_id == self.tenant_id,
+            ModelProvider.kb_id == self.kb_id,
         )
         result = await self.db.execute(q)
         provider = result.scalar_one_or_none()
@@ -84,7 +84,7 @@ class ModelProviderService:
         """Create a model route."""
         route = ModelRoute(
             id=uuid.uuid4(),
-            tenant_id=self.tenant_id,
+            kb_id=self.kb_id,
             task_type=data["task_type"],
             provider_id=data["provider_id"],
             model_name=data["model_name"],
@@ -98,7 +98,7 @@ class ModelProviderService:
     async def list_routes(self) -> list[ModelRoute]:
         """List model routes for the tenant."""
         q = select(ModelRoute).where(
-            ModelRoute.tenant_id == self.tenant_id,
+            ModelRoute.kb_id == self.kb_id,
         ).order_by(ModelRoute.created_at.desc())
         rows = (await self.db.execute(q)).scalars().all()
         return list(rows)
@@ -107,7 +107,7 @@ class ModelProviderService:
         """Update a model route."""
         q = select(ModelRoute).where(
             ModelRoute.id == route_id,
-            ModelRoute.tenant_id == self.tenant_id,
+            ModelRoute.kb_id == self.kb_id,
         )
         result = await self.db.execute(q)
         route = result.scalar_one_or_none()
@@ -127,7 +127,7 @@ class ModelProviderService:
         """Delete a model route."""
         q = select(ModelRoute).where(
             ModelRoute.id == route_id,
-            ModelRoute.tenant_id == self.tenant_id,
+            ModelRoute.kb_id == self.kb_id,
         )
         result = await self.db.execute(q)
         route = result.scalar_one_or_none()

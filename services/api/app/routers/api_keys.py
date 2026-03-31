@@ -38,7 +38,7 @@ async def create_api_key(
 ):
     # Verify project exists and belongs to user's tenant
     proj = await db.get(Project, project_id)
-    if proj is None or proj.tenant_id != current_user.tenant_id:
+    if proj is None or proj.kb_id != current_user.kb_id:
         raise AppException(ErrorCode.PROJECT_NOT_FOUND, "项目不存在", status_code=404)
 
     raw_key = "kb_" + secrets.token_urlsafe(24)
@@ -47,7 +47,7 @@ async def create_api_key(
 
     api_key = ApiKey(
         project_id=project_id,
-        tenant_id=current_user.tenant_id,
+        kb_id=current_user.kb_id,
         name=body.name,
         key_hash=key_hash,
         key_prefix=key_prefix,
@@ -84,7 +84,7 @@ async def list_api_keys(
         select(ApiKey)
         .where(
             ApiKey.project_id == project_id,
-            ApiKey.tenant_id == current_user.tenant_id,
+            ApiKey.kb_id == current_user.kb_id,
         )
         .order_by(ApiKey.created_at.desc())
     )
@@ -114,7 +114,7 @@ async def revoke_api_key(
     q = select(ApiKey).where(
         ApiKey.id == key_id,
         ApiKey.project_id == project_id,
-        ApiKey.tenant_id == current_user.tenant_id,
+        ApiKey.kb_id == current_user.kb_id,
     )
     result = await db.execute(q)
     api_key = result.scalar_one_or_none()

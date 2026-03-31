@@ -41,6 +41,24 @@ class NodeUpdate(BaseModel):
     status: str | None = Field(None, pattern="^(draft|reviewing|published|deprecated)$")
 
 
+class MergeNodesRequest(BaseModel):
+    source_node_ids: list[UUID] = Field(..., min_length=2)
+    target_name: str = Field(..., min_length=1, max_length=200)
+    target_description: str | None = None
+    target_node_type: str = Field(default="topic", pattern="^(category|topic|document|glossary|conflict|index)$")
+
+
+class SplitPartRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=200)
+    node_type: str = Field(default="topic", pattern="^(category|topic|document|glossary|conflict|index)$")
+    doc_ids: list[UUID] = Field(..., min_length=1)
+
+
+class SplitNodeRequest(BaseModel):
+    part_a: SplitPartRequest
+    part_b: SplitPartRequest
+
+
 class NodeOut(BaseModel):
     id: UUID
     architecture_id: UUID

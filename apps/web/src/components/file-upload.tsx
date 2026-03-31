@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import { ApiClientError, uploadWithProgress } from "@/lib/api";
+import { api, ApiClientError, uploadWithProgress } from "@/lib/api";
 
 interface FileUploadProps {
   projectId: string;
@@ -62,11 +62,26 @@ export function FileUpload({ projectId, onUploadComplete }: FileUploadProps) {
     formData.append("asset_type", guessType(file.name));
 
     try {
-      await uploadWithProgress("/v1/assets/upload", formData, {
+      const resp = await uploadWithProgress("/v1/assets/upload", formData, {
         onProgress: (percent) => updateItem(index, { progress: percent }),
         signal: controller.signal,
       });
-      updateItem(index, { status: "done", progress: 100 });
+      updateItem(index, { status: "done", progress: 100, message: "解析中..." });
+
+      // Auto-trigger ingest job so the file gets parsed
+      const assetData = (resp.data as { id?: string });
+      if (assetData?.id) {
+        try {
+          await api.post("/v1/jobs", {
+            project_id: projectId,
+            job_type: "ingest",
+            asset_id: assetData.id,
+          });
+        } catch {
+          // Ingest trigger failed — asset is uploaded but won't auto-parse
+          updateItem(index, { message: "已上传（自动解析触发失败）" });
+        }
+      }
     } catch (e) {
       if (e instanceof ApiClientError && e.errorCode === "UPLOAD_CANCELLED") {
         updateItem(index, { status: "cancelled", message: "已取消" });

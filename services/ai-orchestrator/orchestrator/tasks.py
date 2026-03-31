@@ -12,10 +12,22 @@ from shared_models import (
     Architecture, ArchitectureNode, AssetChunk, Asset, Job, Project,
     KnowledgeDoc, KnowledgeDocVersion, SourceRef, ConflictRecord,
 )
+from shared_models.pipeline_stage_config import PipelineStageConfig
 
 from .celery_app import celery_app
 from .llm_client import call_llm, parse_json_response
-from .prompts import build_propose_prompt, build_generate_doc_prompt, build_classify_prompt
+from shared_models.cross_reference import CrossReference
+from .prompts import (
+    build_propose_prompt,
+    build_generate_doc_prompt,
+    build_classify_prompt,
+    build_summary_prompt,
+    build_suggest_tags_prompt,
+    build_summary_reflection_prompt,
+    build_tags_reflection_prompt,
+    build_contradiction_prompt,
+    build_pattern_discovery_prompt,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +38,23 @@ _sync_engine = create_engine(settings.database_url_sync, pool_size=5, max_overfl
 
 def _get_sync_session() -> Session:
     return Session(_sync_engine)
+
+
+def _get_entity_types(session: Session, project_id: uuid.UUID, stage_name: str) -> list[str] | None:
+    """Load entity_types from pipeline stage config for a project.
+
+    Returns None if not configured or empty, so callers can use default behavior.
+    """
+    row = session.execute(
+        select(PipelineStageConfig).where(
+            PipelineStageConfig.project_id == project_id,
+            PipelineStageConfig.stage_name == stage_name,
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        return None
+    types = row.params.get("entity_types", [])
+    return types if types else None
 
 
 @celery_app.task(bind=True, name="orchestrator.propose_architecture")
@@ -297,6 +326,9 @@ def generate_docs(self, project_id: str, job_id: str) -> dict:
             ).scalar_one_or_none()
             created_by = job.created_by if job else project_uuid  # fallback
 
+            # Load entity_types from pipeline config (v0.46.3)
+            doc_gen_entity_types = _get_entity_types(session, project_uuid, "doc_generate")
+
             for node in nodes:
                 # Skip category nodes (they are containers, not content)
                 if node.node_type == "category":
@@ -309,6 +341,7 @@ def generate_docs(self, project_id: str, job_id: str) -> dict:
                     node_description=node.description,
                     node_level=node.level,
                     chunks=chunk_dicts,
+                    entity_types=doc_gen_entity_types,
                 )
 
                 # Call LLM
@@ -485,10 +518,14 @@ def classify_incremental(self, project_id: str, job_id: str, asset_ids: list[str
                     "summary": summary,
                 })
 
+            # Load entity_types from pipeline config (v0.46.3)
+            classify_entity_types = _get_entity_types(session, project_uuid, "classify")
+
             # Build prompt and call LLM
             system_prompt, user_prompt = build_classify_prompt(
                 existing_docs=existing_doc_dicts,
                 new_chunks=new_chunk_dicts,
+                entity_types=classify_entity_types,
             )
 
             llm_response = call_llm(prompt=user_prompt, system_prompt=system_prompt)
@@ -675,3 +712,404 @@ def _update_job_failed(session: Session, job_id: uuid.UUID, error_message: str) 
         job.error_message = error_message
         job.finished_at = datetime.now(timezone.utc)
         _publish_job_event(job, error_message)
+
+
+# ---------------------------------------------------------------------------
+# AI summary / tag suggestion tasks (v0.45.5)
+# ---------------------------------------------------------------------------
+
+
+_REFLECTION_CONFIDENCE_THRESHOLD = 0.7
+
+
+@celery_app.task(bind=True, name="orchestrator.generate_summary")
+def generate_summary(self, doc_id: str) -> dict:
+    """Generate an AI summary with one round of reflection/self-check.
+
+    Flow: generate → reflect → decide (use revised if confidence < threshold).
+    Writes summary + summary_confidence to KnowledgeDoc.
+    """
+    doc_uuid = uuid.UUID(doc_id)
+
+    with _get_sync_session() as session:
+        doc = session.execute(
+            select(KnowledgeDoc).where(KnowledgeDoc.id == doc_uuid)
+        ).scalar_one_or_none()
+
+        if doc is None:
+            return {"status": "error", "message": "Document not found"}
+
+        latest_version = session.execute(
+            select(KnowledgeDocVersion)
+            .where(KnowledgeDocVersion.doc_id == doc_uuid)
+            .order_by(KnowledgeDocVersion.version.desc())
+        ).scalar_one_or_none()
+
+        if latest_version is None or not latest_version.content_md:
+            return {"status": "error", "message": "Document has no content"}
+
+        try:
+            # Step 1: Initial generation
+            system_prompt, user_prompt = build_summary_prompt(latest_version.content_md)
+            llm_response = call_llm(prompt=user_prompt, system_prompt=system_prompt)
+            result = parse_json_response(llm_response)
+            raw_summary = result.get("summary", "")
+
+            if not raw_summary:
+                return {"status": "error", "message": "LLM returned empty summary"}
+
+            # Step 2: Reflection (self-check)
+            confidence = 0.5  # default if reflection fails
+            final_summary = raw_summary
+            try:
+                ref_system, ref_user = build_summary_reflection_prompt(
+                    latest_version.content_md, raw_summary
+                )
+                ref_response = call_llm(prompt=ref_user, system_prompt=ref_system)
+                ref_result = parse_json_response(ref_response)
+
+                confidence = float(ref_result.get("confidence", 0.5))
+                confidence = max(0.0, min(1.0, confidence))
+
+                # Step 3: Decide — use revised if low confidence
+                if confidence < _REFLECTION_CONFIDENCE_THRESHOLD:
+                    revised = ref_result.get("revised_summary")
+                    if revised and isinstance(revised, str) and len(revised) > 10:
+                        final_summary = revised
+                        logger.info(
+                            "Doc %s: using revised summary (confidence=%.2f)",
+                            doc_id, confidence,
+                        )
+            except Exception as ref_err:
+                logger.warning(
+                    "Reflection failed for doc %s, using raw summary: %s",
+                    doc_id, ref_err,
+                )
+
+            # Step 4: Write to DB
+            doc.summary = final_summary
+            doc.summary_confidence = confidence
+            session.commit()
+
+            logger.info(
+                "Generated summary for doc %s (%d chars, confidence=%.2f)",
+                doc_id, len(final_summary), confidence,
+            )
+            return {
+                "status": "success",
+                "summary": final_summary,
+                "confidence": confidence,
+            }
+
+        except Exception as e:
+            session.rollback()
+            logger.error("Failed to generate summary for doc %s: %s", doc_id, e)
+            return {"status": "error", "message": str(e)}
+
+
+@celery_app.task(bind=True, name="orchestrator.suggest_tags")
+def suggest_tags(self, doc_id: str) -> dict:
+    """Suggest keyword tags with one round of reflection/self-check.
+
+    Flow: generate → reflect → decide (use revised if confidence < threshold).
+    Writes keywords + summary_confidence to KnowledgeDoc.
+    """
+    doc_uuid = uuid.UUID(doc_id)
+
+    with _get_sync_session() as session:
+        doc = session.execute(
+            select(KnowledgeDoc).where(KnowledgeDoc.id == doc_uuid)
+        ).scalar_one_or_none()
+
+        if doc is None:
+            return {"status": "error", "message": "Document not found"}
+
+        latest_version = session.execute(
+            select(KnowledgeDocVersion)
+            .where(KnowledgeDocVersion.doc_id == doc_uuid)
+            .order_by(KnowledgeDocVersion.version.desc())
+        ).scalar_one_or_none()
+
+        if latest_version is None or not latest_version.content_md:
+            return {"status": "error", "message": "Document has no content"}
+
+        try:
+            # Load entity_types from pipeline config (v0.46.3)
+            tags_entity_types = _get_entity_types(session, doc.project_id, "classify")
+
+            # Step 1: Initial generation
+            system_prompt, user_prompt = build_suggest_tags_prompt(
+                latest_version.content_md, entity_types=tags_entity_types,
+            )
+            llm_response = call_llm(prompt=user_prompt, system_prompt=system_prompt)
+            result = parse_json_response(llm_response)
+
+            raw_keywords = result.get("keywords", [])
+            if not raw_keywords:
+                return {"status": "error", "message": "LLM returned empty keywords"}
+
+            # Step 2: Reflection (self-check)
+            confidence = 0.5  # default if reflection fails
+            final_keywords = raw_keywords
+            try:
+                ref_system, ref_user = build_tags_reflection_prompt(
+                    latest_version.content_md, raw_keywords
+                )
+                ref_response = call_llm(prompt=ref_user, system_prompt=ref_system)
+                ref_result = parse_json_response(ref_response)
+
+                confidence = float(ref_result.get("confidence", 0.5))
+                confidence = max(0.0, min(1.0, confidence))
+
+                # Step 3: Decide — use revised if low confidence
+                if confidence < _REFLECTION_CONFIDENCE_THRESHOLD:
+                    revised = ref_result.get("revised_tags")
+                    if revised and isinstance(revised, list) and len(revised) >= 2:
+                        final_keywords = revised
+                        logger.info(
+                            "Doc %s: using revised tags (confidence=%.2f)",
+                            doc_id, confidence,
+                        )
+            except Exception as ref_err:
+                logger.warning(
+                    "Reflection failed for doc %s, using raw tags: %s",
+                    doc_id, ref_err,
+                )
+
+            # Step 4: Write to DB
+            doc.keywords = final_keywords
+            doc.summary_confidence = confidence
+            session.commit()
+
+            logger.info(
+                "Suggested %d tags for doc %s (confidence=%.2f)",
+                len(final_keywords), doc_id, confidence,
+            )
+            return {
+                "status": "success",
+                "keywords": final_keywords,
+                "confidence": confidence,
+            }
+
+        except Exception as e:
+            session.rollback()
+            logger.error("Failed to suggest tags for doc %s: %s", doc_id, e)
+            return {"status": "error", "message": str(e)}
+
+
+# ---------------------------------------------------------------------------
+# Cross-document contradiction detection (v0.46.5)
+# ---------------------------------------------------------------------------
+
+@celery_app.task(bind=True, name="orchestrator.detect_contradictions")
+def detect_contradictions(self, project_id: str, max_pairs: int = 50) -> dict:
+    """Detect contradictions between published documents in a project.
+
+    1. Load all published KnowledgeDocs with summary + content
+    2. Build pairs (limited to max_pairs)
+    3. For each pair, call LLM with contradiction prompt
+    4. Create CrossReference records for detected contradictions
+    """
+    project_uuid = uuid.UUID(project_id)
+
+    with _get_sync_session() as session:
+        try:
+            # Load published docs
+            docs = session.execute(
+                select(KnowledgeDoc).where(
+                    KnowledgeDoc.project_id == project_uuid,
+                    KnowledgeDoc.status.in_(["published", "draft"]),
+                )
+            ).scalars().all()
+
+            if len(docs) < 2:
+                return {
+                    "status": "success",
+                    "total_pairs_checked": 0,
+                    "contradictions_found": 0,
+                    "cross_refs_created": [],
+                }
+
+            # Build doc info with content
+            doc_infos = []
+            for doc in docs:
+                latest_ver = session.execute(
+                    select(KnowledgeDocVersion)
+                    .where(KnowledgeDocVersion.doc_id == doc.id)
+                    .order_by(KnowledgeDocVersion.version.desc())
+                ).scalar_one_or_none()
+
+                content = latest_ver.content_md if latest_ver else ""
+                doc_infos.append({
+                    "id": doc.id,
+                    "title": doc.title,
+                    "summary": doc.summary or "",
+                    "content": content,
+                })
+
+            # Build pairs (limit to max_pairs)
+            pairs = []
+            for i in range(len(doc_infos)):
+                for j in range(i + 1, len(doc_infos)):
+                    pairs.append((doc_infos[i], doc_infos[j]))
+                    if len(pairs) >= max_pairs:
+                        break
+                if len(pairs) >= max_pairs:
+                    break
+
+            # Check each pair for contradictions
+            total_contradictions = 0
+            cross_refs_created = []
+
+            for doc_a, doc_b in pairs:
+                system_prompt, user_prompt = build_contradiction_prompt(
+                    doc_a_title=doc_a["title"],
+                    doc_a_summary=doc_a["summary"],
+                    doc_a_content=doc_a["content"],
+                    doc_b_title=doc_b["title"],
+                    doc_b_summary=doc_b["summary"],
+                    doc_b_content=doc_b["content"],
+                )
+
+                try:
+                    llm_response = call_llm(prompt=user_prompt, system_prompt=system_prompt)
+                    result = parse_json_response(llm_response)
+                except Exception as e:
+                    logger.warning(
+                        "Contradiction check failed for %s vs %s: %s",
+                        doc_a["title"], doc_b["title"], e,
+                    )
+                    continue
+
+                contradictions = result.get("contradictions", [])
+                for contradiction in contradictions:
+                    severity = contradiction.get("severity", "medium")
+                    description = contradiction.get("description", "")
+                    evidence_a = contradiction.get("evidence_a", "")
+                    evidence_b = contradiction.get("evidence_b", "")
+
+                    note = f"[{severity}] {description}\n\n文档A证据: {evidence_a}\n文档B证据: {evidence_b}"
+
+                    ref = CrossReference(
+                        id=uuid.uuid4(),
+                        source_doc_id=doc_a["id"],
+                        target_doc_id=doc_b["id"],
+                        relation_type="contradicts",
+                        confidence={"high": 0.9, "medium": 0.7, "low": 0.5}.get(severity, 0.7),
+                        note=note,
+                        created_by="ai",
+                    )
+                    session.add(ref)
+                    total_contradictions += 1
+                    cross_refs_created.append({
+                        "ref_id": str(ref.id),
+                        "doc_a": str(doc_a["id"]),
+                        "doc_b": str(doc_b["id"]),
+                        "description": description,
+                    })
+
+            session.commit()
+
+            logger.info(
+                "Contradiction detection for project %s: %d pairs checked, %d contradictions found",
+                project_id, len(pairs), total_contradictions,
+            )
+            return {
+                "status": "success",
+                "total_pairs_checked": len(pairs),
+                "contradictions_found": total_contradictions,
+                "cross_refs_created": cross_refs_created,
+            }
+
+        except Exception as e:
+            session.rollback()
+            logger.error("Failed contradiction detection for project %s: %s", project_id, e)
+            return {"status": "error", "message": str(e)}
+
+
+# ---------------------------------------------------------------------------
+# Cross-document pattern discovery (v0.46.6)
+# ---------------------------------------------------------------------------
+
+@celery_app.task(bind=True, name="orchestrator.discover_patterns")
+def discover_patterns(self, project_id: str) -> dict:
+    """Discover cross-document patterns: theme clusters, associations, knowledge gaps.
+
+    1. Load all docs' summary + keywords (lightweight)
+    2. Call LLM with pattern discovery prompt
+    3. Cache result in Redis (24h TTL)
+    """
+    import json
+    import redis as redis_lib
+
+    project_uuid = uuid.UUID(project_id)
+    cache_key = f"patterns:{project_id}"
+
+    # Check Redis cache first
+    try:
+        r = redis_lib.from_url(settings.redis_url)
+        cached = r.get(cache_key)
+        if cached:
+            logger.info("Returning cached patterns for project %s", project_id)
+            return json.loads(cached)
+    except Exception:
+        r = None
+
+    with _get_sync_session() as session:
+        try:
+            docs = session.execute(
+                select(KnowledgeDoc).where(
+                    KnowledgeDoc.project_id == project_uuid,
+                )
+            ).scalars().all()
+
+            if not docs:
+                return {
+                    "status": "success",
+                    "clusters": [],
+                    "frequent_associations": [],
+                    "knowledge_gaps": [],
+                    "analyzed_docs_count": 0,
+                }
+
+            doc_summaries = [
+                {
+                    "doc_id": str(doc.id),
+                    "title": doc.title,
+                    "summary": doc.summary or "",
+                    "keywords": doc.keywords or [],
+                }
+                for doc in docs
+            ]
+
+            system_prompt, user_prompt = build_pattern_discovery_prompt(doc_summaries)
+            llm_response = call_llm(prompt=user_prompt, system_prompt=system_prompt)
+            result = parse_json_response(llm_response)
+
+            output = {
+                "status": "success",
+                "clusters": result.get("clusters", []),
+                "frequent_associations": result.get("frequent_associations", []),
+                "knowledge_gaps": result.get("knowledge_gaps", []),
+                "analyzed_docs_count": len(docs),
+            }
+
+            # Cache in Redis (24h TTL)
+            try:
+                if r:
+                    r.setex(cache_key, 86400, json.dumps(output))
+            except Exception:
+                pass
+
+            logger.info(
+                "Pattern discovery for project %s: %d docs, %d clusters, %d gaps",
+                project_id, len(docs),
+                len(output["clusters"]),
+                len(output["knowledge_gaps"]),
+            )
+            return output
+
+        except Exception as e:
+            session.rollback()
+            logger.error("Failed pattern discovery for project %s: %s", project_id, e)
+            return {"status": "error", "message": str(e)}

@@ -102,6 +102,10 @@ class Settings(BaseSettings):
     smtp_from: str = "noreply@kb-platform.com"
     smtp_tls: bool = True
 
+    # PA Pass (central auth)
+    pass_base_url: str = "http://localhost:3001"
+    kb_product_id: str = ""
+
     # CORS
     cors_origins: str = "http://localhost:3000,http://localhost:3001"
 
@@ -136,6 +140,16 @@ class Settings(BaseSettings):
                 raise ValueError(
                     "s3_access_key/s3_secret_key must not use default 'minioadmin' in production. "
                     "Set S3_ACCESS_KEY and S3_SECRET_KEY environment variables."
+                )
+            if not self.kb_product_id:
+                raise ValueError(
+                    "kb_product_id must be set in production. "
+                    "Set KB_PRODUCT_ID environment variable to the UUID from PA product management."
+                )
+            if "localhost" in self.pass_base_url or "127.0.0.1" in self.pass_base_url:
+                raise ValueError(
+                    "pass_base_url must not point to localhost in production. "
+                    "Set PASS_BASE_URL environment variable to the PA Pass service URL."
                 )
         return self
 

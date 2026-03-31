@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from shared_schemas.common import DataResponse, ErrorDetail
 from shared_schemas.job import JobOut
 
-from app.deps import get_current_user, get_db, get_tenant_id
+from app.deps import get_current_user, get_db, get_kb_id
 from app.services.job_service import JobService
 from shared_models import User
 
@@ -42,11 +42,11 @@ class IncrementalRequest(BaseModel):
 async def incremental_ingestion(
     body: IncrementalRequest,
     db: AsyncSession = Depends(get_db),
-    tenant_id: uuid.UUID = Depends(get_tenant_id),
+    kb_id: uuid.UUID = Depends(get_kb_id),
     current_user: User = Depends(get_current_user),
 ):
     """Submit new assets for incremental classification against existing knowledge."""
-    svc = JobService(db, tenant_id, current_user.id)
+    svc = JobService(db, kb_id, current_user.id)
     job = await svc.create(
         project_id=body.project_id,
         job_type="incremental",

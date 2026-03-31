@@ -1,6 +1,14 @@
 """Tests for prompt construction."""
 
-from orchestrator.prompts import build_propose_prompt, build_generate_doc_prompt, build_classify_prompt
+from orchestrator.prompts import (
+    build_propose_prompt,
+    build_generate_doc_prompt,
+    build_classify_prompt,
+    build_summary_prompt,
+    build_suggest_tags_prompt,
+    build_summary_reflection_prompt,
+    build_tags_reflection_prompt,
+)
 
 
 class TestBuildProposePrompt:
@@ -132,3 +140,117 @@ class TestBuildClassifyPrompt:
         assert "supplement" in user
         assert "correction" in user
         assert "conflict" in user
+
+
+class TestBuildSummaryPrompt:
+    def test_includes_content(self):
+        """Prompt should contain the document content."""
+        system, user = build_summary_prompt("这是一份关于退款政策的文档")
+        assert "退款政策" in user
+        assert "200" in user  # mentions the 200-char limit
+
+    def test_truncates_long_content(self):
+        """Content exceeding max_content_chars should be truncated."""
+        system, user = build_summary_prompt("x" * 10000, max_content_chars=500)
+        assert "截断" in user
+
+    def test_system_prompt_constraints(self):
+        """System prompt should enforce no fabrication."""
+        system, user = build_summary_prompt("content")
+        assert "不得编造" in system
+        assert "摘要" in system
+
+    def test_json_output_format(self):
+        """User prompt should request JSON output with summary key."""
+        system, user = build_summary_prompt("content")
+        assert "summary" in user
+        assert "JSON" in user
+
+
+class TestBuildSuggestTagsPrompt:
+    def test_includes_content(self):
+        """Prompt should contain the document content."""
+        system, user = build_suggest_tags_prompt("退货政策说明")
+        assert "退货政策" in user
+
+    def test_truncates_long_content(self):
+        """Content exceeding max_content_chars should be truncated."""
+        system, user = build_suggest_tags_prompt("y" * 10000, max_content_chars=500)
+        assert "截断" in user
+
+    def test_system_prompt_constraints(self):
+        """System prompt should enforce no fabrication."""
+        system, user = build_suggest_tags_prompt("content")
+        assert "不得编造" in system
+        assert "关键词" in system
+
+    def test_json_output_format(self):
+        """User prompt should request JSON output with keywords key."""
+        system, user = build_suggest_tags_prompt("content")
+        assert "keywords" in user
+        assert "JSON" in user
+
+    def test_keyword_count_guidance(self):
+        """Prompt should specify 3-8 keywords."""
+        system, user = build_suggest_tags_prompt("content")
+        assert "3-8" in user or "3" in user
+
+
+class TestBuildSummaryReflectionPrompt:
+    def test_includes_content_and_summary(self):
+        """Prompt should contain both original content and the draft summary."""
+        system, user = build_summary_reflection_prompt(
+            "退款政策：7天无理由退货", "本文档介绍退款政策"
+        )
+        assert "退款政策" in user
+        assert "本文档介绍退款政策" in user
+
+    def test_requires_confidence(self):
+        """Prompt should ask for a confidence score."""
+        system, user = build_summary_reflection_prompt("content", "summary")
+        assert "confidence" in user.lower() or "置信" in user
+
+    def test_requires_revised_summary(self):
+        """Prompt should mention revised_summary for low confidence cases."""
+        system, user = build_summary_reflection_prompt("content", "summary")
+        assert "revised_summary" in user
+
+    def test_json_output_format(self):
+        """User prompt should request JSON output."""
+        system, user = build_summary_reflection_prompt("content", "summary")
+        assert "JSON" in user
+
+    def test_system_prompt_not_empty(self):
+        """System prompt should have content."""
+        system, user = build_summary_reflection_prompt("content", "summary")
+        assert len(system) > 30
+
+
+class TestBuildTagsReflectionPrompt:
+    def test_includes_content_and_tags(self):
+        """Prompt should contain both original content and the draft tags."""
+        system, user = build_tags_reflection_prompt(
+            "退款政策：7天无理由退货", ["退款", "政策", "客服"]
+        )
+        assert "退款政策" in user
+        assert "退款" in user
+
+    def test_requires_confidence(self):
+        """Prompt should ask for a confidence score."""
+        system, user = build_tags_reflection_prompt("content", ["tag1"])
+        assert "confidence" in user.lower() or "置信" in user
+
+    def test_requires_revised_tags(self):
+        """Prompt should mention revised_tags for low confidence cases."""
+        system, user = build_tags_reflection_prompt("content", ["tag1"])
+        assert "revised_tags" in user
+
+    def test_json_output_format(self):
+        """User prompt should request JSON output."""
+        system, user = build_tags_reflection_prompt("content", ["tag1"])
+        assert "JSON" in user
+
+    def test_system_prompt_not_empty(self):
+        """System prompt should have content."""
+        system, user = build_tags_reflection_prompt("content", ["tag1"])
+        assert len(system) > 30

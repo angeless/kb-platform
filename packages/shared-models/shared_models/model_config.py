@@ -13,7 +13,7 @@ from .base import Base
 class ModelProvider(Base):
     __tablename__ = "model_provider"
 
-    tenant_id: Mapped[uuid.UUID] = mapped_column(
+    kb_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("tenant.id"), nullable=False
     )
     provider_name: Mapped[str] = mapped_column(String(50), nullable=False)
@@ -30,10 +30,10 @@ class ModelProvider(Base):
 class ModelRoute(Base):
     __tablename__ = "model_route"
     __table_args__ = (
-        Index("ix_model_route_tenant_task", "tenant_id", "task_type"),
+        Index("ix_model_route_tenant_task", "kb_id", "task_type"),
     )
 
-    tenant_id: Mapped[uuid.UUID] = mapped_column(
+    kb_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("tenant.id"), nullable=False
     )
     task_type: Mapped[str] = mapped_column(String(30), nullable=False)

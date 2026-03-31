@@ -3,19 +3,24 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { usePermission } from "@/hooks/usePermission";
 
-const navItems = [
+interface NavItem {
+  label: string;
+  href: string;
+  icon: string;
+  minRole?: string;
+}
+
+const navItems: NavItem[] = [
   { label: "项目", href: "/projects", icon: "📁" },
-];
-
-const settingsItems = [
-  { label: "模型配置", href: "/settings/models", icon: "🤖" },
-  { label: "用户管理", href: "/settings/users", icon: "👥" },
-  { label: "审计日志", href: "/settings/audit", icon: "📋" },
+  { label: "全局设置", href: "/settings/models", icon: "⚙️", minRole: "tenant_admin" },
+  { label: "操作日志", href: "/admin/audit-logs", icon: "📋", minRole: "tenant_admin" },
 ];
 
 export function Sidebar() {
   const pathname = usePathname();
+  const { hasRole } = usePermission();
 
   return (
     <aside className="flex h-screen w-56 flex-col border-r border-gray-200 bg-white">
@@ -27,7 +32,9 @@ export function Sidebar() {
 
       <nav className="flex-1 overflow-y-auto p-3">
         <ul className="space-y-1">
-          {navItems.map((item) => {
+          {navItems
+            .filter((item) => !item.minRole || hasRole(item.minRole))
+            .map((item) => {
             const isActive = pathname.startsWith(item.href);
             return (
               <li key={item.href}>
@@ -48,30 +55,6 @@ export function Sidebar() {
           })}
         </ul>
 
-        <div className="mt-6 border-t border-gray-200 pt-4">
-          <p className="mb-2 px-3 text-xs font-medium uppercase text-gray-400">系统管理</p>
-          <ul className="space-y-1">
-            {settingsItems.map((item) => {
-              const isActive = pathname.startsWith(item.href);
-              return (
-                <li key={item.href}>
-                  <Link
-                    href={item.href}
-                    className={cn(
-                      "flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors",
-                      isActive
-                        ? "bg-primary-50 font-medium text-primary-700"
-                        : "text-gray-600 hover:bg-gray-100 hover:text-gray-900",
-                    )}
-                  >
-                    <span className="text-base">{item.icon}</span>
-                    {item.label}
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
       </nav>
     </aside>
   );

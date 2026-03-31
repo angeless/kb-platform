@@ -14,7 +14,7 @@ from httpx import AsyncClient
 
 
 async def _register_tenant(client: AsyncClient, name: str) -> dict:
-    """Register a new tenant and return {access_token, tenant_id, user_id}."""
+    """Register a new tenant and return {access_token, kb_id, user_id}."""
     email = f"{name}-{uuid.uuid4().hex[:6]}@test.com"
     resp = await client.post(
         "/v1/auth/register",

@@ -15,7 +15,7 @@ from shared_schemas.model_config import (
     ModelRouteUpdate,
 )
 
-from app.deps import get_current_user, get_db, get_tenant_id, require_role
+from app.deps import get_current_user, get_db, get_kb_id, require_role
 from app.services.audit_service import AuditService
 from app.services.model_provider_service import ModelProviderService
 from shared_models import User
@@ -45,12 +45,12 @@ _RESP_AUTH = {
 async def create_provider(
     body: ModelProviderCreate,
     db: AsyncSession = Depends(get_db),
-    tenant_id: uuid.UUID = Depends(get_tenant_id),
+    kb_id: uuid.UUID = Depends(get_kb_id),
     current_user: User = require_role("tenant_admin"),
 ):
-    svc = ModelProviderService(db, tenant_id)
+    svc = ModelProviderService(db, kb_id)
     provider_dict = await svc.create_provider(body.model_dump())
-    audit = AuditService(db, tenant_id, current_user.id)
+    audit = AuditService(db, kb_id, current_user.id)
     await audit.log("create", "model_provider", provider_dict["id"])
     return DataResponse(data=ModelProviderOut.model_validate(provider_dict))
 
@@ -68,9 +68,9 @@ async def create_provider(
 )
 async def list_providers(
     db: AsyncSession = Depends(get_db),
-    tenant_id: uuid.UUID = Depends(get_tenant_id),
+    kb_id: uuid.UUID = Depends(get_kb_id),
 ):
-    svc = ModelProviderService(db, tenant_id)
+    svc = ModelProviderService(db, kb_id)
     providers = await svc.list_providers()
     return ListResponse(
         data=[ModelProviderOut.model_validate(p) for p in providers],
@@ -93,9 +93,9 @@ async def list_providers(
 async def test_provider(
     body: ModelProviderTestRequest,
     db: AsyncSession = Depends(get_db),
-    tenant_id: uuid.UUID = Depends(get_tenant_id),
+    kb_id: uuid.UUID = Depends(get_kb_id),
 ):
-    svc = ModelProviderService(db, tenant_id)
+    svc = ModelProviderService(db, kb_id)
     result = await svc.test_provider(body.provider_id)
     return DataResponse(data=result)
 
@@ -116,10 +116,10 @@ async def test_provider(
 async def create_route(
     body: ModelRouteCreate,
     db: AsyncSession = Depends(get_db),
-    tenant_id: uuid.UUID = Depends(get_tenant_id),
+    kb_id: uuid.UUID = Depends(get_kb_id),
     _user: User = require_role("tenant_admin"),
 ):
-    svc = ModelProviderService(db, tenant_id)
+    svc = ModelProviderService(db, kb_id)
     route = await svc.create_route(body.model_dump())
     return DataResponse(data=ModelRouteOut.model_validate(route))
 
@@ -137,9 +137,9 @@ async def create_route(
 )
 async def list_routes(
     db: AsyncSession = Depends(get_db),
-    tenant_id: uuid.UUID = Depends(get_tenant_id),
+    kb_id: uuid.UUID = Depends(get_kb_id),
 ):
-    svc = ModelProviderService(db, tenant_id)
+    svc = ModelProviderService(db, kb_id)
     routes = await svc.list_routes()
     return ListResponse(
         data=[ModelRouteOut.model_validate(r) for r in routes],
@@ -164,10 +164,10 @@ async def update_route(
     route_id: uuid.UUID,
     body: ModelRouteUpdate,
     db: AsyncSession = Depends(get_db),
-    tenant_id: uuid.UUID = Depends(get_tenant_id),
+    kb_id: uuid.UUID = Depends(get_kb_id),
     _user: User = require_role("tenant_admin"),
 ):
-    svc = ModelProviderService(db, tenant_id)
+    svc = ModelProviderService(db, kb_id)
     route = await svc.update_route(route_id, body.model_dump(exclude_unset=True))
     return DataResponse(data=ModelRouteOut.model_validate(route))
 
@@ -187,9 +187,9 @@ async def update_route(
 async def delete_route(
     route_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    tenant_id: uuid.UUID = Depends(get_tenant_id),
+    kb_id: uuid.UUID = Depends(get_kb_id),
     _user: User = require_role("tenant_admin"),
 ):
-    svc = ModelProviderService(db, tenant_id)
+    svc = ModelProviderService(db, kb_id)
     await svc.delete_route(route_id)
     return DataResponse(data={"deleted": True})

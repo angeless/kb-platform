@@ -25,7 +25,7 @@ async def viewer_headers(db_session: AsyncSession, auth_headers: dict) -> dict[s
 
     user = User(
         id=uuid.uuid4(),
-        tenant_id=tenant.id,
+        kb_id=tenant.id,
         email=f"viewer-{uuid.uuid4().hex[:8]}@example.com",
         password_hash=hash_password("test-password"),
         role="viewer",
@@ -35,7 +35,7 @@ async def viewer_headers(db_session: AsyncSession, auth_headers: dict) -> dict[s
     await db_session.flush()
 
     token = create_access_token(
-        data={"sub": str(user.id), "tenant_id": str(tenant.id), "role": user.role},
+        data={"sub": str(user.id), "kb_id": str(tenant.id), "role": user.role},
         secret=settings.jwt_secret,
         algorithm=settings.jwt_algorithm,
     )
@@ -52,7 +52,7 @@ async def editor_headers(db_session: AsyncSession, auth_headers: dict) -> dict[s
 
     user = User(
         id=uuid.uuid4(),
-        tenant_id=tenant.id,
+        kb_id=tenant.id,
         email=f"editor-{uuid.uuid4().hex[:8]}@example.com",
         password_hash=hash_password("test-password"),
         role="editor",
@@ -62,7 +62,7 @@ async def editor_headers(db_session: AsyncSession, auth_headers: dict) -> dict[s
     await db_session.flush()
 
     token = create_access_token(
-        data={"sub": str(user.id), "tenant_id": str(tenant.id), "role": user.role},
+        data={"sub": str(user.id), "kb_id": str(tenant.id), "role": user.role},
         secret=settings.jwt_secret,
         algorithm=settings.jwt_algorithm,
     )

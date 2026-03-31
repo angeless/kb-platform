@@ -73,13 +73,16 @@ export default function ProjectsPage() {
               placeholder="项目名称"
               className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
             />
-            <input
-              type="text"
-              value={newIndustry}
-              onChange={(e) => setNewIndustry(e.target.value)}
-              placeholder="行业（可选）"
-              className="w-40 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
-            />
+            <div className="flex flex-col">
+              <input
+                type="text"
+                value={newIndustry}
+                onChange={(e) => setNewIndustry(e.target.value)}
+                placeholder="例如：医疗、金融、教育"
+                className="w-48 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+              />
+              <span className="mt-1 text-xs text-gray-400">帮助 AI 更准确地理解文档内容</span>
+            </div>
             <button
               type="submit"
               disabled={createProject.isPending}

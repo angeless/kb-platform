@@ -11,9 +11,9 @@ from app.utils.math_utils import cosine_similarity
 
 
 class CrossRefService:
-    def __init__(self, db: AsyncSession, tenant_id: uuid.UUID):
+    def __init__(self, db: AsyncSession, kb_id: uuid.UUID):
         self.db = db
-        self.tenant_id = tenant_id
+        self.kb_id = kb_id
 
     async def create(
         self,
@@ -26,7 +26,7 @@ class CrossRefService:
     ) -> CrossReference:
         ref = CrossReference(
             id=uuid.uuid4(),
-            tenant_id=self.tenant_id,
+            kb_id=self.kb_id,
             source_doc_id=source_doc_id,
             target_doc_id=target_doc_id,
             relation_type=relation_type,
@@ -44,14 +44,14 @@ class CrossRefService:
         as_source = await self.db.execute(
             select(CrossReference).where(
                 CrossReference.source_doc_id == doc_id,
-                CrossReference.tenant_id == self.tenant_id,
+                CrossReference.kb_id == self.kb_id,
             )
         )
         # As target
         as_target = await self.db.execute(
             select(CrossReference).where(
                 CrossReference.target_doc_id == doc_id,
-                CrossReference.tenant_id == self.tenant_id,
+                CrossReference.kb_id == self.kb_id,
             )
         )
 
@@ -100,7 +100,7 @@ class CrossRefService:
         result = await self.db.execute(
             delete(CrossReference).where(
                 CrossReference.id == ref_id,
-                CrossReference.tenant_id == self.tenant_id,
+                CrossReference.kb_id == self.kb_id,
             )
         )
         return result.rowcount > 0
@@ -119,13 +119,13 @@ class CrossRefService:
         existing_as_source = await self.db.execute(
             select(CrossReference.target_doc_id).where(
                 CrossReference.source_doc_id == doc_id,
-                CrossReference.tenant_id == self.tenant_id,
+                CrossReference.kb_id == self.kb_id,
             )
         )
         existing_as_target = await self.db.execute(
             select(CrossReference.source_doc_id).where(
                 CrossReference.target_doc_id == doc_id,
-                CrossReference.tenant_id == self.tenant_id,
+                CrossReference.kb_id == self.kb_id,
             )
         )
         linked_ids = {row[0] for row in existing_as_source.all()}
@@ -157,7 +157,7 @@ class CrossRefService:
                 select(DocEmbedding).where(
                     DocEmbedding.project_id.in_(
                         select(KnowledgeDoc.project_id).where(
-                            KnowledgeDoc.tenant_id == self.tenant_id
+                            KnowledgeDoc.kb_id == self.kb_id
                         )
                     ),
                     DocEmbedding.doc_id != doc_id,
@@ -193,7 +193,7 @@ class CrossRefService:
             doc_kw_set = set(doc.keywords)
             all_docs = await self.db.execute(
                 select(KnowledgeDoc).where(
-                    KnowledgeDoc.tenant_id == self.tenant_id,
+                    KnowledgeDoc.kb_id == self.kb_id,
                     KnowledgeDoc.id != doc_id,
                     KnowledgeDoc.keywords.isnot(None),
                 )
@@ -243,7 +243,7 @@ class CrossRefService:
                     if not other_ver:
                         continue
                     other_doc = await self.db.get(KnowledgeDoc, other_ver.doc_id)
-                    if not other_doc or other_doc.tenant_id != self.tenant_id:
+                    if not other_doc or other_doc.kb_id != self.kb_id:
                         continue
                     _add_candidate(
                         str(other_doc.id),
@@ -265,7 +265,7 @@ class CrossRefService:
         docs_result = await self.db.execute(
             select(KnowledgeDoc).where(
                 KnowledgeDoc.project_id == project_id,
-                KnowledgeDoc.tenant_id == self.tenant_id,
+                KnowledgeDoc.kb_id == self.kb_id,
             )
         )
         docs = docs_result.scalars().all()
@@ -279,7 +279,7 @@ class CrossRefService:
         # Get all cross-refs where source or target is in this project
         refs_result = await self.db.execute(
             select(CrossReference).where(
-                CrossReference.tenant_id == self.tenant_id,
+                CrossReference.kb_id == self.kb_id,
                 or_(
                     CrossReference.source_doc_id.in_(doc_ids),
                     CrossReference.target_doc_id.in_(doc_ids),

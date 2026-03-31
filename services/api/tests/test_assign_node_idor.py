@@ -34,7 +34,7 @@ async def test_assign_node_same_project_succeeds():
 
     svc = DocService.__new__(DocService)
     svc.db = AsyncMock()
-    svc.tenant_id = uuid.uuid4()
+    svc.kb_id = uuid.uuid4()
 
     # Mock self.get() to return the doc
     svc.get = AsyncMock(return_value=doc)
@@ -62,7 +62,7 @@ async def test_assign_node_different_project_raises_404():
 
     svc = DocService.__new__(DocService)
     svc.db = AsyncMock()
-    svc.tenant_id = uuid.uuid4()
+    svc.kb_id = uuid.uuid4()
 
     svc.get = AsyncMock(return_value=doc)
 
@@ -89,7 +89,7 @@ async def test_assign_node_nonexistent_raises_404():
 
     svc = DocService.__new__(DocService)
     svc.db = AsyncMock()
-    svc.tenant_id = uuid.uuid4()
+    svc.kb_id = uuid.uuid4()
 
     svc.get = AsyncMock(return_value=doc)
 

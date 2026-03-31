@@ -45,12 +45,12 @@ def _make_high_ratio_zip(filename: str) -> bytes:
 def mock_asset_service():
     """Create an AssetService with mocked DB and small limits for testing."""
     db = AsyncMock()
-    tenant_id = uuid.uuid4()
+    kb_id = uuid.uuid4()
     user_id = uuid.uuid4()
     project_id = uuid.uuid4()
 
     # Mock _verify_project to return successfully
-    svc = AssetService(db, tenant_id, user_id, storage=None, max_upload_size_bytes=1024)  # 1KB limit for testing
+    svc = AssetService(db, kb_id, user_id, storage=None, max_upload_size_bytes=1024)  # 1KB limit for testing
 
     # Mock _verify_project
     svc._verify_project = AsyncMock()

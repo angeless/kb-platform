@@ -21,7 +21,7 @@ def _make_service(result_row=None) -> TenantService:
     mock_result.scalar_one_or_none.return_value = result_row
     mock_db.execute.return_value = mock_result
 
-    return TenantService(db=mock_db, tenant_id=uuid.uuid4())
+    return TenantService(db=mock_db, kb_id=uuid.uuid4())
 
 
 @pytest.mark.asyncio
@@ -54,7 +54,7 @@ async def test_verify_project_wrong_tenant():
     """When project belongs to another tenant, it won't match the query → NotFoundException."""
     from shared_errors import NotFoundException
 
-    # The query filters by tenant_id, so a wrong-tenant project simply returns None
+    # The query filters by kb_id, so a wrong-tenant project simply returns None
     svc = _make_service(result_row=None)
 
     with pytest.raises(NotFoundException):

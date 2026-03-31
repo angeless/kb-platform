@@ -7,9 +7,9 @@ from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
 class RegisterRequest(BaseModel):
-    tenant_name: str = Field(..., min_length=1, max_length=200)
     email: EmailStr
     password: str = Field(..., min_length=8, max_length=128)
+    display_name: str | None = Field(None, max_length=200)
 
     @field_validator("password")
     @classmethod
@@ -26,7 +26,7 @@ class RegisterRequest(BaseModel):
 
 
 class RegisterResponse(BaseModel):
-    tenant_id: UUID
+    kb_id: UUID
     user_id: UUID
     email: str
 
@@ -38,7 +38,6 @@ class LoginRequest(BaseModel):
 
 class TokenResponse(BaseModel):
     access_token: str
-    refresh_token: str
     token_type: str = "bearer"
 
 

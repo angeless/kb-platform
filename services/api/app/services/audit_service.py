@@ -16,9 +16,9 @@ logger = logging.getLogger(__name__)
 class AuditService:
     """Write and query audit log entries."""
 
-    def __init__(self, db: AsyncSession, tenant_id: uuid.UUID, user_id: uuid.UUID) -> None:
+    def __init__(self, db: AsyncSession, kb_id: uuid.UUID, user_id: uuid.UUID) -> None:
         self.db = db
-        self.tenant_id = tenant_id
+        self.kb_id = kb_id
         self.user_id = user_id
 
     async def log(
@@ -33,7 +33,7 @@ class AuditService:
         try:
             entry = AuditLog(
                 id=uuid.uuid4(),
-                tenant_id=self.tenant_id,
+                kb_id=self.kb_id,
                 project_id=project_id,
                 user_id=self.user_id,
                 action=action,
@@ -55,7 +55,7 @@ class AuditService:
         page_size: int = 20,
     ) -> tuple[list[AuditLog], int]:
         """Query audit logs with optional filters."""
-        base = select(AuditLog).where(AuditLog.tenant_id == self.tenant_id)
+        base = select(AuditLog).where(AuditLog.kb_id == self.kb_id)
 
         if project_id is not None:
             base = base.where(AuditLog.project_id == project_id)

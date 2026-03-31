@@ -140,7 +140,7 @@ async def test_upload_file_type_rejected(client: AsyncClient, auth_headers: dict
 
 @pytest.mark.asyncio
 async def test_upload_object_path_format(client: AsyncClient, auth_headers: dict):
-    """object_path should follow {tenant_id}/{project_id}/{asset_id}/{filename} format."""
+    """object_path should follow {kb_id}/{project_id}/{asset_id}/{filename} format."""
     proj_resp = await client.post(
         "/v1/projects",
         json={"name": "Path Format Project"},

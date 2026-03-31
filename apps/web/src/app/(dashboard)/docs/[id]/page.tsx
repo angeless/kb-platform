@@ -1,11 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { api, ApiClientError } from "@/lib/api";
 import { StatusBadge } from "@/components/status-badge";
+import { PermissionGuard } from "@/components/PermissionGuard";
 import { MarkdownView } from "@/components/markdown-view";
+import { VersionPanel } from "@/components/version-history/VersionPanel";
+import { CrossRefPanel } from "@/components/cross-ref-panel";
 
 interface SourceRef {
   id: string;
@@ -30,7 +33,22 @@ interface DocDetail {
   title: string;
   current_version: number;
   status: string;
+  summary: string | null;
+  summary_confidence: number | null;
+  keywords: string[] | null;
+  knowledge_type: string | null;
   versions: DocVersion[];
+}
+
+function ConfidenceBadge({ confidence }: { confidence: number | null | undefined }) {
+  if (confidence == null) return null;
+  if (confidence >= 0.8) {
+    return <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-700">AI 高置信</span>;
+  }
+  if (confidence >= 0.6) {
+    return <span className="rounded-full bg-yellow-100 px-2 py-0.5 text-xs text-yellow-700">AI 中置信</span>;
+  }
+  return <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs text-red-700">AI 低置信 — 建议人工审核</span>;
 }
 
 export default function DocDetailPage() {
@@ -42,21 +60,99 @@ export default function DocDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [actionMsg, setActionMsg] = useState("");
+  const [showHistory, setShowHistory] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [summarizing, setSummarizing] = useState(false);
+  const [suggestingTags, setSuggestingTags] = useState(false);
+  const exportRef = useRef<HTMLDivElement>(null);
+
+  const fetchDoc = useCallback(async () => {
+    try {
+      const resp = await api.get<DocDetail>(`/v1/docs/${docId}`);
+      setDoc(resp.data);
+      setActiveVersion(resp.data.current_version);
+    } catch (e) {
+      setError(e instanceof ApiClientError ? e.message : "加载失败");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [docId]);
 
   useEffect(() => {
-    const fetchDoc = async () => {
-      try {
-        const resp = await api.get<DocDetail>(`/v1/docs/${docId}`);
-        setDoc(resp.data);
-        setActiveVersion(resp.data.current_version);
-      } catch (e) {
-        setError(e instanceof ApiClientError ? e.message : "加载失败");
-      } finally {
-        setIsLoading(false);
+    fetchDoc();
+  }, [fetchDoc]);
+
+  // Close export menu on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (exportRef.current && !exportRef.current.contains(e.target as Node)) {
+        setShowExportMenu(false);
       }
     };
-    fetchDoc();
-  }, [docId]);
+    if (showExportMenu) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
+    }
+  }, [showExportMenu]);
+
+  const handleExport = async (fmt: "markdown" | "pdf" | "docx") => {
+    setShowExportMenu(false);
+    setExporting(true);
+    setActionMsg("");
+    try {
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      const resp = await fetch(`${apiBase}/v1/docs/${docId}/export?format=${fmt}`, {
+        credentials: "include",
+      });
+      if (!resp.ok) {
+        throw new Error(`导出失败 (${resp.status})`);
+      }
+      const blob = await resp.blob();
+      const disposition = resp.headers.get("Content-Disposition") || "";
+      const filenameMatch = disposition.match(/filename="?([^"]+)"?/);
+      const filename = filenameMatch ? filenameMatch[1] : `document.${fmt === "markdown" ? "md" : fmt}`;
+
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setActionMsg(e instanceof Error ? e.message : "导出失败");
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleAiSummarize = async () => {
+    setSummarizing(true);
+    setActionMsg("");
+    try {
+      await api.post(`/v1/docs/${docId}/ai-summarize`, {});
+      await fetchDoc();
+      setActionMsg("操作成功");
+    } catch (e) {
+      setActionMsg(e instanceof ApiClientError ? e.message : "摘要生成失败");
+    } finally {
+      setSummarizing(false);
+    }
+  };
+
+  const handleAiSuggestTags = async () => {
+    setSuggestingTags(true);
+    setActionMsg("");
+    try {
+      await api.post(`/v1/docs/${docId}/ai-suggest-tags`, {});
+      await fetchDoc();
+      setActionMsg("操作成功");
+    } catch (e) {
+      setActionMsg(e instanceof ApiClientError ? e.message : "标签推荐失败");
+    } finally {
+      setSuggestingTags(false);
+    }
+  };
 
   const handleAction = async (action: string) => {
     setActionMsg("");
@@ -81,7 +177,8 @@ export default function DocDetailPage() {
   const currentVer = doc.versions.find((v) => v.version === activeVersion);
 
   return (
-    <div className="mx-auto max-w-4xl">
+    <div className="flex gap-0">
+    <div className={`flex-1 ${showHistory ? "" : "mx-auto max-w-4xl"}`}>
       {/* Header */}
       <div className="mb-6">
         <div className="flex items-center gap-3">
@@ -105,25 +202,127 @@ export default function DocDetailPage() {
       <div className="mb-6 flex gap-2">
         {doc.status === "draft" && (
           <>
-            <Link href={`/docs/${docId}/edit`} className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700">
-              编辑内容
-            </Link>
-            <button onClick={() => handleAction("review")} className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
-              提交审核
-            </button>
+            <PermissionGuard action="edit">
+              <Link href={`/docs/${docId}/edit`} className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700">
+                编辑内容
+              </Link>
+            </PermissionGuard>
+            <PermissionGuard action="edit">
+              <button onClick={() => handleAction("review")} className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
+                提交审核
+              </button>
+            </PermissionGuard>
           </>
         )}
         {doc.status === "reviewing" && (
-          <button onClick={() => handleAction("publish")} className="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700">
-            发布
-          </button>
+          <PermissionGuard action="publish">
+            <button onClick={() => handleAction("publish")} className="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700">
+              发布
+            </button>
+          </PermissionGuard>
         )}
         {doc.current_version > 1 && (
           <Link href={`/docs/${docId}/diff?from=1&to=${doc.current_version}`} className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
             版本对比
           </Link>
         )}
+        {/* Export dropdown */}
+        <div ref={exportRef} className="relative">
+          <button
+            onClick={() => setShowExportMenu(!showExportMenu)}
+            disabled={exporting}
+            className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+          >
+            {exporting ? "导出中..." : "导出 ▾"}
+          </button>
+          {showExportMenu && (
+            <div className="absolute left-0 top-full z-10 mt-1 w-40 rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
+              <button onClick={() => handleExport("markdown")} className="block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50">
+                Markdown (.md)
+              </button>
+              <button onClick={() => handleExport("pdf")} className="block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50">
+                PDF (.pdf)
+              </button>
+              <button onClick={() => handleExport("docx")} className="block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50">
+                Word (.docx)
+              </button>
+            </div>
+          )}
+        </div>
+        <button
+          onClick={() => setShowHistory(!showHistory)}
+          className={`rounded-lg border px-4 py-2 text-sm ${showHistory ? "border-primary-300 bg-primary-50 text-primary-700" : "border-gray-300 text-gray-700 hover:bg-gray-50"}`}
+        >
+          历史版本
+        </button>
       </div>
+
+      {/* Summary */}
+      <div className="mb-4 rounded-lg border border-gray-200 bg-white p-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-semibold text-gray-600">摘要</h3>
+            {doc.summary && <ConfidenceBadge confidence={doc.summary_confidence} />}
+          </div>
+          <PermissionGuard action="edit">
+            <button
+              onClick={handleAiSummarize}
+              disabled={summarizing}
+              className={`rounded border px-3 py-1 text-xs disabled:opacity-50 ${
+                doc.summary_confidence != null && doc.summary_confidence < 0.6
+                  ? "border-red-300 bg-red-50 text-red-600 hover:bg-red-100"
+                  : "border-gray-300 text-gray-600 hover:bg-gray-50"
+              }`}
+            >
+              {summarizing ? "生成中..." : doc.summary ? "重新生成" : "生成摘要"}
+            </button>
+          </PermissionGuard>
+        </div>
+        <p className="mt-2 text-sm text-gray-700">
+          {doc.summary || <span className="text-gray-400">暂无摘要</span>}
+        </p>
+      </div>
+
+      {/* Keywords */}
+      <div className="mb-4 rounded-lg border border-gray-200 bg-white p-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-semibold text-gray-600">关键词</h3>
+            {doc.keywords?.length && <ConfidenceBadge confidence={doc.summary_confidence} />}
+          </div>
+          <PermissionGuard action="edit">
+            <button
+              onClick={handleAiSuggestTags}
+              disabled={suggestingTags}
+              className={`rounded border px-3 py-1 text-xs disabled:opacity-50 ${
+                doc.summary_confidence != null && doc.summary_confidence < 0.6
+                  ? "border-red-300 bg-red-50 text-red-600 hover:bg-red-100"
+                  : "border-gray-300 text-gray-600 hover:bg-gray-50"
+              }`}
+            >
+              {suggestingTags ? "推荐中..." : doc.keywords?.length ? "刷新标签" : "推荐标签"}
+            </button>
+          </PermissionGuard>
+        </div>
+        <div className="mt-2 flex flex-wrap gap-2">
+          {doc.keywords && doc.keywords.length > 0 ? (
+            doc.keywords.map((kw) => (
+              <span key={kw} className="rounded-full bg-gray-100 px-3 py-1 text-xs text-gray-600">
+                {kw}
+              </span>
+            ))
+          ) : (
+            <span className="text-sm text-gray-400">暂无关键词</span>
+          )}
+        </div>
+      </div>
+
+      {/* Cross-reference panel */}
+      {doc.project_id && (
+        <div className="mb-4">
+          <CrossRefPanel docId={docId} projectId={doc.project_id} />
+        </div>
+      )}
 
       {/* Version Tabs */}
       {doc.versions.length > 1 && (
@@ -174,6 +373,22 @@ export default function DocDetailPage() {
       ) : (
         <div className="py-8 text-center text-gray-400">暂无内容</div>
       )}
+    </div>
+
+    {/* Version History Panel */}
+    {showHistory && (
+      <div className="w-96 flex-shrink-0">
+        <VersionPanel
+          docId={docId}
+          currentVersion={doc.current_version}
+          onClose={() => setShowHistory(false)}
+          onRollbackSuccess={() => {
+            setShowHistory(false);
+            fetchDoc();
+          }}
+        />
+      </div>
+    )}
     </div>
   );
 }

@@ -11,7 +11,7 @@ from shared_config.settings import Settings
 logger = logging.getLogger(__name__)
 
 # Asset types that have a registered parser in ingestion-worker
-PARSEABLE_ASSET_TYPES: set[str] = {"text", "pdf", "doc", "document"}
+PARSEABLE_ASSET_TYPES: set[str] = {"text", "pdf", "doc", "document", "image", "audio"}
 
 # Allowed file extensions for upload
 ALLOWED_EXTENSIONS: set[str] = {

@@ -37,9 +37,9 @@ SYSTEM_PROMPT = """你是一个知识库助手。用户会提出一个问题，�
 class QAService:
     """RAG-based question answering: retrieve relevant docs then generate answer via LLM."""
 
-    def __init__(self, db: AsyncSession, tenant_id: uuid.UUID, settings: Settings) -> None:
+    def __init__(self, db: AsyncSession, kb_id: uuid.UUID, settings: Settings) -> None:
         self.db = db
-        self.tenant_id = tenant_id
+        self.kb_id = kb_id
         self.settings = settings
 
     async def ask(self, project_id: uuid.UUID, question: str, top_k: int = 5) -> dict:
@@ -51,7 +51,7 @@ class QAService:
         4. Return structured response with sources and related questions
         """
         # Step 1: Retrieve relevant documents via hybrid search
-        search_svc = SearchService(self.db, self.tenant_id)
+        search_svc = SearchService(self.db, self.kb_id)
         results, total = await search_svc.hybrid_search(project_id, question, page=1, page_size=top_k)
 
         if not results:
@@ -110,7 +110,7 @@ class QAService:
     async def ask_stream(self, project_id: uuid.UUID, question: str, top_k: int = 5) -> AsyncGenerator[str, None]:
         """Stream answer via SSE. Yields 'data: ...\n\n' formatted events."""
         # Step 1: Retrieve relevant documents
-        search_svc = SearchService(self.db, self.tenant_id)
+        search_svc = SearchService(self.db, self.kb_id)
         results, total = await search_svc.hybrid_search(project_id, question, page=1, page_size=top_k)
 
         if not results:

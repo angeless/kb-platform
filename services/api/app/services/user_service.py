@@ -16,13 +16,13 @@ from app.utils.security import hash_password
 class UserService:
     """Operations for users, scoped to a single tenant."""
 
-    def __init__(self, db: AsyncSession, tenant_id: uuid.UUID) -> None:
+    def __init__(self, db: AsyncSession, kb_id: uuid.UUID) -> None:
         self.db = db
-        self.tenant_id = tenant_id
+        self.kb_id = kb_id
 
     async def list(self, page: int = 1, page_size: int = 20) -> tuple[list[User], int]:
         """Return paginated users for the tenant."""
-        base = select(User).where(User.tenant_id == self.tenant_id)
+        base = select(User).where(User.kb_id == self.kb_id)
 
         count_q = select(func.count()).select_from(base.subquery())
         total = (await self.db.execute(count_q)).scalar_one()
@@ -53,7 +53,7 @@ class UserService:
         temp_password = secrets.token_urlsafe(16)
         user = User(
             id=uuid.uuid4(),
-            tenant_id=self.tenant_id,
+            kb_id=self.kb_id,
             email=email,
             password_hash=hash_password(temp_password),
             role=role,
@@ -75,7 +75,7 @@ class UserService:
 
         q = select(User).where(
             User.id == user_id,
-            User.tenant_id == self.tenant_id,
+            User.kb_id == self.kb_id,
         )
         result = await self.db.execute(q)
         user = result.scalar_one_or_none()
@@ -101,7 +101,7 @@ class UserService:
 
         q = select(User).where(
             User.id == user_id,
-            User.tenant_id == self.tenant_id,
+            User.kb_id == self.kb_id,
         )
         result = await self.db.execute(q)
         user = result.scalar_one_or_none()
@@ -115,7 +115,7 @@ class UserService:
         if user.role in ("tenant_admin", "admin"):
             admin_count_q = select(func.count()).select_from(
                 select(User).where(
-                    User.tenant_id == self.tenant_id,
+                    User.kb_id == self.kb_id,
                     User.role.in_(["tenant_admin", "admin"]),
                     User.status == "active",
                 ).subquery()

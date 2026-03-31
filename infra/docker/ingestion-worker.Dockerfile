@@ -20,6 +20,9 @@ RUN pip install --no-cache-dir \
 COPY services/ingestion-worker/requirements.lock /app/requirements.lock
 RUN pip install --no-cache-dir --no-deps -r /app/requirements.lock
 
+# Install openai-whisper separately (large dependency tree including PyTorch)
+RUN pip install --no-cache-dir openai-whisper>=20231117
+
 # Install ingestion worker (no-deps: all deps already installed above)
 COPY services/ingestion-worker/ /app/
 RUN pip install --no-cache-dir --no-deps -e /app/

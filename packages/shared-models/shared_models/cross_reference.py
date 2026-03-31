@@ -15,10 +15,10 @@ class CrossReference(Base):
         UniqueConstraint("source_doc_id", "target_doc_id", "relation_type", name="uq_cross_ref_pair"),
         Index("ix_cross_ref_source", "source_doc_id"),
         Index("ix_cross_ref_target", "target_doc_id"),
-        Index("ix_cross_ref_tenant", "tenant_id"),
+        Index("ix_cross_ref_tenant", "kb_id"),
     )
 
-    tenant_id: Mapped[uuid.UUID] = mapped_column(
+    kb_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("tenant.id"), nullable=False
     )
     source_doc_id: Mapped[uuid.UUID] = mapped_column(

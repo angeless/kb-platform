@@ -23,7 +23,7 @@ class UserUpdate(BaseModel):
 
 class UserOut(BaseModel):
     id: UUID
-    tenant_id: UUID
+    kb_id: UUID
     email: str
     role: str
     status: str

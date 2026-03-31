@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from shared_schemas.architecture import ArchitectureOut, NodeCreate, NodeOut, NodeUpdate
 from shared_schemas.common import DataResponse, ErrorDetail, ListResponse, PaginationMeta
 
-from app.deps import get_db, get_tenant_id, require_role
+from app.deps import get_db, get_kb_id, require_role
 from shared_models import User
 from app.services.architecture_service import ArchitectureService
 
@@ -35,9 +35,9 @@ _RESP_AUTH = {
 async def list_architectures(
     project_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    tenant_id: uuid.UUID = Depends(get_tenant_id),
+    kb_id: uuid.UUID = Depends(get_kb_id),
 ):
-    svc = ArchitectureService(db, tenant_id)
+    svc = ArchitectureService(db, kb_id)
     archs = await svc.list_by_project(project_id)
     return ListResponse(
         data=[ArchitectureOut.model_validate(a) for a in archs],
@@ -60,9 +60,9 @@ async def list_architectures(
 async def get_architecture(
     arch_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    tenant_id: uuid.UUID = Depends(get_tenant_id),
+    kb_id: uuid.UUID = Depends(get_kb_id),
 ):
-    svc = ArchitectureService(db, tenant_id)
+    svc = ArchitectureService(db, kb_id)
     arch = await svc.get(arch_id)
     return DataResponse(data=ArchitectureOut.model_validate(arch))
 
@@ -82,9 +82,9 @@ async def get_architecture(
 async def list_nodes(
     arch_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    tenant_id: uuid.UUID = Depends(get_tenant_id),
+    kb_id: uuid.UUID = Depends(get_kb_id),
 ):
-    svc = ArchitectureService(db, tenant_id)
+    svc = ArchitectureService(db, kb_id)
     nodes = await svc.list_nodes(arch_id)
     return ListResponse(
         data=[NodeOut.model_validate(n) for n in nodes],
@@ -108,10 +108,10 @@ async def list_nodes(
 async def publish_architecture(
     arch_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    tenant_id: uuid.UUID = Depends(get_tenant_id),
+    kb_id: uuid.UUID = Depends(get_kb_id),
     _user: User = require_role("project_admin"),
 ):
-    svc = ArchitectureService(db, tenant_id)
+    svc = ArchitectureService(db, kb_id)
     arch = await svc.publish(arch_id)
     return DataResponse(data=ArchitectureOut.model_validate(arch))
 
@@ -134,10 +134,10 @@ async def create_node(
     arch_id: uuid.UUID,
     body: NodeCreate,
     db: AsyncSession = Depends(get_db),
-    tenant_id: uuid.UUID = Depends(get_tenant_id),
+    kb_id: uuid.UUID = Depends(get_kb_id),
     _user: User = require_role("project_admin"),
 ):
-    svc = ArchitectureService(db, tenant_id)
+    svc = ArchitectureService(db, kb_id)
     node = await svc.create_node(arch_id, body.model_dump())
     return DataResponse(data=NodeOut.model_validate(node))
 
@@ -160,10 +160,10 @@ async def update_node(
     node_id: uuid.UUID,
     body: NodeUpdate,
     db: AsyncSession = Depends(get_db),
-    tenant_id: uuid.UUID = Depends(get_tenant_id),
+    kb_id: uuid.UUID = Depends(get_kb_id),
     _user: User = require_role("project_admin"),
 ):
-    svc = ArchitectureService(db, tenant_id)
+    svc = ArchitectureService(db, kb_id)
     node = await svc.update_node(arch_id, node_id, body.model_dump(exclude_unset=True))
     return DataResponse(data=NodeOut.model_validate(node))
 
@@ -184,10 +184,10 @@ async def update_node(
 async def fork_architecture(
     arch_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    tenant_id: uuid.UUID = Depends(get_tenant_id),
+    kb_id: uuid.UUID = Depends(get_kb_id),
     _user: User = require_role("project_admin"),
 ):
-    svc = ArchitectureService(db, tenant_id)
+    svc = ArchitectureService(db, kb_id)
     new_arch = await svc.fork(arch_id)
     return DataResponse(data=ArchitectureOut.model_validate(new_arch))
 
@@ -208,9 +208,9 @@ async def compare_architectures(
     arch_id: uuid.UUID,
     other_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    tenant_id: uuid.UUID = Depends(get_tenant_id),
+    kb_id: uuid.UUID = Depends(get_kb_id),
 ):
-    svc = ArchitectureService(db, tenant_id)
+    svc = ArchitectureService(db, kb_id)
     diff = await svc.compare(arch_id, other_id)
     return DataResponse(data=diff)
 
@@ -232,9 +232,9 @@ async def rollback_architecture(
     arch_id: uuid.UUID,
     target_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    tenant_id: uuid.UUID = Depends(get_tenant_id),
+    kb_id: uuid.UUID = Depends(get_kb_id),
     _user: User = require_role("project_admin"),
 ):
-    svc = ArchitectureService(db, tenant_id)
+    svc = ArchitectureService(db, kb_id)
     new_arch = await svc.rollback(arch_id, target_id)
     return DataResponse(data=ArchitectureOut.model_validate(new_arch))

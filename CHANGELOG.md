@@ -7,6 +7,52 @@
 
 ### 新增 (Added)
 - 自动化开发工作流（dev-workflow-upgrade v1.3）
+- PA Pass 统一认证接入：登录/注册/刷新代理到 Pass REST API，Pass JWT 为认证信任根，`GET /pass/me` 验证，首次登录自动创建 KB Tenant + User（v0.44.15）
+- 前端图谱页矛盾/模式展示：图谱中矛盾边以红色粗虚线展示、"检测矛盾"按钮调用 AI 检测后自动刷新图谱、项目仪表盘新增"知识洞察"卡片展示矛盾统计 + 主题聚类 + 高频关联 + 知识缺口、"发现模式"按钮调用 AI 分析（v0.46.7）
+- 前端 Pipeline 配置页：项目设置新增"知识提取配置" Tab，7 个 stage 卡片含启用/禁用开关，classify 支持置信度滑块 + 自定义实体类型标签输入，quality_check 支持最小内容长度 + 要求标题，conflict_detect 支持相似度阈值滑块，核心 stage 标注"核心"标签，支持重置为默认（v0.46.4）
+- 跨文档模式发现：`POST /v1/projects/{id}/ai-discover-patterns`，LLM 分析项目文档的 summary/keywords 生成主题聚类、高频关联和知识缺口，结果 Redis 缓存 24h（v0.46.6）
+- 跨文档矛盾检测：`POST /v1/projects/{id}/ai-detect-contradictions`，LLM 逐对比较文档事实一致性，检测到矛盾自动创建 contradicts 类型 CrossReference，severity 分三级，note 含证据（v0.46.5）
+- 用户自定义实体类型支持：classify/doc_generate/suggest_tags prompt 动态注入 entity_types 指引，通过 pipeline config params 管理，未设置时行为不变（v0.46.3）
+- Pipeline stage 运行时加载用户配置：run_pipeline 开头查询 PipelineStageConfig，disabled stage 跳过并发布 skipped 事件，config.params 传入各 stage 函数，quality_check 已参数化 min_content_length/require_title（v0.46.2）
+- Pipeline stage 配置 DB 模型 + CRUD API：`pipeline_stage_config` 表（project_id + stage_name 联合唯一），GET 返回 7 stage 含默认值、PUT 更新单个 stage、POST reset 恢复默认，Alembic 迁移（v0.46.1）
+- 前端文档列表虚拟滚动：@tanstack/react-virtual 虚拟化文档列表，pageSize 提升至 100，仅渲染可视区域行 + 10 行 overscan，快速滚动无白屏（v0.45.9）
+- 摘要/标签置信度展示：ConfidenceBadge 组件（高/中/低三档颜色），低置信度时"重新生成"按钮高亮提示，旧数据无 confidence 时降级兼容（v0.45.14）
+- 全局设置页重构：Tab 式布局（模型提供商 + 路由规则），路由规则支持 CRUD（添加/修改/删除），task_type 中文标签，tenant_admin 权限守卫（v0.45.12）
+- 审计日志页面：`/admin/audit-logs` 路由（tenant_admin 可见），操作日志表格+操作类型/资源类型筛选器+分页，侧边栏增加权限感知导航入口（v0.45.11）
+- 图谱页关系编辑：边展示中文关联类型标签、点击边弹出详情面板（来源/目标/类型）、editor+ 可删除关联、工具栏"添加关联"入口（v0.45.8）
+- 文档详情页跨文档关联面板：CrossRefPanel 组件展示关联列表、editor+ 添加/删除关联（Modal 表单+文档搜索）、AI 建议关联一键确认（v0.45.7）
+- AI 反思循环自检：generate_summary 和 suggest_tags 任务增加一轮 LLM 自我评审，置信度 < 0.7 自动使用修订版，summary_confidence 字段写入 DB 并通过 API 返回（v0.45.13）
+- AI 摘要与标签推荐 API：`POST /v1/docs/{id}/ai-summarize` 和 `POST /v1/docs/{id}/ai-suggest-tags`，Celery 异步调用 LLM 生成摘要写入 summary 字段、推荐关键词写入 keywords 字段（v0.45.5）
+- 文档导出支持 PDF/DOCX 格式：`GET /v1/docs/{id}/export?format=pdf|docx|markdown`，weasyprint PDF 渲染 + python-docx DOCX 生成，支持 CJK 字符（v0.45.2）
+- 文档详情页导出下拉菜单：Markdown / PDF / DOCX 三格式选择，浏览器直接下载（v0.45.3）
+- 审计日志写入集成：docs/projects/users 核心 CRUD 操作写入 audit_log 表（v0.45.10）
+- 文档详情页摘要/标签区块：展示 AI 生成的摘要和关键词 chip，提供"生成摘要"和"推荐标签"按钮（v0.45.6）
+- API 响应新增 summary/keywords/knowledge_type 字段到 KnowledgeDocOut 和 KnowledgeDocDetailOut（v0.45.6）
+- knowledge_doc 表新增 summary 字段（Alembic 迁移 p5d6e7f8g9h0）（v0.45.4）
+- 前端 RBAC 权限感知：usePermission hook + PermissionGuard 组件，按角色隐藏操作按钮（v0.44.1）
+- 侧边栏精简：移除"用户管理"和"审计日志"入口，v1 单用户场景不需要（v0.44.2）
+- 版本历史 API：GET /v1/docs/{id}/versions 列表 + POST rollback 回滚端点（v0.44.3）
+- 前端版本历史 UI：历史版本抽屉面板 + 行级 diff 展示 + 回滚确认（v0.44.4）
+- 批量导入后端：ZIP 上传解压 + 批次跟踪 + Celery 任务调度（v0.44.5）
+- 前端批量导入 UI：BatchDropzone 拖拽上传 + BatchProgressList 轮询进度 + 资产页集成（v0.44.6）
+
+### 修复 (Fixed)
+- 全仓库 tenant_id → kb_id 重命名：7 表 Alembic migration + ORM + 36 router/service + JWT payload + 前端 store + 14 测试文件（v0.44.16）
+- ForbiddenException 支持自定义 error_code 参数，修复封禁账号返回错误码不正确的问题（v0.44.15）
+- 修复 3 处 `Depends(require_role())` 双层包装导致启动崩溃的 pre-existing bug（docs/graph/batch_import 路由）（v0.44.15）
+
+### 变更 (Changed)
+- 认证方式从本地 bcrypt + 自签 JWT 迁移到 PA Pass 代理模式（v0.44.15）
+- 限流身份识别从 JWT 解码降级为 IP-based（KB 无法本地解码 Pass JWT）（v0.44.15）
+- 注册流程：移除"团队名称"字段，新增可选"昵称"，注册后自动登录不再跳转登录页（v0.44.15）
+- `/forgot-password` 和 `/reset-password` 端点标记为 410 Gone（密码管理移至 PA 平台）（v0.44.15）
+- [P0] 首次体验修复：上传自动触发 ingest job、仪表板真实统计、资产列表运行流水线按钮、上传引导优化、OnboardingGuide 去 localStorage（v0.44.13）
+- ASR 端到端打通：补齐 openai-whisper 依赖、修复 PARSEABLE_ASSET_TYPES 缺少 image/audio、延长 Celery 超时到 300s（v0.44.7）
+- 图谱节点合并/拆分 API：POST merge + POST split 端点，事务安全，project_admin 权限（v0.44.8）
+- 前端图谱编辑：分类管理面板 + NodeMergeModal + NodeSplitPanel，project_admin 专属（v0.44.9）
+- API Key 限流：per-key Redis 固定窗口计数，rate_limit_per_minute 字段 + 429 响应（v0.44.10）
+- API 用量统计：api_usage_log 表 + BackgroundTask 异步写入 + GET /v1/agent/usage 汇总查询（v0.44.11）
+- Q&A 对话界面：SSE 流式问答页面 + 引用来源展示 + 项目首页问答入口 tile（v0.44.12）
 
 ## [0.43.5] - 2026-03-27
 

@@ -1,4 +1,4 @@
-"""Graph router: knowledge document graph for visualization."""
+"""Graph router: knowledge document graph for visualization, merge, and split."""
 
 import uuid
 
@@ -11,10 +11,12 @@ from shared_models import Project, User
 from shared_models.architecture import ArchitectureNode
 from shared_models.cross_reference import CrossReference
 from shared_models.knowledge import KnowledgeDoc
+from shared_schemas.architecture import MergeNodesRequest, NodeOut, SplitNodeRequest
 from shared_schemas.common import DataResponse, ERROR_RESPONSES_AUTH
 from shared_schemas.graph import GraphEdge, GraphNode, GraphResponse
 
-from app.deps import get_current_user, get_db
+from app.deps import get_current_user, get_db, get_kb_id, require_role
+from app.services.graph_service import GraphService
 
 router = APIRouter(prefix="/v1/projects", tags=["graph"])
 
@@ -33,7 +35,7 @@ async def get_project_graph(
 ):
     # Verify project exists and belongs to user's tenant
     proj = await db.get(Project, project_id)
-    if proj is None or proj.tenant_id != current_user.tenant_id:
+    if proj is None or proj.kb_id != current_user.kb_id:
         raise AppException(ErrorCode.PROJECT_NOT_FOUND, "项目不存在", status_code=404)
 
     # 1. Query docs — if > 500 total, restrict to approved only
@@ -125,3 +127,67 @@ async def get_project_graph(
             edge_count=len(edges),
         )
     )
+
+
+@router.post(
+    "/{project_id}/graph/nodes/merge",
+    response_model=DataResponse[NodeOut],
+    status_code=201,
+    summary="Merge architecture nodes",
+    description="Merge 2+ architecture nodes into one. Reassigns all docs to the new node and archives the source nodes.",
+    responses={**ERROR_RESPONSES_AUTH},
+)
+async def merge_nodes(
+    project_id: uuid.UUID,
+    body: MergeNodesRequest,
+    db: AsyncSession = Depends(get_db),
+    kb_id: uuid.UUID = Depends(get_kb_id),
+    current_user: User = require_role("project_admin"),
+):
+    svc = GraphService(db, kb_id)
+    new_node = await svc.merge_nodes(
+        project_id=project_id,
+        source_node_ids=body.source_node_ids,
+        target_name=body.target_name,
+        target_node_type=body.target_node_type,
+        target_description=body.target_description,
+    )
+    await db.commit()
+    await db.refresh(new_node)
+    return DataResponse(data=NodeOut.model_validate(new_node))
+
+
+@router.post(
+    "/{project_id}/graph/nodes/{node_id}/split",
+    response_model=DataResponse[list[NodeOut]],
+    status_code=201,
+    summary="Split architecture node",
+    description="Split one architecture node into two. Reassigns docs as specified and archives the original node.",
+    responses={**ERROR_RESPONSES_AUTH},
+)
+async def split_node(
+    project_id: uuid.UUID,
+    node_id: uuid.UUID,
+    body: SplitNodeRequest,
+    db: AsyncSession = Depends(get_db),
+    kb_id: uuid.UUID = Depends(get_kb_id),
+    current_user: User = require_role("project_admin"),
+):
+    svc = GraphService(db, kb_id)
+    node_a, node_b = await svc.split_node(
+        project_id=project_id,
+        node_id=node_id,
+        part_a_name=body.part_a.name,
+        part_a_type=body.part_a.node_type,
+        part_a_doc_ids=body.part_a.doc_ids,
+        part_b_name=body.part_b.name,
+        part_b_type=body.part_b.node_type,
+        part_b_doc_ids=body.part_b.doc_ids,
+    )
+    await db.commit()
+    await db.refresh(node_a)
+    await db.refresh(node_b)
+    return DataResponse(data=[
+        NodeOut.model_validate(node_a),
+        NodeOut.model_validate(node_b),
+    ])

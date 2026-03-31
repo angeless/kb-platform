@@ -12,11 +12,11 @@ from .base import Base
 class AuditLog(Base):
     __tablename__ = "audit_log"
     __table_args__ = (
-        Index("ix_audit_log_tenant_created", "tenant_id", "created_at"),
+        Index("ix_audit_log_tenant_created", "kb_id", "created_at"),
         Index("ix_audit_log_resource", "resource_type", "resource_id"),
     )
 
-    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    kb_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     project_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     action: Mapped[str] = mapped_column(String(50), nullable=False)

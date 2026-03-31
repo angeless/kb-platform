@@ -1,20 +1,29 @@
 """Agent output router: API-key-authenticated search and QA for external agents."""
 
+import asyncio
+import logging
+import time
 import uuid
+from datetime import date, datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy import cast, func, select, Date
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared_config.settings import Settings
-from shared_models import ApiKey, ArchitectureNode, Asset, AssetChunk, KnowledgeDoc, KnowledgeDocVersion, SourceRef
+from shared_errors import AppException, ErrorCode
+from shared_models import ApiKey, ApiUsageLog, ArchitectureNode, Asset, AssetChunk, KnowledgeDoc, KnowledgeDocVersion, SourceRef
 from shared_schemas.agent import (
     AgentAskRequest,
     AgentAskResponse,
     AgentSearchHit,
     AgentSearchRequest,
     AgentSearchResponse,
+    AgentUsageResponse,
+    DailyUsage,
+    EndpointUsage,
     SourceAsset,
+    UsageGroupBy,
 )
 from shared_schemas.common import DataResponse, ErrorDetail
 
@@ -22,11 +31,86 @@ from app.deps import get_api_key_project, get_db, get_settings_dep
 from app.services.search_service import SearchService
 from app.services.qa_service import QAService
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/v1/agent", tags=["agent"])
+
+_background_tasks: set[asyncio.Task] = set()
+
+
+def _fire_and_forget(coro) -> None:
+    """Schedule a coroutine as a background task with GC-safe reference."""
+    task = asyncio.create_task(coro)
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
+
 
 _RESP_AUTH = {
     401: {"description": "Unauthorized — invalid or revoked API key", "model": ErrorDetail},
+    429: {"description": "Rate limited", "model": ErrorDetail},
 }
+
+
+async def _check_rate_limit(
+    auth: tuple[ApiKey, uuid.UUID, uuid.UUID] = Depends(get_api_key_project),
+    settings: Settings = Depends(get_settings_dep),
+) -> tuple[ApiKey, uuid.UUID, uuid.UUID]:
+    """Per-API-key rate limiting using Redis fixed-window counter."""
+    api_key, project_id, kb_id = auth
+    limit = api_key.rate_limit_per_minute
+    if limit == 0:
+        return auth  # no limit
+
+    try:
+        import redis
+        r = redis.from_url(settings.redis_url, decode_responses=True)
+        minute = int(time.time()) // 60
+        key = f"rl:api:{api_key.id}:{minute}"
+        count = r.incr(key)
+        if count == 1:
+            r.expire(key, 120)
+        r.close()
+
+        if count > limit:
+            seconds_left = 60 - (int(time.time()) % 60)
+            _fire_and_forget(_log_usage(api_key.id, "rate_limited", "ANY", 429, 0))
+            raise AppException(
+                ErrorCode.SYSTEM_RATE_LIMITED,
+                status_code=429,
+                detail={"retry_after": seconds_left},
+            )
+    except AppException:
+        raise
+    except Exception as e:
+        logger.warning("Rate limit check failed (allowing request): %s", e)
+
+    return auth
+
+
+async def _log_usage(
+    api_key_id: uuid.UUID,
+    endpoint: str,
+    method: str,
+    status_code: int,
+    latency_ms: int,
+) -> None:
+    """Write a usage log row in an independent session (BackgroundTask)."""
+    from shared_models.database import async_session_factory
+
+    async with async_session_factory() as session:
+        try:
+            log = ApiUsageLog(
+                api_key_id=api_key_id,
+                endpoint=endpoint,
+                method=method,
+                status_code=status_code,
+                latency_ms=latency_ms,
+                requested_at=datetime.now(timezone.utc),
+            )
+            session.add(log)
+            await session.commit()
+        except Exception as e:
+            logger.warning("Failed to write usage log: %s", e)
 
 
 async def _batch_load_arch_nodes(
@@ -125,12 +209,13 @@ async def _batch_load_source_assets(
 )
 async def agent_search(
     body: AgentSearchRequest,
-    auth: tuple[ApiKey, uuid.UUID, uuid.UUID] = Depends(get_api_key_project),
+    auth: tuple[ApiKey, uuid.UUID, uuid.UUID] = Depends(_check_rate_limit),
     db: AsyncSession = Depends(get_db),
 ):
-    api_key, project_id, tenant_id = auth
+    t0 = time.monotonic()
+    api_key, project_id, kb_id = auth
 
-    svc = SearchService(db, tenant_id)
+    svc = SearchService(db, kb_id)
     results, total = await svc.hybrid_search(
         project_id=project_id,
         query=body.query,
@@ -183,6 +268,9 @@ async def agent_search(
             )
         )
 
+    latency = int((time.monotonic() - t0) * 1000)
+    _fire_and_forget(_log_usage(api_key.id, "/v1/agent/search", "POST", 200, latency))
+
     return DataResponse(data=AgentSearchResponse(results=hits, total=total))
 
 
@@ -199,19 +287,112 @@ async def agent_search(
 )
 async def agent_ask(
     body: AgentAskRequest,
-    auth: tuple[ApiKey, uuid.UUID, uuid.UUID] = Depends(get_api_key_project),
+    auth: tuple[ApiKey, uuid.UUID, uuid.UUID] = Depends(_check_rate_limit),
     db: AsyncSession = Depends(get_db),
     settings: Settings = Depends(get_settings_dep),
 ):
-    api_key, project_id, tenant_id = auth
+    t0 = time.monotonic()
+    api_key, project_id, kb_id = auth
 
-    svc = QAService(db, tenant_id, settings)
+    svc = QAService(db, kb_id, settings)
     result = await svc.ask(project_id, body.question, body.top_k)
+
+    latency = int((time.monotonic() - t0) * 1000)
+    _fire_and_forget(_log_usage(api_key.id, "/v1/agent/ask", "POST", 200, latency))
 
     return DataResponse(
         data=AgentAskResponse(
             answer=result.get("answer", ""),
             sources=result.get("sources", []),
             related_questions=result.get("related_questions", []),
+        )
+    )
+
+
+@router.get(
+    "/usage",
+    response_model=DataResponse[AgentUsageResponse],
+    summary="API key usage statistics",
+    description="Query usage summary for the authenticated API key.",
+    responses={200: {"description": "Usage statistics returned"}, **_RESP_AUTH},
+)
+async def agent_usage(
+    auth: tuple[ApiKey, uuid.UUID, uuid.UUID] = Depends(get_api_key_project),
+    db: AsyncSession = Depends(get_db),
+    start_date: date | None = Query(None, description="Start date (YYYY-MM-DD), default 7 days ago"),
+    end_date: date | None = Query(None, description="End date (YYYY-MM-DD), default today"),
+    group_by: UsageGroupBy = Query(UsageGroupBy.day, description="Group by day or endpoint"),
+):
+    api_key, project_id, kb_id = auth
+
+    today = date.today()
+    start = start_date or (today - timedelta(days=6))
+    end = end_date or today
+
+    # Totals
+    totals_q = select(
+        func.count().label("total_requests"),
+        func.count().filter(ApiUsageLog.status_code >= 400).label("total_errors"),
+    ).where(
+        ApiUsageLog.api_key_id == api_key.id,
+        cast(ApiUsageLog.requested_at, Date) >= start,
+        cast(ApiUsageLog.requested_at, Date) <= end,
+    )
+    totals_row = (await db.execute(totals_q)).one()
+
+    daily: list[DailyUsage] | None = None
+    by_endpoint: list[EndpointUsage] | None = None
+
+    if group_by == UsageGroupBy.day:
+        day_q = (
+            select(
+                cast(ApiUsageLog.requested_at, Date).label("d"),
+                func.count().label("requests"),
+                func.count().filter(ApiUsageLog.status_code >= 400).label("errors"),
+                func.coalesce(func.avg(ApiUsageLog.latency_ms), 0).label("avg_lat"),
+            )
+            .where(
+                ApiUsageLog.api_key_id == api_key.id,
+                cast(ApiUsageLog.requested_at, Date) >= start,
+                cast(ApiUsageLog.requested_at, Date) <= end,
+            )
+            .group_by("d")
+            .order_by("d")
+        )
+        rows = (await db.execute(day_q)).all()
+        daily = [
+            DailyUsage(date=r.d, requests=r.requests, errors=r.errors, avg_latency_ms=int(r.avg_lat))
+            for r in rows
+        ]
+    else:
+        ep_q = (
+            select(
+                ApiUsageLog.endpoint,
+                func.count().label("requests"),
+                func.count().filter(ApiUsageLog.status_code >= 400).label("errors"),
+                func.coalesce(func.avg(ApiUsageLog.latency_ms), 0).label("avg_lat"),
+            )
+            .where(
+                ApiUsageLog.api_key_id == api_key.id,
+                cast(ApiUsageLog.requested_at, Date) >= start,
+                cast(ApiUsageLog.requested_at, Date) <= end,
+            )
+            .group_by(ApiUsageLog.endpoint)
+            .order_by(func.count().desc())
+        )
+        rows = (await db.execute(ep_q)).all()
+        by_endpoint = [
+            EndpointUsage(endpoint=r.endpoint, requests=r.requests, errors=r.errors, avg_latency_ms=int(r.avg_lat))
+            for r in rows
+        ]
+
+    return DataResponse(
+        data=AgentUsageResponse(
+            api_key_id=api_key.id,
+            period={"start": start.isoformat(), "end": end.isoformat()},
+            total_requests=totals_row.total_requests,
+            total_errors=totals_row.total_errors,
+            daily=daily,
+            by_endpoint=by_endpoint,
         )
     )

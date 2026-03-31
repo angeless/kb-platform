@@ -35,9 +35,9 @@ class ConflictException(AppException):
 
 
 class ForbiddenException(AppException):
-    def __init__(self, message: str = "权限不足", detail: dict | None = None):
+    def __init__(self, error_code: ErrorCode = ErrorCode.AUTH_INSUFFICIENT_ROLE, message: str = "权限不足", detail: dict | None = None):
         super().__init__(
-            error_code=ErrorCode.AUTH_INSUFFICIENT_ROLE, message=message, status_code=403, detail=detail
+            error_code=error_code, message=message, status_code=403, detail=detail
         )
 
 

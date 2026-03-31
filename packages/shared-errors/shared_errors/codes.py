@@ -13,6 +13,8 @@ class ErrorCode(StrEnum):
     AUTH_REFRESH_TOKEN_INVALID = "AUTH_REFRESH_TOKEN_INVALID"
     AUTH_RESET_TOKEN_INVALID = "AUTH_RESET_TOKEN_INVALID"
     AUTH_ACCOUNT_LOCKED = "AUTH_ACCOUNT_LOCKED"
+    AUTH_ACCOUNT_BANNED = "AUTH_ACCOUNT_BANNED"
+    AUTH_PASS_UNAVAILABLE = "AUTH_PASS_UNAVAILABLE"
 
     # Project
     PROJECT_NOT_FOUND = "PROJECT_NOT_FOUND"
@@ -29,11 +31,15 @@ class ErrorCode(StrEnum):
     ARCH_NODE_NOT_FOUND = "ARCH_NODE_NOT_FOUND"
     ARCH_ALREADY_PUBLISHED = "ARCH_ALREADY_PUBLISHED"
     ARCH_CYCLE_DETECTED = "ARCH_CYCLE_DETECTED"
+    ARCH_INSUFFICIENT_SOURCES = "ARCH_INSUFFICIENT_SOURCES"
+    ARCH_DOC_LIST_INCOMPLETE = "ARCH_DOC_LIST_INCOMPLETE"
+    ARCH_DOC_LIST_OVERLAP = "ARCH_DOC_LIST_OVERLAP"
 
     # Knowledge Doc
     DOC_NOT_FOUND = "DOC_NOT_FOUND"
     DOC_ALREADY_PUBLISHED = "DOC_ALREADY_PUBLISHED"
     DOC_STATUS_INVALID = "DOC_STATUS_INVALID"
+    VERSION_NOT_FOUND = "VERSION_NOT_FOUND"
 
     # Job
     JOB_NOT_FOUND = "JOB_NOT_FOUND"
@@ -59,6 +65,10 @@ class ErrorCode(StrEnum):
     SEARCH_QUERY_TOO_SHORT = "SEARCH_QUERY_TOO_SHORT"
     QA_MODEL_NOT_CONFIGURED = "QA_MODEL_NOT_CONFIGURED"
 
+    # Batch Import
+    BATCH_NOT_FOUND = "BATCH_NOT_FOUND"
+    EMPTY_ARCHIVE = "EMPTY_ARCHIVE"
+
     # Validation
     VALIDATION_ERROR = "VALIDATION_ERROR"
 
@@ -78,6 +88,8 @@ ERROR_MESSAGES: dict[str, str] = {
     ErrorCode.AUTH_REFRESH_TOKEN_INVALID: "登录已失效，请重新登录",
     ErrorCode.AUTH_RESET_TOKEN_INVALID: "重置链接已失效，请重新申请",
     ErrorCode.AUTH_ACCOUNT_LOCKED: "账户已临时锁定，请稍后重试",
+    ErrorCode.AUTH_ACCOUNT_BANNED: "账号已被封禁，请联系管理员",
+    ErrorCode.AUTH_PASS_UNAVAILABLE: "认证服务暂时不可用，请稍后重试",
     ErrorCode.PROJECT_NOT_FOUND: "项目不存在或已被删除",
     ErrorCode.PROJECT_NAME_DUPLICATE: "项目名称已存在，请换一个",
     ErrorCode.ASSET_NOT_FOUND: "文件不存在或已被删除",
@@ -88,9 +100,13 @@ ERROR_MESSAGES: dict[str, str] = {
     ErrorCode.ARCH_NODE_NOT_FOUND: "分类节点不存在",
     ErrorCode.ARCH_ALREADY_PUBLISHED: "该架构已发布，无法再次发布",
     ErrorCode.ARCH_CYCLE_DETECTED: "检测到循环引用，请调整节点关系",
+    ErrorCode.ARCH_INSUFFICIENT_SOURCES: "合并至少需要 2 个节点",
+    ErrorCode.ARCH_DOC_LIST_INCOMPLETE: "拆分时文档列表未覆盖节点下全部文档",
+    ErrorCode.ARCH_DOC_LIST_OVERLAP: "拆分时两组文档列表有重叠",
     ErrorCode.DOC_NOT_FOUND: "文档不存在或已被删除",
     ErrorCode.DOC_ALREADY_PUBLISHED: "该文档已发布",
     ErrorCode.DOC_STATUS_INVALID: "文档当前状态不允许此操作",
+    ErrorCode.VERSION_NOT_FOUND: "指定版本不存在",
     ErrorCode.JOB_NOT_FOUND: "任务不存在",
     ErrorCode.JOB_ALREADY_RUNNING: "该任务正在运行中，请等待完成",
     ErrorCode.CONFLICT_NOT_FOUND: "冲突记录不存在",
@@ -103,6 +119,8 @@ ERROR_MESSAGES: dict[str, str] = {
     ErrorCode.API_KEY_NOT_FOUND: "API Key 不存在",
     ErrorCode.SEARCH_QUERY_TOO_SHORT: "请输入至少 2 个字的搜索内容",
     ErrorCode.QA_MODEL_NOT_CONFIGURED: "AI 问答功能需要先配置模型服务",
+    ErrorCode.BATCH_NOT_FOUND: "批次不存在",
+    ErrorCode.EMPTY_ARCHIVE: "压缩包中没有支持的文件格式",
     ErrorCode.VALIDATION_ERROR: "提交的信息有误，请检查后重试",
     ErrorCode.SYSTEM_INTERNAL_ERROR: "系统开了个小差，请稍后重试",
     ErrorCode.SYSTEM_RATE_LIMITED: "操作太频繁，请稍后再试",

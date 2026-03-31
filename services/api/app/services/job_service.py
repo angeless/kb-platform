@@ -34,8 +34,8 @@ def _get_celery_app():
 class JobService(TenantService):
     """Operations for jobs, scoped to a single tenant via project ownership."""
 
-    def __init__(self, db: AsyncSession, tenant_id: uuid.UUID, user_id: uuid.UUID) -> None:
-        super().__init__(db, tenant_id)
+    def __init__(self, db: AsyncSession, kb_id: uuid.UUID, user_id: uuid.UUID) -> None:
+        super().__init__(db, kb_id)
         self.user_id = user_id
 
     async def create(

@@ -9,8 +9,9 @@ from shared_schemas.common import DataResponse, ErrorDetail, ListResponse, Pagin
 from shared_schemas.cross_reference import RouteContentRequest
 from shared_schemas.project import ProjectCreate, ProjectOut, ProjectUpdate
 
-from app.deps import get_db, get_tenant_id, require_role
+from app.deps import get_current_user, get_db, get_kb_id, require_role
 from shared_models import User
+from app.services.audit_service import AuditService
 from app.services.project_service import ProjectService
 
 router = APIRouter(prefix="/v1/projects", tags=["projects"])
@@ -37,10 +38,13 @@ _RESP_AUTH = {
 async def create_project(
     body: ProjectCreate,
     db: AsyncSession = Depends(get_db),
-    tenant_id: uuid.UUID = Depends(get_tenant_id),
+    kb_id: uuid.UUID = Depends(get_kb_id),
+    current_user: User = Depends(get_current_user),
 ):
-    svc = ProjectService(db, tenant_id)
+    svc = ProjectService(db, kb_id)
     project = await svc.create(name=body.name, industry_hint=body.industry_hint)
+    audit = AuditService(db, kb_id, current_user.id)
+    await audit.log("create_project", "project", project.id)
     return DataResponse(data=ProjectOut.model_validate(project))
 
 
@@ -59,9 +63,9 @@ async def list_projects(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
-    tenant_id: uuid.UUID = Depends(get_tenant_id),
+    kb_id: uuid.UUID = Depends(get_kb_id),
 ):
-    svc = ProjectService(db, tenant_id)
+    svc = ProjectService(db, kb_id)
     projects, total = await svc.list(page=page, page_size=page_size)
     return ListResponse(
         data=[ProjectOut.model_validate(p) for p in projects],
@@ -84,9 +88,9 @@ async def list_projects(
 async def get_project(
     project_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    tenant_id: uuid.UUID = Depends(get_tenant_id),
+    kb_id: uuid.UUID = Depends(get_kb_id),
 ):
-    svc = ProjectService(db, tenant_id)
+    svc = ProjectService(db, kb_id)
     project = await svc.get(project_id)
     return DataResponse(data=ProjectOut.model_validate(project))
 
@@ -108,15 +112,18 @@ async def update_project(
     project_id: uuid.UUID,
     body: ProjectUpdate,
     db: AsyncSession = Depends(get_db),
-    tenant_id: uuid.UUID = Depends(get_tenant_id),
+    kb_id: uuid.UUID = Depends(get_kb_id),
+    current_user: User = Depends(get_current_user),
 ):
-    svc = ProjectService(db, tenant_id)
+    svc = ProjectService(db, kb_id)
     project = await svc.update(
         project_id,
         name=body.name,
         industry_hint=body.industry_hint,
         status=body.status,
     )
+    audit = AuditService(db, kb_id, current_user.id)
+    await audit.log("update_project", "project", project_id, project_id=project_id)
     return DataResponse(data=ProjectOut.model_validate(project))
 
 
@@ -135,11 +142,13 @@ async def update_project(
 async def delete_project(
     project_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    tenant_id: uuid.UUID = Depends(get_tenant_id),
-    _user: User = require_role("tenant_admin"),
+    kb_id: uuid.UUID = Depends(get_kb_id),
+    current_user: User = require_role("tenant_admin"),
 ):
-    svc = ProjectService(db, tenant_id)
+    svc = ProjectService(db, kb_id)
     await svc.delete(project_id)
+    audit = AuditService(db, kb_id, current_user.id)
+    await audit.log("delete_project", "project", project_id, project_id=project_id)
     return DataResponse(data={"deleted": True})
 
 
@@ -156,10 +165,10 @@ async def delete_project(
 async def route_content(
     body: RouteContentRequest,
     db: AsyncSession = Depends(get_db),
-    tenant_id: uuid.UUID = Depends(get_tenant_id),
+    kb_id: uuid.UUID = Depends(get_kb_id),
 ):
     from app.services.project_router_service import ProjectRouterService
-    svc = ProjectRouterService(db, tenant_id)
+    svc = ProjectRouterService(db, kb_id)
     candidates = await svc.route(
         content_embedding=body.embedding,
         content_keywords=body.keywords,
