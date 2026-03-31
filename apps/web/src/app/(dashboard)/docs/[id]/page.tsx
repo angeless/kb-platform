@@ -8,6 +8,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { PermissionGuard } from "@/components/PermissionGuard";
 import { MarkdownView } from "@/components/markdown-view";
 import { VersionPanel } from "@/components/version-history/VersionPanel";
+import { CrossRefPanel } from "@/components/cross-ref-panel";
 
 interface SourceRef {
   id: string;
@@ -289,6 +290,13 @@ export default function DocDetailPage() {
           )}
         </div>
       </div>
+
+      {/* Cross-reference panel */}
+      {doc.project_id && (
+        <div className="mb-4">
+          <CrossRefPanel docId={docId} projectId={doc.project_id} />
+        </div>
+      )}
 
       {/* Version Tabs */}
       {doc.versions.length > 1 && (

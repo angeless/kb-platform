@@ -8,6 +8,7 @@
 ### 新增 (Added)
 - 自动化开发工作流（dev-workflow-upgrade v1.3）
 - PA Pass 统一认证接入：登录/注册/刷新代理到 Pass REST API，Pass JWT 为认证信任根，`GET /pass/me` 验证，首次登录自动创建 KB Tenant + User（v0.44.15）
+- 文档详情页跨文档关联面板：CrossRefPanel 组件展示关联列表、editor+ 添加/删除关联（Modal 表单+文档搜索）、AI 建议关联一键确认（v0.45.7）
 - AI 反思循环自检：generate_summary 和 suggest_tags 任务增加一轮 LLM 自我评审，置信度 < 0.7 自动使用修订版，summary_confidence 字段写入 DB 并通过 API 返回（v0.45.13）
 - AI 摘要与标签推荐 API：`POST /v1/docs/{id}/ai-summarize` 和 `POST /v1/docs/{id}/ai-suggest-tags`，Celery 异步调用 LLM 生成摘要写入 summary 字段、推荐关键词写入 keywords 字段（v0.45.5）
 - 文档导出支持 PDF/DOCX 格式：`GET /v1/docs/{id}/export?format=pdf|docx|markdown`，weasyprint PDF 渲染 + python-docx DOCX 生成，支持 CJK 字符（v0.45.2）
