@@ -21,6 +21,8 @@ from .prompts import (
     build_classify_prompt,
     build_summary_prompt,
     build_suggest_tags_prompt,
+    build_summary_reflection_prompt,
+    build_tags_reflection_prompt,
 )
 
 logger = logging.getLogger(__name__)
@@ -688,12 +690,15 @@ def _update_job_failed(session: Session, job_id: uuid.UUID, error_message: str) 
 # ---------------------------------------------------------------------------
 
 
+_REFLECTION_CONFIDENCE_THRESHOLD = 0.7
+
+
 @celery_app.task(bind=True, name="orchestrator.generate_summary")
 def generate_summary(self, doc_id: str) -> dict:
-    """Generate an AI summary for a knowledge document.
+    """Generate an AI summary with one round of reflection/self-check.
 
-    Reads the latest version's content_md, calls LLM, and writes
-    the result to KnowledgeDoc.summary.
+    Flow: generate → reflect → decide (use revised if confidence < threshold).
+    Writes summary + summary_confidence to KnowledgeDoc.
     """
     doc_uuid = uuid.UUID(doc_id)
 
@@ -705,7 +710,6 @@ def generate_summary(self, doc_id: str) -> dict:
         if doc is None:
             return {"status": "error", "message": "Document not found"}
 
-        # Get latest version content
         latest_version = session.execute(
             select(KnowledgeDocVersion)
             .where(KnowledgeDocVersion.doc_id == doc_uuid)
@@ -716,19 +720,57 @@ def generate_summary(self, doc_id: str) -> dict:
             return {"status": "error", "message": "Document has no content"}
 
         try:
+            # Step 1: Initial generation
             system_prompt, user_prompt = build_summary_prompt(latest_version.content_md)
             llm_response = call_llm(prompt=user_prompt, system_prompt=system_prompt)
             result = parse_json_response(llm_response)
+            raw_summary = result.get("summary", "")
 
-            summary = result.get("summary", "")
-            if not summary:
+            if not raw_summary:
                 return {"status": "error", "message": "LLM returned empty summary"}
 
-            doc.summary = summary
+            # Step 2: Reflection (self-check)
+            confidence = 0.5  # default if reflection fails
+            final_summary = raw_summary
+            try:
+                ref_system, ref_user = build_summary_reflection_prompt(
+                    latest_version.content_md, raw_summary
+                )
+                ref_response = call_llm(prompt=ref_user, system_prompt=ref_system)
+                ref_result = parse_json_response(ref_response)
+
+                confidence = float(ref_result.get("confidence", 0.5))
+                confidence = max(0.0, min(1.0, confidence))
+
+                # Step 3: Decide — use revised if low confidence
+                if confidence < _REFLECTION_CONFIDENCE_THRESHOLD:
+                    revised = ref_result.get("revised_summary")
+                    if revised and isinstance(revised, str) and len(revised) > 10:
+                        final_summary = revised
+                        logger.info(
+                            "Doc %s: using revised summary (confidence=%.2f)",
+                            doc_id, confidence,
+                        )
+            except Exception as ref_err:
+                logger.warning(
+                    "Reflection failed for doc %s, using raw summary: %s",
+                    doc_id, ref_err,
+                )
+
+            # Step 4: Write to DB
+            doc.summary = final_summary
+            doc.summary_confidence = confidence
             session.commit()
 
-            logger.info("Generated summary for doc %s (%d chars)", doc_id, len(summary))
-            return {"status": "success", "summary": summary}
+            logger.info(
+                "Generated summary for doc %s (%d chars, confidence=%.2f)",
+                doc_id, len(final_summary), confidence,
+            )
+            return {
+                "status": "success",
+                "summary": final_summary,
+                "confidence": confidence,
+            }
 
         except Exception as e:
             session.rollback()
@@ -738,10 +780,10 @@ def generate_summary(self, doc_id: str) -> dict:
 
 @celery_app.task(bind=True, name="orchestrator.suggest_tags")
 def suggest_tags(self, doc_id: str) -> dict:
-    """Suggest keyword tags for a knowledge document.
+    """Suggest keyword tags with one round of reflection/self-check.
 
-    Reads the latest version's content_md, calls LLM, and writes
-    the result to KnowledgeDoc.keywords.
+    Flow: generate → reflect → decide (use revised if confidence < threshold).
+    Writes keywords + summary_confidence to KnowledgeDoc.
     """
     doc_uuid = uuid.UUID(doc_id)
 
@@ -763,19 +805,57 @@ def suggest_tags(self, doc_id: str) -> dict:
             return {"status": "error", "message": "Document has no content"}
 
         try:
+            # Step 1: Initial generation
             system_prompt, user_prompt = build_suggest_tags_prompt(latest_version.content_md)
             llm_response = call_llm(prompt=user_prompt, system_prompt=system_prompt)
             result = parse_json_response(llm_response)
 
-            keywords = result.get("keywords", [])
-            if not keywords:
+            raw_keywords = result.get("keywords", [])
+            if not raw_keywords:
                 return {"status": "error", "message": "LLM returned empty keywords"}
 
-            doc.keywords = keywords
+            # Step 2: Reflection (self-check)
+            confidence = 0.5  # default if reflection fails
+            final_keywords = raw_keywords
+            try:
+                ref_system, ref_user = build_tags_reflection_prompt(
+                    latest_version.content_md, raw_keywords
+                )
+                ref_response = call_llm(prompt=ref_user, system_prompt=ref_system)
+                ref_result = parse_json_response(ref_response)
+
+                confidence = float(ref_result.get("confidence", 0.5))
+                confidence = max(0.0, min(1.0, confidence))
+
+                # Step 3: Decide — use revised if low confidence
+                if confidence < _REFLECTION_CONFIDENCE_THRESHOLD:
+                    revised = ref_result.get("revised_tags")
+                    if revised and isinstance(revised, list) and len(revised) >= 2:
+                        final_keywords = revised
+                        logger.info(
+                            "Doc %s: using revised tags (confidence=%.2f)",
+                            doc_id, confidence,
+                        )
+            except Exception as ref_err:
+                logger.warning(
+                    "Reflection failed for doc %s, using raw tags: %s",
+                    doc_id, ref_err,
+                )
+
+            # Step 4: Write to DB
+            doc.keywords = final_keywords
+            doc.summary_confidence = confidence
             session.commit()
 
-            logger.info("Suggested %d tags for doc %s", len(keywords), doc_id)
-            return {"status": "success", "keywords": keywords}
+            logger.info(
+                "Suggested %d tags for doc %s (confidence=%.2f)",
+                len(final_keywords), doc_id, confidence,
+            )
+            return {
+                "status": "success",
+                "keywords": final_keywords,
+                "confidence": confidence,
+            }
 
         except Exception as e:
             session.rollback()

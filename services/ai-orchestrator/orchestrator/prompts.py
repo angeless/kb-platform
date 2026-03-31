@@ -323,6 +323,98 @@ def build_suggest_tags_prompt(content: str, max_content_chars: int = 6000) -> tu
     return SYSTEM_PROMPT_SUGGEST_TAGS, user_prompt
 
 
+# ---------------------------------------------------------------------------
+# Reflection prompts (v0.45.13)
+# ---------------------------------------------------------------------------
+
+SYSTEM_PROMPT_REFLECTION = """你是一个严格的知识文档质量审查专家。你的任务是评审 AI 生成的摘要或标签，
+判断其质量并给出置信度评分。
+
+你必须：
+- 严格对照原文内容评审，不偏袒生成结果
+- 列出具体问题，不能只说"质量很好"
+- 置信度评分 0.0-1.0，标准如下：
+  - 0.9+：完全忠于原文、覆盖核心内容、无幻觉
+  - 0.7-0.9：基本准确，有小问题
+  - 0.5-0.7：有明显遗漏或不准确
+  - <0.5：严重问题（幻觉、偏题、遗漏关键内容）"""
+
+USER_PROMPT_SUMMARY_REFLECTION_TEMPLATE = """请评审以下 AI 生成的摘要是否准确。
+
+--- 原文内容 ---
+{original_content}
+--- 原文内容结束 ---
+
+--- AI 生成的摘要 ---
+{generated_summary}
+--- 摘要结束 ---
+
+评审维度：
+1. 忠实度：摘要是否忠于原文？是否存在幻觉（原文中不存在的信息）？
+2. 覆盖度：摘要是否覆盖了原文的核心观点？
+3. 简洁度：摘要是否控制在 200 字以内？是否有冗余？
+
+请以如下 JSON 格式输出（不要输出其他内容）：
+{{
+  "confidence": 0.85,
+  "issues": ["问题1", "问题2"],
+  "revised_summary": "如果 confidence < 0.7，提供修正后的摘要；否则为 null"
+}}"""
+
+USER_PROMPT_TAGS_REFLECTION_TEMPLATE = """请评审以下 AI 推荐的关键词标签是否准确。
+
+--- 原文内容 ---
+{original_content}
+--- 原文内容结束 ---
+
+--- AI 推荐的标签 ---
+{generated_tags}
+--- 标签结束 ---
+
+评审维度：
+1. 准确性：每个标签是否真实反映原文主题？
+2. 覆盖度：是否遗漏了重要的核心概念？
+3. 冗余度：是否有含义重复或过于模糊的标签？
+
+请以如下 JSON 格式输出（不要输出其他内容）：
+{{
+  "confidence": 0.85,
+  "issues": ["问题1", "问题2"],
+  "revised_tags": ["修正后的标签列表（如果 confidence < 0.7），否则为 null"]
+}}"""
+
+
+def build_summary_reflection_prompt(
+    original_content: str, generated_summary: str, max_content_chars: int = 4000
+) -> tuple[str, str]:
+    """Build prompts for reflecting on a generated summary."""
+    truncated = original_content[:max_content_chars]
+    if len(original_content) > max_content_chars:
+        truncated += "...(截断)"
+
+    user_prompt = USER_PROMPT_SUMMARY_REFLECTION_TEMPLATE.format(
+        original_content=truncated,
+        generated_summary=generated_summary,
+    )
+    return SYSTEM_PROMPT_REFLECTION, user_prompt
+
+
+def build_tags_reflection_prompt(
+    original_content: str, generated_tags: list[str], max_content_chars: int = 4000
+) -> tuple[str, str]:
+    """Build prompts for reflecting on suggested tags."""
+    truncated = original_content[:max_content_chars]
+    if len(original_content) > max_content_chars:
+        truncated += "...(截断)"
+
+    tags_text = ", ".join(generated_tags)
+    user_prompt = USER_PROMPT_TAGS_REFLECTION_TEMPLATE.format(
+        original_content=truncated,
+        generated_tags=tags_text,
+    )
+    return SYSTEM_PROMPT_REFLECTION, user_prompt
+
+
 def build_classify_prompt(
     existing_docs: list[dict],
     new_chunks: list[dict],

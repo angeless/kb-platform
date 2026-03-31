@@ -87,7 +87,10 @@ async def ai_summarize(
             status_code=500,
         )
 
-    return DataResponse(data={"summary": task_result.get("summary", "")})
+    return DataResponse(data={
+        "summary": task_result.get("summary", ""),
+        "confidence": task_result.get("confidence"),
+    })
 
 
 @router.post(
@@ -138,4 +141,7 @@ async def ai_suggest_tags(
             status_code=500,
         )
 
-    return DataResponse(data={"keywords": task_result.get("keywords", [])})
+    return DataResponse(data={
+        "keywords": task_result.get("keywords", []),
+        "confidence": task_result.get("confidence"),
+    })

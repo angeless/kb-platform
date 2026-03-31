@@ -15,6 +15,7 @@ class KnowledgeDocOut(BaseModel):
     current_version: int
     status: str
     summary: str | None = None
+    summary_confidence: float | None = None
     keywords: list[str] | None = None
     knowledge_type: str | None = None
     created_at: datetime
@@ -72,6 +73,7 @@ class KnowledgeDocDetailOut(BaseModel):
     current_version: int
     status: str
     summary: str | None = None
+    summary_confidence: float | None = None
     keywords: list[str] | None = None
     knowledge_type: str | None = None
     created_at: datetime
