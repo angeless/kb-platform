@@ -8,6 +8,7 @@
 ### 新增 (Added)
 - 自动化开发工作流（dev-workflow-upgrade v1.3）
 - PA Pass 统一认证接入：登录/注册/刷新代理到 Pass REST API，Pass JWT 为认证信任根，`GET /pass/me` 验证，首次登录自动创建 KB Tenant + User（v0.44.15）
+- 摘要/标签置信度展示：ConfidenceBadge 组件（高/中/低三档颜色），低置信度时"重新生成"按钮高亮提示，旧数据无 confidence 时降级兼容（v0.45.14）
 - 全局设置页重构：Tab 式布局（模型提供商 + 路由规则），路由规则支持 CRUD（添加/修改/删除），task_type 中文标签，tenant_admin 权限守卫（v0.45.12）
 - 审计日志页面：`/admin/audit-logs` 路由（tenant_admin 可见），操作日志表格+操作类型/资源类型筛选器+分页，侧边栏增加权限感知导航入口（v0.45.11）
 - 图谱页关系编辑：边展示中文关联类型标签、点击边弹出详情面板（来源/目标/类型）、editor+ 可删除关联、工具栏"添加关联"入口（v0.45.8）

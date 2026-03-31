@@ -34,9 +34,21 @@ interface DocDetail {
   current_version: number;
   status: string;
   summary: string | null;
+  summary_confidence: number | null;
   keywords: string[] | null;
   knowledge_type: string | null;
   versions: DocVersion[];
+}
+
+function ConfidenceBadge({ confidence }: { confidence: number | null | undefined }) {
+  if (confidence == null) return null;
+  if (confidence >= 0.8) {
+    return <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-700">AI 高置信</span>;
+  }
+  if (confidence >= 0.6) {
+    return <span className="rounded-full bg-yellow-100 px-2 py-0.5 text-xs text-yellow-700">AI 中置信</span>;
+  }
+  return <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs text-red-700">AI 低置信 — 建议人工审核</span>;
 }
 
 export default function DocDetailPage() {
@@ -248,12 +260,19 @@ export default function DocDetailPage() {
       {/* Summary */}
       <div className="mb-4 rounded-lg border border-gray-200 bg-white p-4">
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-gray-600">摘要</h3>
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-semibold text-gray-600">摘要</h3>
+            {doc.summary && <ConfidenceBadge confidence={doc.summary_confidence} />}
+          </div>
           <PermissionGuard action="edit">
             <button
               onClick={handleAiSummarize}
               disabled={summarizing}
-              className="rounded border border-gray-300 px-3 py-1 text-xs text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+              className={`rounded border px-3 py-1 text-xs disabled:opacity-50 ${
+                doc.summary_confidence != null && doc.summary_confidence < 0.6
+                  ? "border-red-300 bg-red-50 text-red-600 hover:bg-red-100"
+                  : "border-gray-300 text-gray-600 hover:bg-gray-50"
+              }`}
             >
               {summarizing ? "生成中..." : doc.summary ? "重新生成" : "生成摘要"}
             </button>
@@ -267,12 +286,19 @@ export default function DocDetailPage() {
       {/* Keywords */}
       <div className="mb-4 rounded-lg border border-gray-200 bg-white p-4">
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-gray-600">关键词</h3>
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-semibold text-gray-600">关键词</h3>
+            {doc.keywords?.length && <ConfidenceBadge confidence={doc.summary_confidence} />}
+          </div>
           <PermissionGuard action="edit">
             <button
               onClick={handleAiSuggestTags}
               disabled={suggestingTags}
-              className="rounded border border-gray-300 px-3 py-1 text-xs text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+              className={`rounded border px-3 py-1 text-xs disabled:opacity-50 ${
+                doc.summary_confidence != null && doc.summary_confidence < 0.6
+                  ? "border-red-300 bg-red-50 text-red-600 hover:bg-red-100"
+                  : "border-gray-300 text-gray-600 hover:bg-gray-50"
+              }`}
             >
               {suggestingTags ? "推荐中..." : doc.keywords?.length ? "刷新标签" : "推荐标签"}
             </button>
