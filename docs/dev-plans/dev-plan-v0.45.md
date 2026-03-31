@@ -108,6 +108,8 @@
 | v0.45.10 | 后端审计写入集成（docs / projects / users CRUD） | P1 | Planned | W-020 |
 | v0.45.11 | 前端审计日志页 | P1 | Planned | W-020 |
 | v0.45.12 | 前端全局设置页（模型提供商 + 路由配置） | P1 | Planned | W-021 |
+| v0.45.13 | AI 摘要/标签生成反思循环 — 后端自检 + 置信度评分 | P1 | Planned | W-024 |
+| v0.45.14 | 前端摘要/标签置信度展示 | P2 | Planned | W-024 |
 
 ### 3.3 北极星三问校验
 
@@ -125,6 +127,8 @@
 | v0.45.10 | - | - | ✅ 安全 / 合规 / 可审计 | ✅ 通过 |
 | v0.45.11 | - | - | ✅ 安全 / 合规可见性 | ✅ 通过 |
 | v0.45.12 | - | - | ✅ AI 模型配置是整合端基础设施 | ✅ 通过 |
+| v0.45.13 | ✅ 整合端质量（AI 生成质量提升） | - | - | ✅ 通过 |
+| v0.45.14 | - | - | ✅ 质量可见性（用户可感知 AI 置信度） | ✅ 通过（边界） |
 
 ### 3.4 明确不做的事项
 
@@ -161,14 +165,17 @@ v0.45.10 → v0.45.11          ← v0.45.11 依赖 v0.45.10 写入数据才有�
 
 W-021（全局设置）：
 v0.45.12                     ← 纯前端，独立（API 已完整）
+
+W-024（AI 反思循环）：
+v0.45.13 → v0.45.14          ← v0.45.13 依赖 v0.45.5（AI 摘要 API），v0.45.14 依赖 v0.45.13 + v0.45.6
 ```
 
 建议执行顺序（兼顾依赖链和风险）：
 
 ```
 v0.45.1 → v0.45.4 → v0.45.5 → v0.45.2 → v0.45.3
-→ v0.45.10 → v0.45.6 → v0.45.7 → v0.45.8
-→ v0.45.11 → v0.45.12 → v0.45.9
+→ v0.45.10 → v0.45.6 → v0.45.13 → v0.45.7 → v0.45.8
+→ v0.45.11 → v0.45.12 → v0.45.14 → v0.45.9
 ```
 
 ---
@@ -404,6 +411,14 @@ GET /v1/docs/{doc_id}/export（原有）
 
 - Phase 1 + Phase 2 执行：2 小时
 - Phase 3 测试：1 小时
+
+---
+
+#### 风险预判
+
+| 风险 | 概率 | 影响 | 缓解措施 |
+|------|------|------|---------|
+| 下拉菜单在移动端展示不友好 | 低 | 低 | 可接受，当前阶段仅桌面端 |
 
 ---
 
@@ -643,6 +658,14 @@ Response 200：
 
 ---
 
+#### 风险预判
+
+| 风险 | 概率 | 影响 | 缓解措施 |
+|------|------|------|---------|
+| summary 为 null 的旧文档导致前端空状态不友好 | 中 | 低 | 空摘要显示"暂无摘要"+ 生成按钮（已在设计中） |
+
+---
+
 ### v0.45.7: 前端文档详情页跨文档关联面板
 
 **任务版本号：** v0.45.7
@@ -837,6 +860,15 @@ Response 200：
 
 ---
 
+#### 风险预判
+
+| 风险 | 概率 | 影响 | 缓解措施 |
+|------|------|------|---------|
+| react-window 与现有表格组件（如 Table）不兼容 | 中 | 中 | Phase 1 确认组件类型；若为 Table，改用 @tanstack/react-virtual |
+| 虚拟滚动破坏键盘导航 / 无障碍访问 | 低 | 低 | 可接受，当前无无障碍要求 |
+
+---
+
 ### v0.45.10: 后端审计写入集成
 
 **任务版本号：** v0.45.10
@@ -985,6 +1017,14 @@ await audit.log("create_doc", "knowledge_doc", doc.id, project_id=project_id)
 
 ---
 
+#### 风险预判
+
+| 风险 | 概率 | 影响 | 缓解措施 |
+|------|------|------|---------|
+| 审计日志数据量大时列表加载慢 | 低 | 低 | 后端已有分页；前端使用服务端分页 |
+
+---
+
 ### v0.45.12: 前端全局设置页
 
 **任务版本号：** v0.45.12
@@ -1062,9 +1102,185 @@ await audit.log("create_doc", "knowledge_doc", doc.id, project_id=project_id)
 
 ---
 
+### v0.45.13: AI 摘要/标签生成反思循环 — 后端自检 + 置信度评分
+
+**任务版本号：** v0.45.13
+**优先级：** P1
+**前置依赖：** v0.45.5（AI 摘要 API 可用）
+**WISHLIST 来源：** W-024（Shiji-KB 借鉴 — 反思循环）
+
+---
+
+#### 背景与目标
+
+**现状：**
+- v0.45.5 的 `generate_summary` task 调用 LLM 一次后直接写入 DB，无质量校验
+- `ai-suggest-tags` task 同理，一次生成即最终结果
+- pipeline `quality_check.py`（Stage 6）仅做规则校验（内容长度、标题存在），无 AI 自检
+
+**借鉴来源：**
+Shiji-KB 通过 5 轮反思循环将事件年代准确率从 90% 提升到 99.1%。核心模式：`AI 初始生成 → 自检 prompt → 对比修正 → 置信度评分`。
+
+**目标（Goal）：**
+在 `generate_summary` 和 `ai-suggest-tags` 两个 task 中引入 **一轮 AI 自检**（reflection），并为每次生成结果附加 `confidence` 置信度评分（0.0–1.0）。低于阈值的结果自动触发一次返工。
+
+---
+
+#### 后端变更
+
+**修改文件：**
+- `services/ai-orchestrator/orchestrator/tasks.py` — 修改 `generate_summary` 和 `ai-suggest-tags` task
+
+**`generate_summary` task 修改逻辑（伪代码）：**
+```python
+# Step 1: 初始生成
+raw_summary = call_llm(build_summary_prompt(content_md))
+
+# Step 2: 自检 — 用另一个 prompt 让 LLM 评估自身输出
+reflection = call_llm(build_reflection_prompt(content_md, raw_summary))
+# reflection 返回 JSON: {"confidence": 0.85, "issues": ["..."], "revised_summary": "..."}
+parsed = parse_json_response(reflection)
+
+# Step 3: 决策
+confidence = parsed.get("confidence", 0.5)
+if confidence < 0.7 and parsed.get("revised_summary"):
+    final_summary = parsed["revised_summary"]
+else:
+    final_summary = raw_summary
+
+# Step 4: 写入 DB（附加 confidence）
+doc.summary = final_summary
+```
+
+**新增 prompt 函数：**
+- `services/ai-orchestrator/orchestrator/prompts.py` — 新增：
+  - `build_reflection_prompt(original_content: str, generated_output: str) -> str`
+    - 要求 LLM 评估：① 是否忠于原文（无幻觉）② 是否覆盖核心内容 ③ 是否简洁（≤200字）
+    - 返回 JSON：`{"confidence": float, "issues": [str], "revised_summary": str | null}`
+  - `build_tags_reflection_prompt(original_content: str, generated_tags: list[str]) -> str`
+    - 要求 LLM 评估：① 标签是否准确 ② 是否遗漏关键概念 ③ 是否有冗余/模糊标签
+    - 返回 JSON：`{"confidence": float, "issues": [str], "revised_tags": [str] | null}`
+
+**数据库字段（必需）：**
+- `KnowledgeDoc` 新增 `summary_confidence: float | None`（需 Alembic 迁移，建议与 v0.45.4 合并为一次迁移脚本）
+
+> ⚠️ **Phase 1 前置确认：**
+> 1. 读 `orchestrator/prompts.py`，确认现有 prompt 构建模式
+> 2. 读 `orchestrator/llm_client.py`，确认 `call_llm()` 调用方式和错误处理
+> 3. 确认是否新增 DB 字段（需与 v0.45.4 迁移协调）
+
+---
+
+#### 验收标准
+
+- [ ] `POST /v1/docs/{doc_id}/ai-summarize` 返回结果中包含 `confidence` 字段
+- [ ] 当 LLM 自检发现问题（confidence < 0.7）时，返回的 summary 是修正后的版本
+- [ ] 当 LLM 自检通过（confidence ≥ 0.7）时，返回原始生成结果
+- [ ] `POST /v1/docs/{doc_id}/ai-suggest-tags` 同样包含 `confidence` 字段和自检逻辑
+- [ ] 自检 prompt 失败（JSON 解析错误）时，降级为直接使用初始生成结果（不阻塞主流程）
+
+---
+
+#### 工作范围
+
+**包含：**
+- `orchestrator/tasks.py`（修改 2 个 task）
+- `orchestrator/prompts.py`（新增 2 个 prompt 构建函数）
+- Alembic 迁移新增 `summary_confidence` 字段
+
+**不包含：**
+- 多轮反思（本版本仅引入 1 轮自检，效果验证后再考虑多轮）
+- pipeline Stage 6 quality_check 的 AI 化改造（v0.46 范围）
+
+---
+
+#### 预估工作量
+
+- Phase 1 读 orchestrator 代码 + prompt 设计：1.5 小时
+- Phase 2 执行：3 小时
+- Phase 3 测试（含手动验证 LLM 输出质量）：2 小时
+
+---
+
+#### 风险预判
+
+| 风险 | 概率 | 影响 | 缓解措施 |
+|------|------|------|---------|
+| 自检 prompt 返回非法 JSON | 中 | 低 | `parse_json_response` 已有容错；失败时降级为原始结果 |
+| 自检消耗额外 token（成本翻倍） | 确定 | 中 | 可接受：摘要/标签为低频手动触发操作，非批量自动触发 |
+| LLM 自检总是给高分（自我认同偏差） | 中 | 低 | prompt 中明确要求"严格评审，列出具体问题"；后续可引入不同模型交叉检验 |
+
+---
+
+### v0.45.14: 前端摘要/标签置信度展示
+
+**任务版本号：** v0.45.14
+**优先级：** P2
+**前置依赖：** v0.45.13（后端返回 confidence 字段）+ v0.45.6（前端摘要/标签 UI 已有）
+**WISHLIST 来源：** W-024（Shiji-KB 借鉴 — 反思循环）
+
+---
+
+#### 背景与目标
+
+**目标（Goal）：**
+在 v0.45.6 已有的摘要区块和标签区块中，展示 AI 置信度指示器。让用户直观了解 AI 生成质量，低置信度结果提示用户手动审核或重新生成。
+
+---
+
+#### 前端变更
+
+**修改文件：**
+- 文档详情页（v0.45.6 新增的 Summary 区块和 Tags 区块）
+
+**新增交互：**
+- Summary 区块右上角展示置信度 badge：
+  - `confidence ≥ 0.8` → 绿色 badge "AI 高置信"
+  - `0.6 ≤ confidence < 0.8` → 黄色 badge "AI 中置信"
+  - `confidence < 0.6` → 红色 badge "AI 低置信 — 建议人工审核"
+- Tags 区块同理
+- 低置信度时，"重新生成"按钮高亮提示
+
+---
+
+#### 验收标准
+
+- [ ] 文档有 AI 摘要且 confidence ≥ 0.8 时，显示绿色 badge
+- [ ] confidence < 0.6 时，显示红色 badge + "建议人工审核"提示
+- [ ] 无 confidence 值（旧数据）时，不显示 badge（降级兼容）
+- [ ] badge 不影响现有摘要/标签展示布局
+
+---
+
+#### 工作范围
+
+**包含：**
+- 文档详情页 Summary 区块 + Tags 区块添加置信度 badge（2 处 UI 修改）
+
+**不包含：**
+- 在文档列表页展示置信度（独立需求）
+- 批量重新生成低置信度文档的操作（独立需求）
+
+---
+
+#### 预估工作量
+
+- Phase 2 执行：1.5 小时
+- Phase 3 测试：0.5 小时
+
+---
+
+#### 风险预判
+
+| 风险 | 概率 | 影响 | 缓解措施 |
+|------|------|------|---------|
+| 无 confidence 的旧数据不显示 badge | 确定 | 低 | 降级兼容：无值时不渲染 badge（已在验收标准中要求） |
+
+---
+
 ## 第六章 Alembic 迁移注意事项
 
-v0.45 引入 1 次数据库迁移（v0.45.4）。执行前必须：
+v0.45 引入 2 次数据库迁移（v0.45.4 新增 `summary` 字段，v0.45.13 新增 `summary_confidence` 字段）。执行前必须：
 
 1. 备份 DB（或在 staging 环境先验证）
 2. `alembic upgrade head` 前确认无未完成的 pending 迁移
@@ -1095,6 +1311,55 @@ v0.45 引入 1 次数据库迁移（v0.45.4）。执行前必须：
 
 ---
 
+## 第九章 测试要求
+
+> 引用项目技术规范：`docs/tech-specs/testing-strategy.md`
+
+### 9.1 测试层次
+
+| 层次 | 工具 | 覆盖重点 |
+|------|------|---------|
+| 后端单元测试 | pytest | 新增 service / router / task 函数 |
+| 后端集成测试 | pytest + TestClient | API 端点 + 数据库交互 |
+| 前端组件测试 | vitest + React Testing Library | 新增 UI 组件渲染与交互 |
+| 前端集成测试 | vitest | API 调用 mock + 页面级行为 |
+
+### 9.2 覆盖策略
+
+- 每个任务至少覆盖其验收标准中列出的场景
+- 新增 API 端点必须有 happy path + 权限拒绝 + 参数非法 三类测试
+- 纯前端任务至少覆盖渲染 + 交互 + 空状态
+- AI 相关任务（v0.45.5/13）需 mock LLM 响应，测试正常 / 空响应 / 异常 三种路径
+
+---
+
+## 第十章 版本号管理与文档产出
+
+### 10.1 版本号管理
+
+> 引用项目技术规范：`docs/tech-specs/dev-governance-part1-version.md` §1.1–§1.4
+
+- 版本号格式：`v0.45.{Z}`，Z 为任务序号（1–14）
+- 每完成一个任务，VERSION 文件更新为 `0.45.{Z}`
+- CHANGELOG.md 追加该任务的变更记录
+- Commit message 格式：`feat|fix|refactor: 简要描述 (v0.45.{Z})`
+
+### 10.2 文档产出要求
+
+> 引用项目技术规范：`docs/tech-specs/dev-governance-part0-automation.md` §0.7
+
+每个任务完成后必须同步更新：
+- `VERSION`
+- `CHANGELOG.md`
+- `TODO_NEXT.md`
+- 本计划文件中该任务的状态（Planned → Completed）
+
+版本全部完成后必须产出：
+- `docs/versions/phase-report-v0.45.md`（版本总结报告）
+- `docs/versions/seal-audit-v0.45.md`（封板审计报告）
+
+---
+
 ## 第十一章 任务汇报格式
 
 每个 `vX.Y.Z` 任务完成后，按以下 9 项结构报告：
@@ -1108,3 +1373,91 @@ v0.45 引入 1 次数据库迁移（v0.45.4）。执行前必须：
 7. **版本状态更新**（VERSION / CHANGELOG / TODO_NEXT.md）
 8. **commit 信息**
 9. **是否继续下一个任务**
+
+---
+
+## 第十二章 新增数据库表汇总
+
+v0.45 不新增独立表，仅对已有表新增字段：
+
+| 任务 | 表名 | 变更类型 | 字段 | 类型 | 约束 | 说明 |
+|------|------|---------|------|------|------|------|
+| v0.45.4 | `knowledge_doc` | 新增字段 | `summary` | TEXT | nullable | AI 生成的文档摘要 |
+| v0.45.13 | `knowledge_doc` | 新增字段 | `summary_confidence` | FLOAT | nullable | AI 摘要置信度（0.0–1.0） |
+
+合计：0 张新表，2 个新增字段，2 次 Alembic 迁移。
+
+---
+
+## 第十三章 开始前必须先输出
+
+Agent 在进入 Phase 2 编码之前，必须先输出以下三项内容：
+
+1. **当前代码现状理解** — 列出与第一个任务相关的已有文件、函数、API 端点现状
+2. **第一个任务的实施计划** — 按 `docs/tech-specs/dev-governance-part3-guides.md` §3.1 模板输出
+3. **第一个任务的预计修改文件清单** — 明确新增 / 修改 / 不动的文件
+
+**在这三项输出并经确认之前，不要开始写代码。**
+
+---
+
+## 第十四章 完成状态追踪
+
+| 任务版本号 | 任务名称 | 计划周期 | 实际完成日期 | 迭代次数 | 状态 |
+|----------|--------|--------|----------|--------|------|
+| v0.45.1 | 前端搜索页切换到混合检索 | — | — | 0 | Planned |
+| v0.45.2 | 后端 PDF / DOCX 导出扩展 | — | — | 0 | Planned |
+| v0.45.3 | 前端导出格式选择器 | — | — | 0 | Planned |
+| v0.45.4 | AI 摘要 DB 迁移 | — | — | 0 | Planned |
+| v0.45.5 | AI 摘要后端 API + orchestrator 任务 | — | — | 0 | Planned |
+| v0.45.6 | 前端文档详情页摘要 + 标签展示 | — | — | 0 | Planned |
+| v0.45.7 | 前端文档详情页跨文档关联面板 | — | — | 0 | Planned |
+| v0.45.8 | 前端图谱页关系编辑操作 | — | — | 0 | Planned |
+| v0.45.9 | 前端文档列表虚拟滚动 | — | — | 0 | Planned |
+| v0.45.10 | 后端审计写入集成 | — | — | 0 | Planned |
+| v0.45.11 | 前端审计日志页 | — | — | 0 | Planned |
+| v0.45.12 | 前端全局设置页 | — | — | 0 | Planned |
+| v0.45.13 | AI 反思循环 — 后端自检 + 置信度 | — | — | 0 | Planned |
+| v0.45.14 | 前端摘要/标签置信度展示 | — | — | 0 | Planned |
+
+**Phase 封板记录：**
+
+| 功能项 | 包含任务 | 封板日期 | 封板版本号 | 回归测试结果 |
+|-------|--------|--------|----------|-----------|
+| v0.45 输出接口质量提升 + 图谱可维护性 + 运营可见性 | v0.45.1–v0.45.14 | — | — | — |
+
+---
+
+## 第十五章 变更记录
+
+| 日期 | 变更内容 | 责任人 |
+|-----|--------|------|
+| 2026-03-28 | V1.0 初始版本，基于代码核实编写 | 产品 Owner |
+| 2026-03-30 | 追加 v0.45.13–v0.45.14（Shiji-KB 反思循环借鉴） | 产品 Owner |
+| 2026-03-31 | 补齐缺失章节（测试/版本号/文档产出/状态追踪/变更记录/决策/风险），修复章节编号 | 产品 Owner |
+
+---
+
+## 第十六章 决策与假设
+
+**关键决策：**
+- PDF 导出使用 `weasyprint`（HTML→PDF 路线），而非 `reportlab`（纯 Python）— 原因：weasyprint 对 Markdown→HTML→PDF 链路更自然，CJK 支持更好
+- AI 反思循环（v0.45.13）仅引入 1 轮自检，不做多轮 — 原因：先验证单轮效果，多轮成本翻倍且收益不确定
+- `summary_confidence` 作为独立 DB 字段而非存入 JSONB — 原因：v0.45.14 前端需直接查询和展示，独立字段更便于排序和过滤
+
+**重要假设：**
+- v0.44 全部完成后才启动 v0.45（基线为 v0.44.16）
+- LLM 摘要 prompt 在 200 字限制下产出质量可接受
+- weasyprint 在 Docker 容器中可正常运行（需安装 CJK 字体）
+
+---
+
+## 第十七章 版本级风险与缓解
+
+| 风险 | 概率 | 影响 | 缓解措施 |
+|------|------|------|---------|
+| weasyprint Docker 兼容性问题（字体/渲染） | 中 | 中 | v0.45.2 Phase 1 先在容器中验证 weasyprint 可用性 |
+| LLM 反思循环自检质量不稳定（自我认同偏差） | 中 | 低 | prompt 明确要求严格评审；后续可引入交叉模型检验 |
+| 14 个任务总量较大，可能延期 | 中 | 中 | 严格按依赖顺序执行，P2 任务（v0.45.9/14）可延后 |
+| 前端虚拟滚动与现有表格组件冲突 | 低 | 中 | Phase 1 确认现有组件兼容性，必要时降级为优化分页 |
+| AI orchestrator 与 API service 共享 DB 的并发问题 | 低 | 高 | 参考现有 `_get_sync_session()` 模式，每个 task 独立 session |
