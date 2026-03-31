@@ -430,6 +430,92 @@ def build_tags_reflection_prompt(
     return SYSTEM_PROMPT_REFLECTION, user_prompt
 
 
+# ---------------------------------------------------------------------------
+# Cross-document contradiction detection prompts (v0.46.5)
+# ---------------------------------------------------------------------------
+
+SYSTEM_PROMPT_CONTRADICTION = """你是一个知识一致性审查专家。你的任务是检测两篇知识文档之间是否存在矛盾。
+
+矛盾类型包括：
+- 数字/数据矛盾：同一事实在两篇文档中给出了不同的数字（日期、金额、数量等）
+- 因果矛盾：同一事件的原因或结果描述不一致
+- 定义矛盾：同一概念在两篇文档中有不同的定义
+- 流程矛盾：同一操作流程的步骤不一致
+- 时间矛盾：同一事件的时间线不一致
+
+你必须：
+- 只报告确定的矛盾，不报告可能的差异或互补信息
+- 每条矛盾必须给出两端的具体证据原文
+- 如果两篇文档没有矛盾，返回空列表"""
+
+USER_PROMPT_CONTRADICTION_TEMPLATE = """请检测以下两篇知识文档之间是否存在矛盾。
+
+--- 文档 A ---
+标题：{doc_a_title}
+摘要：{doc_a_summary}
+正文片段：{doc_a_content}
+--- 文档 A 结束 ---
+
+--- 文档 B ---
+标题：{doc_b_title}
+摘要：{doc_b_summary}
+正文片段：{doc_b_content}
+--- 文档 B 结束 ---
+
+请以如下 JSON 格式输出（不要输出其他内容）：
+{{
+  "contradictions": [
+    {{
+      "description": "矛盾的简要描述",
+      "severity": "high|medium|low",
+      "evidence_a": "文档 A 中的原文证据",
+      "evidence_b": "文档 B 中的原文证据"
+    }}
+  ]
+}}
+
+severity 说明：
+- high：核心事实矛盾（数字、日期、因果关系）
+- medium：定义或流程描述不一致
+- low：措辞差异但可能指同一事实
+
+如果没有矛盾，返回 {{"contradictions": []}}"""
+
+
+def build_contradiction_prompt(
+    doc_a_title: str,
+    doc_a_summary: str,
+    doc_a_content: str,
+    doc_b_title: str,
+    doc_b_summary: str,
+    doc_b_content: str,
+    max_content_chars: int = 500,
+) -> tuple[str, str]:
+    """Build prompts for detecting contradictions between two documents.
+
+    Returns (system_prompt, user_prompt).
+    Content is truncated to max_content_chars to control token usage.
+    """
+    a_content = doc_a_content[:max_content_chars]
+    if len(doc_a_content) > max_content_chars:
+        a_content += "...(截断)"
+
+    b_content = doc_b_content[:max_content_chars]
+    if len(doc_b_content) > max_content_chars:
+        b_content += "...(截断)"
+
+    user_prompt = USER_PROMPT_CONTRADICTION_TEMPLATE.format(
+        doc_a_title=doc_a_title,
+        doc_a_summary=doc_a_summary or "无摘要",
+        doc_a_content=a_content,
+        doc_b_title=doc_b_title,
+        doc_b_summary=doc_b_summary or "无摘要",
+        doc_b_content=b_content,
+    )
+
+    return SYSTEM_PROMPT_CONTRADICTION, user_prompt
+
+
 def build_classify_prompt(
     existing_docs: list[dict],
     new_chunks: list[dict],

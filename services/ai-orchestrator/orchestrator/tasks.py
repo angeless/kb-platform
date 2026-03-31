@@ -16,6 +16,7 @@ from shared_models.pipeline_stage_config import PipelineStageConfig
 
 from .celery_app import celery_app
 from .llm_client import call_llm, parse_json_response
+from shared_models.cross_reference import CrossReference
 from .prompts import (
     build_propose_prompt,
     build_generate_doc_prompt,
@@ -24,6 +25,7 @@ from .prompts import (
     build_suggest_tags_prompt,
     build_summary_reflection_prompt,
     build_tags_reflection_prompt,
+    build_contradiction_prompt,
 )
 
 logger = logging.getLogger(__name__)
@@ -891,4 +893,134 @@ def suggest_tags(self, doc_id: str) -> dict:
         except Exception as e:
             session.rollback()
             logger.error("Failed to suggest tags for doc %s: %s", doc_id, e)
+            return {"status": "error", "message": str(e)}
+
+
+# ---------------------------------------------------------------------------
+# Cross-document contradiction detection (v0.46.5)
+# ---------------------------------------------------------------------------
+
+@celery_app.task(bind=True, name="orchestrator.detect_contradictions")
+def detect_contradictions(self, project_id: str, max_pairs: int = 50) -> dict:
+    """Detect contradictions between published documents in a project.
+
+    1. Load all published KnowledgeDocs with summary + content
+    2. Build pairs (limited to max_pairs)
+    3. For each pair, call LLM with contradiction prompt
+    4. Create CrossReference records for detected contradictions
+    """
+    project_uuid = uuid.UUID(project_id)
+
+    with _get_sync_session() as session:
+        try:
+            # Load published docs
+            docs = session.execute(
+                select(KnowledgeDoc).where(
+                    KnowledgeDoc.project_id == project_uuid,
+                    KnowledgeDoc.status.in_(["published", "draft"]),
+                )
+            ).scalars().all()
+
+            if len(docs) < 2:
+                return {
+                    "status": "success",
+                    "total_pairs_checked": 0,
+                    "contradictions_found": 0,
+                    "cross_refs_created": [],
+                }
+
+            # Build doc info with content
+            doc_infos = []
+            for doc in docs:
+                latest_ver = session.execute(
+                    select(KnowledgeDocVersion)
+                    .where(KnowledgeDocVersion.doc_id == doc.id)
+                    .order_by(KnowledgeDocVersion.version.desc())
+                ).scalar_one_or_none()
+
+                content = latest_ver.content_md if latest_ver else ""
+                doc_infos.append({
+                    "id": doc.id,
+                    "title": doc.title,
+                    "summary": doc.summary or "",
+                    "content": content,
+                })
+
+            # Build pairs (limit to max_pairs)
+            pairs = []
+            for i in range(len(doc_infos)):
+                for j in range(i + 1, len(doc_infos)):
+                    pairs.append((doc_infos[i], doc_infos[j]))
+                    if len(pairs) >= max_pairs:
+                        break
+                if len(pairs) >= max_pairs:
+                    break
+
+            # Check each pair for contradictions
+            total_contradictions = 0
+            cross_refs_created = []
+
+            for doc_a, doc_b in pairs:
+                system_prompt, user_prompt = build_contradiction_prompt(
+                    doc_a_title=doc_a["title"],
+                    doc_a_summary=doc_a["summary"],
+                    doc_a_content=doc_a["content"],
+                    doc_b_title=doc_b["title"],
+                    doc_b_summary=doc_b["summary"],
+                    doc_b_content=doc_b["content"],
+                )
+
+                try:
+                    llm_response = call_llm(prompt=user_prompt, system_prompt=system_prompt)
+                    result = parse_json_response(llm_response)
+                except Exception as e:
+                    logger.warning(
+                        "Contradiction check failed for %s vs %s: %s",
+                        doc_a["title"], doc_b["title"], e,
+                    )
+                    continue
+
+                contradictions = result.get("contradictions", [])
+                for contradiction in contradictions:
+                    severity = contradiction.get("severity", "medium")
+                    description = contradiction.get("description", "")
+                    evidence_a = contradiction.get("evidence_a", "")
+                    evidence_b = contradiction.get("evidence_b", "")
+
+                    note = f"[{severity}] {description}\n\n文档A证据: {evidence_a}\n文档B证据: {evidence_b}"
+
+                    ref = CrossReference(
+                        id=uuid.uuid4(),
+                        source_doc_id=doc_a["id"],
+                        target_doc_id=doc_b["id"],
+                        relation_type="contradicts",
+                        confidence={"high": 0.9, "medium": 0.7, "low": 0.5}.get(severity, 0.7),
+                        note=note,
+                        created_by="ai",
+                    )
+                    session.add(ref)
+                    total_contradictions += 1
+                    cross_refs_created.append({
+                        "ref_id": str(ref.id),
+                        "doc_a": str(doc_a["id"]),
+                        "doc_b": str(doc_b["id"]),
+                        "description": description,
+                    })
+
+            session.commit()
+
+            logger.info(
+                "Contradiction detection for project %s: %d pairs checked, %d contradictions found",
+                project_id, len(pairs), total_contradictions,
+            )
+            return {
+                "status": "success",
+                "total_pairs_checked": len(pairs),
+                "contradictions_found": total_contradictions,
+                "cross_refs_created": cross_refs_created,
+            }
+
+        except Exception as e:
+            session.rollback()
+            logger.error("Failed contradiction detection for project %s: %s", project_id, e)
             return {"status": "error", "message": str(e)}

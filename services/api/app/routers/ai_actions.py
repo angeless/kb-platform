@@ -1,9 +1,11 @@
-"""AI actions router: generate summary, suggest tags for knowledge docs."""
+"""AI actions router: generate summary, suggest tags, detect contradictions."""
 
 import logging
 import uuid
+from typing import Optional
 
 from fastapi import APIRouter, Depends, Path
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,7 +17,7 @@ from app.deps import get_db, get_kb_id, require_role
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/v1/docs", tags=["ai-actions"])
+router = APIRouter(tags=["ai-actions"])
 
 _RESP_AUTH = {
     401: {"description": "Unauthorized", "model": ErrorDetail},
@@ -40,7 +42,7 @@ def _get_celery_app():
 
 
 @router.post(
-    "/{doc_id}/ai-summarize",
+    "/v1/docs/{doc_id}/ai-summarize",
     response_model=DataResponse[dict],
     summary="Generate AI summary for a document",
     description="Calls the AI orchestrator to generate a summary for the specified knowledge document. "
@@ -94,7 +96,7 @@ async def ai_summarize(
 
 
 @router.post(
-    "/{doc_id}/ai-suggest-tags",
+    "/v1/docs/{doc_id}/ai-suggest-tags",
     response_model=DataResponse[dict],
     summary="Suggest AI-generated keyword tags for a document",
     description="Calls the AI orchestrator to suggest keyword tags for the specified knowledge document. "
@@ -144,4 +146,64 @@ async def ai_suggest_tags(
     return DataResponse(data={
         "keywords": task_result.get("keywords", []),
         "confidence": task_result.get("confidence"),
+    })
+
+
+# ---------------------------------------------------------------------------
+# Cross-document contradiction detection (v0.46.5)
+# ---------------------------------------------------------------------------
+
+
+class DetectContradictionsRequest(BaseModel):
+    max_pairs: int = Field(default=50, ge=1, le=200)
+
+
+@router.post(
+    "/v1/projects/{project_id}/ai-detect-contradictions",
+    response_model=DataResponse[dict],
+    summary="Detect contradictions between documents in a project",
+    description="Triggers AI to compare document pairs and detect factual contradictions. "
+                "Results are automatically saved as 'contradicts' CrossReference records.",
+    responses={
+        200: {"description": "Detection completed"},
+        **_RESP_AUTH,
+        500: {"description": "AI detection failed", "model": ErrorDetail},
+    },
+)
+async def ai_detect_contradictions(
+    project_id: uuid.UUID = Path(...),
+    body: Optional[DetectContradictionsRequest] = None,
+    db: AsyncSession = Depends(get_db),
+    kb_id: uuid.UUID = Depends(get_kb_id),
+    current_user: User = require_role("editor"),
+):
+    max_pairs = body.max_pairs if body else 50
+
+    celery = _get_celery_app()
+    if celery is None:
+        raise AppException(ErrorCode.SYSTEM_INTERNAL_ERROR, "AI 服务不可用", status_code=500)
+
+    result = celery.send_task(
+        "orchestrator.detect_contradictions",
+        args=[str(project_id)],
+        kwargs={"max_pairs": max_pairs},
+    )
+
+    try:
+        task_result = result.get(timeout=120)
+    except Exception as e:
+        logger.error("Contradiction detection failed for project %s: %s", project_id, e)
+        raise AppException(ErrorCode.SYSTEM_INTERNAL_ERROR, "AI 矛盾检测失败", status_code=500)
+
+    if task_result.get("status") == "error":
+        raise AppException(
+            ErrorCode.SYSTEM_INTERNAL_ERROR,
+            task_result.get("message", "AI 矛盾检测失败"),
+            status_code=500,
+        )
+
+    return DataResponse(data={
+        "total_pairs_checked": task_result.get("total_pairs_checked", 0),
+        "contradictions_found": task_result.get("contradictions_found", 0),
+        "cross_refs_created": task_result.get("cross_refs_created", []),
     })
