@@ -518,22 +518,21 @@ def _check_terminology_consistency(content_md: str, project_docs: list) -> list[
 
 #### 背景与目标
 
-**现状：** DocEmbedding.embedding 存储为 JSONB（JSON 数组），搜索需全表扫描。
+**现状：** DocEmbedding 已有 `embedding`（JSONB）和 `embedding_vec`（pgvector Vector(1536)，nullable）两列共存。pgvector extension 和列已通过迁移 `a1b2c3d4e5f6` / `b2c3d4e5f6a7` 创建。但尚未建立 HNSW 索引，搜索仍使用 JSONB 全表扫描。
 
-**目标（Goal）：** 将 embedding 列迁移为 pgvector 原生 `vector` 类型，创建 HNSW 索引，语义搜索使用 `<=>` 运算符。
+**目标（Goal）：** 为已有 `embedding_vec` 列创建 HNSW 索引，将语义搜索改用 `<=>` 运算符，回填历史数据。
 
 ---
 
 #### 数据库变更
 
-- `infra/sql/alembic/versions/` — migration 分 3 步：
-  1. `CREATE EXTENSION IF NOT EXISTS vector`
-  2. `ALTER TABLE doc_embedding ADD COLUMN embedding_vec vector(1536)`（假设 1536 维）
-  3. 数据复制：`UPDATE doc_embedding SET embedding_vec = embedding::vector WHERE embedding IS NOT NULL`
-  4. `CREATE INDEX CONCURRENTLY idx_doc_embedding_vec ON doc_embedding USING hnsw (embedding_vec vector_cosine_ops)`
+- `infra/sql/alembic/versions/` — migration 分 2 步（列已存在，无需 ADD COLUMN）：
+  1. 数据回填：`UPDATE doc_embedding SET embedding_vec = embedding::vector WHERE embedding IS NOT NULL AND embedding_vec IS NULL`
+  2. `CREATE INDEX CONCURRENTLY idx_doc_embedding_vec ON doc_embedding USING hnsw (embedding_vec vector_cosine_ops)`
+  > ⚠️ 注意：`embedding_vec` 列和 pgvector extension 已通过迁移 `a1b2c3d4e5f6` / `b2c3d4e5f6a7` 创建，此处 **不要** 重复 `CREATE EXTENSION` 或 `ADD COLUMN`。
 
 **修改文件：**
-- `packages/shared-models/shared_models/`（DocEmbedding 所在文件）— 新增 `embedding_vec` 列（`pgvector.sqlalchemy.Vector(1536)`）
+- `packages/shared-models/shared_models/embedding.py`（DocEmbedding）— `embedding_vec` 列已存在，无需修改模型定义
 - `services/api/app/services/search_service.py` — 语义搜索改用 `embedding_vec <=> query_vec` 运算符
 - 依赖文件 — 新增 `pgvector` Python 包
 
@@ -850,7 +849,7 @@ def _check_terminology_consistency(content_md: str, project_docs: list) -> list[
 | v0.49.1 | asset_chunk | 修改 | extraction_confidence | FLOAT | nullable | 提取置信度 |
 | v0.49.1 | asset_chunk | 修改 | semantic_boundaries | JSONB | nullable | 语义边界信息 |
 | v0.49.1 | asset_chunk | 修改 | language | VARCHAR(10) | nullable | 语言标识 |
-| v0.49.6 | doc_embedding | 修改 | embedding_vec | vector(1536) | nullable | pgvector 原生列 |
+| v0.49.6 | doc_embedding | **已有列** | embedding_vec | vector(1536) | nullable | pgvector 原生列（已存在，本次仅建 HNSW 索引 + 回填数据） |
 | v0.49.7 | pipeline_stage_log | 修改 | input_hash | VARCHAR(64) | nullable | 输入数据 hash |
 
 合计：0 张新表，3 张表修改（7 个新字段），3 次 Alembic migration。
@@ -880,6 +879,7 @@ def _check_terminology_consistency(content_md: str, project_docs: list) -> list[
 | 2026-03-31 | V1.0 初始版本 | Claude Code |
 | 2026-03-31 | V2.0 规范重写：拆分 IR 适配为 2 任务、反思循环为 2 任务，补齐必填字段 | Claude Code |
 | 2026-04-01 | V2.1 交叉审查修复：§1.2 继承列表补充 v0.48 readability/video_parser/URL import 能力 | Claude Code |
+| 2026-04-01 | V2.2 交叉审查v2修复：H-1 v0.49.6 pgvector embedding_vec 列已存在，migration 改为仅回填+建索引 | Claude Code |
 
 ### 第十六章 决策与假设
 **关键决策：**

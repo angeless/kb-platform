@@ -17,7 +17,7 @@
 
 ### 1.2 继承已有能力
 
-- **KnowledgeDoc**（`packages/shared-models/shared_models/knowledge.py`）— status 字段（draft / reviewing / published）+ update_type
+- **KnowledgeDoc**（`packages/shared-models/shared_models/knowledge.py`）— status 字段（draft / pending / approved / rejected / archived）+ update_type
 - **CrossReference**（`packages/shared-models/`）— 5 种关系类型 CRUD
 - **Pipeline 配置化**（v0.46）— PipelineStageConfig enable/disable + params
 - **反思循环 v2**（v0.49.4-5）— 规则校验 + AI 自检 + 多轮循环
@@ -141,13 +141,13 @@ assigned → approved（审批通过）
 assigned → rejected（驳回）
 rejected → resubmitted（作者修改后重新提交）
 resubmitted → assigned（自动重新分配给原审批人）
-approved → (触发 doc.status = "published")
+approved → (触发 doc.status = "approved"，即文档也标记为已批准)
 ```
 
 **业务规则：**
 ① 创建 ReviewTask 时 status=pending，reviewer_id=NULL
 ② 分配审批人时 status→assigned，reviewer_id 填充
-③ 审批通过时 status→approved，同时更新对应 doc 的 status 为 published
+③ 审批通过时 status→approved，同时更新对应 doc 的 status 为 approved（注：KnowledgeDoc 无 `published` 状态，使用 `approved` 表示审批通过）
 ④ 驳回时 status→rejected，review_note 必填
 ⑤ 重新提交时 status→resubmitted，然后自动→assigned（原审批人）
 ⑥ 状态流转严格单向，不允许逆向（如 approved 不能回到 assigned）
@@ -259,7 +259,7 @@ Response 200：{"data": [...], "total": N, "page": 1}
 **业务规则：**
 ① 创建审批：校验 doc 状态为 reviewing → 创建 ReviewTask(status=pending)
 ② 分配审批人：校验 reviewer_id 为有效用户 → status=assigned + assigned_at
-③ 批准：校验调用者 = reviewer_id → status=approved + reviewed_at → **自动更新 doc.status='published'**
+③ 批准：校验调用者 = reviewer_id → status=approved + reviewed_at → **自动更新 doc.status='approved'**
 ④ 驳回：校验调用者 = reviewer_id + note 非空 → status=rejected
 ⑤ 重新提交：校验调用者 = created_by → status=resubmitted → 自动 assigned（原 reviewer）
 ⑥ 列表查询：支持按 status 筛选 + 分页
@@ -271,7 +271,7 @@ Response 200：{"data": [...], "total": N, "page": 1}
 
 - [ ] 创建审批 → 返回 pending 状态的 ReviewTask
 - [ ] 分配审批人 → reviewer_id 正确设置
-- [ ] 批准 → doc.status 变为 published
+- [ ] 批准 → doc.status 变为 approved
 - [ ] 驳回 → review_note 记录驳回原因
 - [ ] 重新提交 → 自动重新分配给原审批人
 - [ ] 非法状态转换 → 400 错误
@@ -326,7 +326,7 @@ Response 200：{"data": [...], "total": N, "page": 1}
 #### 前端变更
 
 **修改文件：**
-- `apps/web/src/app/(dashboard)/projects/[id]/review/page.tsx` — 重构为看板页：
+- `apps/web/src/app/(dashboard)/projects/[id]/review/page.tsx` — **重构**已有页面为看板页（文件已存在）：
   - 三列看板：待分配（pending） | 待审批（assigned） | 已完成（approved + rejected）
   - 每张卡片显示：文档标题、创建者、创建时间、审批人（如有）
   - 点击卡片 → 跳转到文档详情页
@@ -575,7 +575,7 @@ Response 200：{"data": [...], "total": N, "page": 1}
 - `services/ai-orchestrator/orchestrator/prompts.py` — 新增 `build_glossary_extraction_prompt()`
 
 **业务规则：**
-① 从项目所有 published 文档的 chunks 中收集内容
+① 从项目所有 approved 文档的 chunks 中收集内容
 ② 调用 LLM 提取专业术语（名称 + 简短定义）
 ③ 去重：同义词合并（LLM 判断）
 ④ 按首字母/拼音排序
@@ -592,7 +592,7 @@ POST /v1/projects/{project_id}/ai-generate-glossary
 认证：JWT，editor+
 Body：无
 Response 200：{"data": {"doc_id": "uuid", "terms_count": 42}}
-Response 400：项目无 published 文档
+Response 400：项目无 approved 文档
 ```
 
 ---
@@ -602,7 +602,7 @@ Response 400：项目无 published 文档
 - [ ] 调用 API 后生成 glossary 类型的 KnowledgeDoc
 - [ ] 术语表包含术语名称、定义、首次出现文档
 - [ ] 术语按字母排序
-- [ ] 项目无 published 文档 → 400 错误
+- [ ] 项目无 approved 文档 → 400 错误
 - [ ] 术语去重（同义词不重复列出）
 
 ---
@@ -631,7 +631,7 @@ Response 400：项目无 published 文档
 
 > ⚠️ **Phase 1 前置确认：**
 > 1. 读 doc_generate.py 确认文档生成模式
-> 2. 确认 KnowledgeDoc 的 doc_type 字段是否存在
+> 2. ✅ **已确认：KnowledgeDoc.doc_type 字段已存在**（`knowledge.py:36` → `String(30)`），无需 migration 添加列
 
 ---
 
@@ -856,6 +856,7 @@ Response 200：{
 |-----|--------|------|
 | 2026-03-31 | V1.0 初始版本 | Claude Code |
 | 2026-03-31 | V2.0 规范重写：审批前端拆为看板+操作 2 任务，补齐必填字段 | Claude Code |
+| 2026-04-01 | V2.1 交叉审查v2修复：C-2 published→approved 状态值修正（7处）；M-1 review/page.tsx 标记为重构非新增；M-2 doc_type 字段确认已存在 | Claude Code |
 
 ### 第十六章 决策与假设
 **关键决策：**

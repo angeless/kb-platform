@@ -125,11 +125,9 @@ Pipeline 链：v0.51.5 → v0.51.6 → v0.51.7 → v0.51.8
 #### 后端变更
 
 **修改文件：**
-- `packages/shared-config/shared_config/settings.py` — 新增：
-  - `storage_backend: str = "minio"` — "minio" | "s3"
-  - `s3_bucket: str = ""` — S3 bucket 名称
-  - `s3_region: str = "us-east-1"` — S3 region
-  - `s3_endpoint: str = ""` — S3 兼容端点（可选，用于非 AWS S3）
+- `packages/shared-config/shared_config/settings.py` — 修改：
+  - 新增 `storage_backend: str = "minio"` — "minio" | "s3" 切换开关
+  > ⚠️ 注意：`s3_endpoint`, `s3_access_key`, `s3_secret_key`, `s3_bucket`, `s3_region` **已存在**于 settings.py（用于 MinIO 配置），无需重复添加。仅需新增 `storage_backend` 字段。
 
 - `services/api/app/utils/storage.py` — StorageClient 重构：
   - 抽象接口：`upload(key, data)` / `download(key)` / `delete(key)` / `presign_url(key)`
@@ -1220,6 +1218,7 @@ Response 200：{"data": {"job_id": "uuid", "status": "started"}}
 | 2026-03-31 | V1.0 初始版本 | Claude Code |
 | 2026-03-31 | V2.0 规范重写：水平扩展拆为 S3+Redis 2 任务，SKILL 拆为 模型+集成+UI 3 任务，本体拆为 模型+AI+可视化 3 任务 | Claude Code |
 | 2026-04-01 | V2.1 交叉审查修复：v0.51.3 补充存储量计算方式 + 建议前置依赖 v0.51.1；v0.51.4 补充 Team CRUD API 契约（5 端点） | Claude Code |
+| 2026-04-01 | V2.2 交叉审查v2修复：H-2 v0.51.1 S3 config 字段已存在于 settings.py，仅需新增 storage_backend | Claude Code |
 
 ### 第十六章 决策与假设
 **关键决策：**

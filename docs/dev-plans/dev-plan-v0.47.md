@@ -131,7 +131,8 @@ Bug 修复链：v0.47.1 → v0.47.2 → v0.47.3
 
 **现状：** `ai_detect_contradictions` 对所有文档（含 draft）做矛盾检测，导致未完成文档产生误报。
 
-**目标（Goal）：** 修改矛盾检测查询，排除 `status='draft'` 的文档，仅对 `published` / `reviewing` 文档执行矛盾检测。
+**目标（Goal）：** 修改矛盾检测查询，排除 `status='draft'` 的文档，仅对非 draft 文档（pending / approved / rejected / archived）执行矛盾检测。
+> ⚠️ 注意：KnowledgeDoc.status 合法值为 `draft / pending / approved / rejected / archived`，不存在 `published` 或 `reviewing` 状态。
 
 ---
 
@@ -143,17 +144,17 @@ Bug 修复链：v0.47.1 → v0.47.2 → v0.47.3
 
 **业务规则：**
 ① 读取项目文档列表时，添加 `status != 'draft'` 过滤
-② `published` 和 `reviewing` 状态的文档正常参与矛盾检测
+② 非 draft 状态的文档（pending / approved / rejected / archived）正常参与矛盾检测
 ③ 如果过滤后文档数 < 2，返回空结果（沿用已有逻辑）
 
 ---
 
 #### 验收标准
 
-- [ ] 项目中有 3 篇 published + 2 篇 draft 文档 → 矛盾检测只比对 3 篇 published，draft 不参与
+- [ ] 项目中有 3 篇 approved + 2 篇 draft 文档 → 矛盾检测只比对 3 篇 approved，draft 不参与
 - [ ] 项目仅有 draft 文档 → 返回空结果，不报错
-- [ ] reviewing 状态文档正常参与检测
-- [ ] 已有 published 文档行为不变（不回归）
+- [ ] pending 状态文档正常参与检测
+- [ ] 已有 approved 文档行为不变（不回归）
 
 ---
 
@@ -528,7 +529,7 @@ STAGE_PARAM_SCHEMAS = {
 | 字段 | 类型 | 约束 | 说明 |
 |------|------|------|------|
 | id | UUID | PK, default uuid4 | 主键 |
-| job_id | UUID | FK→pipeline_job.id, NOT NULL | 所属 pipeline job |
+| job_id | UUID | FK→job.id, NOT NULL | 所属 pipeline job |
 | stage_name | VARCHAR(50) | NOT NULL | Stage 标识 |
 | status | VARCHAR(20) | NOT NULL | "running" / "completed" / "skipped" / "failed" |
 | started_at | TIMESTAMP | nullable | 开始时间 |
@@ -585,11 +586,11 @@ STAGE_PARAM_SCHEMAS = {
 | 风险 | 概率 | 影响 | 缓解措施 |
 |------|------|------|---------|
 | stage log 写入增加 pipeline 执行耗时 | 低 | 低 | 非关键路径，单次 DB 写入可忽略 |
-| pipeline_job 表不存在（如使用了不同名称） | 中 | 中 | Phase 1 确认实际表名和 FK |
+| ~~pipeline_job 表名已确认~~ | — | — | **已确认：实际表名为 `job`（`packages/shared-models/shared_models/job.py`），FK 已修正为 `job.id`** |
 
 > ⚠️ **Phase 1 前置确认：**
 > 1. 读 `services/pipeline-worker/worker/tasks.py` 完整 run_pipeline 逻辑
-> 2. **⚠️ 关键：确认 pipeline job 的实际表名和模型文件路径** — 本任务 FK 引用 `pipeline_job.id`，若实际表名不同（如 `pipeline_run` 或 `celery_task`）则 migration 会失败。必须先 `grep -r "pipeline" packages/shared-models/` 确认。
+> 2. **✅ 已确认：pipeline job 实际表名为 `job`**（`packages/shared-models/shared_models/job.py` → `__tablename__ = "job"`），FK 已修正为 `job.id`。
 > 3. 确认 LLM client 返回 token_usage 的方式
 
 ---
@@ -830,7 +831,7 @@ Response 404：provider 不存在
 | 任务 | 表名 | 变更类型 | 字段 | 类型 | 约束 | 说明 |
 |------|------|---------|------|------|------|------|
 | v0.47.6 | `pipeline_stage_log` | **新增表** | `id` | UUID | PK, default uuid4 | 主键 |
-| v0.47.6 | `pipeline_stage_log` | | `job_id` | UUID | FK→pipeline_job.id, NOT NULL | 所属 job |
+| v0.47.6 | `pipeline_stage_log` | | `job_id` | UUID | FK→job.id, NOT NULL | 所属 job |
 | v0.47.6 | `pipeline_stage_log` | | `stage_name` | VARCHAR(50) | NOT NULL | Stage 标识 |
 | v0.47.6 | `pipeline_stage_log` | | `status` | VARCHAR(20) | NOT NULL | running/completed/skipped/failed |
 | v0.47.6 | `pipeline_stage_log` | | `started_at` | TIMESTAMP | nullable | 开始时间 |
@@ -876,6 +877,7 @@ Agent 在进入 Phase 2 编码之前，必须先输出以下三项：
 | 2026-03-31 | V1.0 初始版本 | Claude Code |
 | 2026-03-31 | V2.0 按规范重写，补齐所有必填字段 | Claude Code |
 | 2026-04-01 | V2.1 交叉审查修复：v0.47.6 Phase 1 前置确认强化 pipeline_job 表名验证 | Claude Code |
+| 2026-04-01 | V2.2 交叉审查v2修复：C-1 pipeline_job→job FK 修正（4处）；C-2 published/reviewing→正确状态值（3处） | Claude Code |
 
 ---
 
