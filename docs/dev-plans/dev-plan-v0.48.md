@@ -503,13 +503,13 @@
 - `apps/web/src/app/(dashboard)/projects/[id]/assets/page.tsx` — 修改：
   - 视频文件列表项显示缩略图 + 时长（从 Asset.tags 中读取 `duration_s`）
   - 上传进度条组件（已有上传进度 → 扩展为多阶段：上传中 / ASR 中 / 帧提取中 / 完成）
-  - 解析状态标签（基于 Asset 的 processing_status 字段）
+  - 解析状态标签（基于 Asset 的 `parse_status` 字段，注意：实际字段名为 `parse_status` 而非 `processing_status`）
 
 **业务规则：**
 ① 视频类型文件在列表中显示视频图标 + 时长标签（格式 `MM:SS`）
 ② 上传期间展示进度条
 ③ 上传完成后展示解析状态：ASR 进行中 / 帧提取中 / 完成
-④ 解析状态通过轮询 Asset 详情获取（GET asset → 检查 processing_status）
+④ 解析状态通过轮询 Asset 详情获取（GET asset → 检查 `parse_status`）
 
 ---
 
@@ -546,7 +546,7 @@
 
 > ⚠️ **Phase 1 前置确认：**
 > 1. 读 assets/page.tsx 当前列表渲染逻辑
-> 2. 确认 Asset 上是否有 processing_status 字段（可能在 tags 中）
+> 2. ✅ **已确认：Asset 的解析状态字段名为 `parse_status`**（`asset.py:29` → `String(20), default="pending"`），不是 `processing_status`
 
 ---
 
@@ -628,6 +628,7 @@ v0.48 **不新增数据库表**。变更仅限代码层。
 |-----|--------|------|
 | 2026-03-31 | V1.0 初始版本 | Claude Code |
 | 2026-03-31 | V2.0 按规范重写，补齐必填字段 | Claude Code |
+| 2026-04-01 | V2.1 交叉审查v3修复：v0.48.6 processing_status→parse_status 字段名修正（3处） | Claude Code |
 
 ---
 
