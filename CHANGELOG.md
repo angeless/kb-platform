@@ -3,6 +3,14 @@
 所有重要变更都将被记录在此文件中。
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/)。
 
+## [0.47.3] — 2026-04-03
+
+### 新增 (Added)
+- Pipeline params JSON Schema 校验：PUT pipeline config 端点新增 `STAGE_PARAM_SCHEMAS` 验证，未知参数返回 422、类型不匹配返回 422、数值超范围返回 422，7 个 stage 全覆盖，GET 和 reset 不受影响（v0.47.3）
+
+### 跳过 (Skipped)
+- v0.47.2 suggest_tags entity_types：已在 v0.46.3 由 `_get_entity_types()` 实现，worker 端直接从 PipelineStageConfig 读取
+
 ## [0.47.1] — 2026-04-03
 
 ### 修复 (Fixed)

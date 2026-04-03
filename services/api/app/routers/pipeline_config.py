@@ -20,6 +20,60 @@ from app.deps import get_db, get_kb_id, require_role
 from shared_models import Project, User
 from shared_models.pipeline_stage_config import PipelineStageConfig
 
+# Param validation schemas per stage (v0.47.3, audit H-4)
+STAGE_PARAM_SCHEMAS: dict[str, dict[str, dict]] = {
+    "classify": {
+        "confidence_threshold": {"type": float, "min": 0.0, "max": 1.0},
+        "entity_types": {"type": list},
+    },
+    "architecture_draft": {},
+    "doc_generate": {
+        "max_length": {"type": int, "min": 100, "max": 50000},
+        "entity_types": {"type": list},
+    },
+    "quality_check": {
+        "min_content_length": {"type": int, "min": 1, "max": 10000},
+        "require_title": {"type": bool},
+        "detect_pii": {"type": bool},
+    },
+    "conflict_detect": {
+        "similarity_threshold": {"type": float, "min": 0.0, "max": 1.0},
+    },
+    "embed": {
+        "model": {"type": str},
+    },
+    "review_notify": {},
+}
+
+
+def _validate_stage_params(stage_name: str, params: dict) -> None:
+    """Validate params against the stage schema. Raises HTTPException 422 on failure."""
+    schema = STAGE_PARAM_SCHEMAS.get(stage_name, {})
+    for key, value in params.items():
+        if key not in schema:
+            raise HTTPException(
+                status_code=422,
+                detail=f"unknown parameter: {key} (stage: {stage_name})",
+            )
+        spec = schema[key]
+        expected_type = spec["type"]
+        if not isinstance(value, expected_type):
+            raise HTTPException(
+                status_code=422,
+                detail=f"parameter {key}: expected {expected_type.__name__}, got {type(value).__name__}",
+            )
+        if "min" in spec and value < spec["min"]:
+            raise HTTPException(
+                status_code=422,
+                detail=f"parameter {key}: value {value} below minimum {spec['min']}",
+            )
+        if "max" in spec and value > spec["max"]:
+            raise HTTPException(
+                status_code=422,
+                detail=f"parameter {key}: value {value} above maximum {spec['max']}",
+            )
+
+
 router = APIRouter(prefix="/v1/projects", tags=["pipeline-config"])
 
 
@@ -87,6 +141,9 @@ async def update_stage_config(
     await _verify_project_tenant(db, project_id, kb_id)
     if stage_name not in STAGE_NAMES:
         raise HTTPException(status_code=404, detail=f"Unknown stage: {stage_name}")
+
+    if body.params:
+        _validate_stage_params(stage_name, body.params)
 
     result = await db.execute(
         select(PipelineStageConfig).where(
