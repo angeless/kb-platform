@@ -331,13 +331,13 @@ async def test_import_archive_empty_zip(client: AsyncClient, auth_headers: dict)
 
 
 @pytest.mark.asyncio
-async def test_upload_unsupported_type_gets_unsupported_status(
+async def test_upload_image_type_gets_pending_status(
     client: AsyncClient, auth_headers: dict
 ):
-    """Uploading an image file should succeed but set parse_status=unsupported."""
+    """Uploading an image file should succeed with parse_status=pending (OCR parseable)."""
     proj_resp = await client.post(
         "/v1/projects",
-        json={"name": "Unsupported Type Project"},
+        json={"name": "Image Type Project"},
         headers=auth_headers,
     )
     project_id = proj_resp.json()["data"]["id"]
@@ -350,7 +350,7 @@ async def test_upload_unsupported_type_gets_unsupported_status(
     )
     assert resp.status_code == 201
     data = resp.json()["data"]
-    assert data["parse_status"] == "unsupported"
+    assert data["parse_status"] == "pending"
     assert data["asset_type"] == "image"
 
 

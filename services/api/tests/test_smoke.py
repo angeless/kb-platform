@@ -51,10 +51,18 @@ async def test_unauthenticated_request_rejected(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_login_with_invalid_credentials(client: AsyncClient):
     """Login with invalid credentials should return 401."""
-    response = await client.post(
-        "/v1/auth/login",
-        json={"email": "nonexistent@example.com", "password": "wrong"},
-    )
+    from unittest.mock import AsyncMock, patch
+    from shared_errors import ErrorCode, UnauthorizedException
+
+    with patch("app.services.auth_service.PassClient.login", new_callable=AsyncMock) as mock_login:
+        mock_login.side_effect = UnauthorizedException(
+            error_code=ErrorCode.AUTH_INVALID_CREDENTIALS,
+            message="邮箱或密码错误",
+        )
+        response = await client.post(
+            "/v1/auth/login",
+            json={"email": "nonexistent@example.com", "password": "wrong"},
+        )
     assert response.status_code == 401
 
 

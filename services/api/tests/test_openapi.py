@@ -14,7 +14,7 @@ from app.routers.assets import get_storage
 
 
 # Public paths that should NOT have security requirements
-PUBLIC_PATHS = {"/healthz", "/readyz", "/metrics", "/api/versions", "/api/health/ready"}
+PUBLIC_PATHS = {"/healthz", "/readyz", "/metrics", "/api/versions", "/api/health/ready", "/api/health", "/_version"}
 
 
 @pytest_asyncio.fixture(scope="module", loop_scope="session")

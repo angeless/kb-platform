@@ -61,6 +61,7 @@ def _set_access_cookie(
     response_model=DataResponse,
     status_code=201,
     summary="Register via PA Pass and create KB account",
+    description="Register a new account via PA Pass authentication. Auto-creates KB Tenant and User on first registration. Returns access token set as httpOnly cookie.",
     responses={
         201: {"description": "Registered and logged in"},
         409: {"description": "Email already registered", "model": ErrorDetail},
@@ -87,6 +88,7 @@ async def register(
     "/login",
     response_model=DataResponse,
     summary="Login via PA Pass",
+    description="Authenticate with email and password via PA Pass. Auto-provisions KB User on first login. Returns access token set as httpOnly cookie.",
     responses={
         200: {"description": "Login successful"},
         401: {"description": "Invalid credentials", "model": ErrorDetail},
@@ -110,6 +112,7 @@ async def login(
     "/refresh",
     response_model=DataResponse,
     summary="Refresh Pass token",
+    description="Refresh an expiring Pass access token. Reads current token from cookie or Authorization header. Returns new access token set as httpOnly cookie.",
     responses={
         200: {"description": "New token returned"},
         401: {"description": "Token invalid or expired", "model": ErrorDetail},
@@ -158,6 +161,7 @@ async def logout(request: Request, settings: Settings = Depends(get_settings_dep
     "/me",
     response_model=DataResponse,
     summary="Get current user info",
+    description="Returns the authenticated user's profile including id, email, role, and tenant (kb_id).",
     responses={
         200: {"description": "User info returned"},
         401: {"description": "Not authenticated", "model": ErrorDetail},
