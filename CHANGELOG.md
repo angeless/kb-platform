@@ -3,6 +3,11 @@
 所有重要变更都将被记录在此文件中。
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/)。
 
+## [0.47.6] — 2026-04-03
+
+### 新增 (Added)
+- Pipeline per-stage 执行日志表：新增 `pipeline_stage_log` 表（job_id FK、stage_name、status、started_at/finished_at、token_usage JSONB、error_message），Alembic 迁移 `t9h0i1j2k3l4`，pipeline worker 每个 stage 自动记录 running/completed/skipped/failed 状态，异常处理器同步记录失败日志（v0.47.6）
+
 ## [0.47.4] — 2026-04-03
 
 ### 新增 (Added)

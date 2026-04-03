@@ -13,6 +13,7 @@ Stage 9: Notify reviewers
 import json
 import logging
 import uuid
+from datetime import datetime, timezone
 
 import redis
 from sqlalchemy import select
@@ -21,6 +22,7 @@ from shared_config.settings import get_settings
 from shared_models import Job
 from shared_models.database import sync_session_factory
 from shared_models.pipeline_stage_config import PipelineStageConfig
+from shared_models.pipeline_stage_log import PipelineStageLog
 from shared_schemas.pipeline_stage_config import DEFAULT_STAGE_PARAMS
 
 from .celery_app import celery_app
@@ -63,6 +65,43 @@ def _publish_event(project_id: uuid.UUID, job_id: uuid.UUID, stage: str, status:
         r.publish(f"job_events:{project_id}", json.dumps(event))
     except Exception as e:
         logger.warning("Failed to publish stage event: %s", e)
+
+
+def _log_stage_start(db, job_id: uuid.UUID, stage: str) -> PipelineStageLog:
+    """Create a PipelineStageLog record with status='running'."""
+    log = PipelineStageLog(
+        job_id=job_id,
+        stage_name=stage,
+        status="running",
+        started_at=datetime.now(timezone.utc),
+    )
+    db.add(log)
+    db.commit()
+    return log
+
+
+def _log_stage_end(db, log: PipelineStageLog, status: str, token_usage: dict | None = None, error_message: str | None = None) -> None:
+    """Update a PipelineStageLog record with final status."""
+    log.status = status
+    log.finished_at = datetime.now(timezone.utc)
+    if token_usage:
+        log.token_usage = token_usage
+    if error_message:
+        log.error_message = error_message
+    db.commit()
+
+
+def _log_stage_skip(db, job_id: uuid.UUID, stage: str) -> None:
+    """Create a PipelineStageLog record for a skipped stage."""
+    log = PipelineStageLog(
+        job_id=job_id,
+        stage_name=stage,
+        status="skipped",
+        started_at=datetime.now(timezone.utc),
+        finished_at=datetime.now(timezone.utc),
+    )
+    db.add(log)
+    db.commit()
 
 
 @celery_app.task(bind=True, name="pipeline.run_pipeline", max_retries=3, default_retry_delay=60)
@@ -114,10 +153,13 @@ def run_pipeline(self, project_id: str, job_id: str, asset_ids: list[str], user_
         if not _is_enabled(current_stage):
             logger.info("Stage 3 classify: SKIPPED by config")
             _publish_event(pid, jid, current_stage, "skipped")
+            _log_stage_skip(db, jid, current_stage)
             classification = {"new": [], "supplement": [], "correction": [], "conflict": []}
         else:
             _publish_event(pid, jid, current_stage, "running")
+            stage_log = _log_stage_start(db, jid, current_stage)
             classification = classify_chunks(db, pid, aids, config=_get_config(current_stage))
+            _log_stage_end(db, stage_log, "completed")
             _publish_event(pid, jid, current_stage, "completed")
             logger.info("Stage 3 classify: new=%d, supplement=%d, correction=%d, conflict=%d",
                          len(classification.get("new", [])),
@@ -130,9 +172,11 @@ def run_pipeline(self, project_id: str, job_id: str, asset_ids: list[str], user_
         if not _is_enabled(current_stage):
             logger.info("Stage 4 architecture_draft: SKIPPED by config")
             _publish_event(pid, jid, current_stage, "skipped")
+            _log_stage_skip(db, jid, current_stage)
             arch_id = None
         else:
             _publish_event(pid, jid, current_stage, "running")
+            stage_log = _log_stage_start(db, jid, current_stage)
             arch_id = generate_architecture_draft(db, pid, classification, config=_get_config(current_stage))
 
             # Architecture quality gate
@@ -140,6 +184,7 @@ def run_pipeline(self, project_id: str, job_id: str, asset_ids: list[str], user_
             arch_qc = validate_architecture(db, arch_id)
             if arch_qc["warnings"]:
                 logger.warning("Architecture quality warnings: %s", arch_qc["warnings"])
+            _log_stage_end(db, stage_log, "completed")
             _publish_event(pid, jid, current_stage, "completed")
 
         # --- Stage 5: Document Generation ---
@@ -147,10 +192,13 @@ def run_pipeline(self, project_id: str, job_id: str, asset_ids: list[str], user_
         if not _is_enabled(current_stage) or arch_id is None:
             logger.info("Stage 5 doc_generate: SKIPPED by config (or no architecture)")
             _publish_event(pid, jid, current_stage, "skipped")
+            _log_stage_skip(db, jid, current_stage)
             doc_ids = []
         else:
             _publish_event(pid, jid, current_stage, "running")
+            stage_log = _log_stage_start(db, jid, current_stage)
             doc_ids = generate_documents(db, pid, arch_id, classification, uid, config=_get_config(current_stage))
+            _log_stage_end(db, stage_log, "completed")
             _publish_event(pid, jid, current_stage, "completed")
             logger.info("Stage 5: generated %d documents", len(doc_ids))
 
@@ -159,10 +207,13 @@ def run_pipeline(self, project_id: str, job_id: str, asset_ids: list[str], user_
         if not _is_enabled(current_stage) or not doc_ids:
             logger.info("Stage 6 quality_check: SKIPPED by config (or no docs)")
             _publish_event(pid, jid, current_stage, "skipped")
+            _log_stage_skip(db, jid, current_stage)
             qc_result = {"passed": [], "flagged": []}
         else:
             _publish_event(pid, jid, current_stage, "running")
+            stage_log = _log_stage_start(db, jid, current_stage)
             qc_result = quality_check(db, doc_ids, config=_get_config(current_stage))
+            _log_stage_end(db, stage_log, "completed")
             _publish_event(pid, jid, current_stage, "completed")
             logger.info("Stage 6: %d passed, %d flagged",
                          len(qc_result.get("passed", [])),
@@ -173,11 +224,14 @@ def run_pipeline(self, project_id: str, job_id: str, asset_ids: list[str], user_
         if not _is_enabled(current_stage):
             logger.info("Stage 7 conflict_detect: SKIPPED by config")
             _publish_event(pid, jid, current_stage, "skipped")
+            _log_stage_skip(db, jid, current_stage)
             conflict_ids = []
         else:
             _publish_event(pid, jid, current_stage, "running")
+            stage_log = _log_stage_start(db, jid, current_stage)
             conflict_ids = detect_conflicts(db, pid, classification, config=_get_config(current_stage))
             db.commit()
+            _log_stage_end(db, stage_log, "completed")
             _publish_event(pid, jid, current_stage, "completed")
 
         # --- Stage 8: Embedding ---
@@ -185,11 +239,14 @@ def run_pipeline(self, project_id: str, job_id: str, asset_ids: list[str], user_
         if not _is_enabled(current_stage) or not doc_ids:
             logger.info("Stage 8 embed: SKIPPED by config (or no docs)")
             _publish_event(pid, jid, current_stage, "skipped")
+            _log_stage_skip(db, jid, current_stage)
             embed_count = 0
         else:
             _publish_event(pid, jid, current_stage, "running")
+            stage_log = _log_stage_start(db, jid, current_stage)
             embed_count = generate_embeddings(db, doc_ids, config=_get_config(current_stage))
             db.commit()
+            _log_stage_end(db, stage_log, "completed")
             _publish_event(pid, jid, current_stage, "completed")
             logger.info("Stage 8: embedded %d documents", embed_count)
 
@@ -198,9 +255,12 @@ def run_pipeline(self, project_id: str, job_id: str, asset_ids: list[str], user_
         if not _is_enabled(current_stage):
             logger.info("Stage 9 review_notify: SKIPPED by config")
             _publish_event(pid, jid, current_stage, "skipped")
+            _log_stage_skip(db, jid, current_stage)
         else:
             _publish_event(pid, jid, current_stage, "running")
+            stage_log = _log_stage_start(db, jid, current_stage)
             notify_review(db, pid, doc_ids, conflict_ids, config=_get_config(current_stage))
+            _log_stage_end(db, stage_log, "completed")
             _publish_event(pid, jid, current_stage, "completed")
 
         # Mark job completed
@@ -218,7 +278,7 @@ def run_pipeline(self, project_id: str, job_id: str, asset_ids: list[str], user_
     except Exception as exc:
         logger.error("Pipeline failed at stage '%s': %s", current_stage, exc)
 
-        # Update job status in a new session to avoid stale state
+        # Update job status and log stage failure in a new session to avoid stale state
         try:
             db.rollback()
             new_db = sync_session_factory()
@@ -227,7 +287,19 @@ def run_pipeline(self, project_id: str, job_id: str, asset_ids: list[str], user_
                 if job:
                     job.status = "failed"
                     job.error_message = f"Stage '{current_stage}' failed: {exc}"
-                    new_db.commit()
+
+                # Log stage failure
+                if current_stage:
+                    fail_log = PipelineStageLog(
+                        job_id=jid,
+                        stage_name=current_stage,
+                        status="failed",
+                        started_at=datetime.now(timezone.utc),
+                        finished_at=datetime.now(timezone.utc),
+                        error_message=str(exc)[:2000],
+                    )
+                    new_db.add(fail_log)
+                new_db.commit()
             finally:
                 new_db.close()
         except Exception:
