@@ -119,7 +119,7 @@ def create_app() -> FastAPI:
     app.include_router(pipeline_config_router)
 
     # Custom OpenAPI schema: add Bearer security scheme
-    _PUBLIC_PATHS = {"/api/health", "/healthz", "/readyz", "/metrics", "/api/versions", "/api/health/ready"}
+    _PUBLIC_PATHS = {"/api/health", "/healthz", "/readyz", "/metrics", "/api/versions", "/api/health/ready", "/_version"}
 
     def custom_openapi():
         if app.openapi_schema:
