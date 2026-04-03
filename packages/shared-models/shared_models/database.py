@@ -14,8 +14,9 @@ settings = get_settings()
 engine = create_async_engine(
     settings.database_url,
     echo=settings.debug,
-    pool_size=20,
-    max_overflow=10,
+    pool_size=settings.db_pool_size,
+    max_overflow=settings.db_max_overflow,
+    pool_recycle=settings.db_pool_recycle,
 )
 
 async_session_factory = async_sessionmaker(
@@ -26,8 +27,9 @@ async_session_factory = async_sessionmaker(
 sync_engine = create_engine(
     settings.database_url_sync,
     echo=settings.debug,
-    pool_size=10,
-    max_overflow=5,
+    pool_size=settings.db_pool_size,
+    max_overflow=settings.db_max_overflow,
+    pool_recycle=settings.db_pool_recycle,
 )
 
 sync_session_factory = sessionmaker(sync_engine, expire_on_commit=False)

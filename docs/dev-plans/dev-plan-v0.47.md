@@ -862,7 +862,7 @@ Agent 在进入 Phase 2 编码之前，必须先输出以下三项：
 | v0.47.1 | 矛盾检测排除 draft 文档 | — | 2026-04-03 | 1 | ✅ Done |
 | v0.47.2 | suggest_tags entity_types 从 pipeline config 读取 | — | 2026-04-03 | 0 | ✅ Already done (v0.46.3) |
 | v0.47.3 | Pipeline params JSON Schema 校验 | — | 2026-04-03 | 1 | ✅ Done |
-| v0.47.4 | 数据库连接池显式配置 | — | — | 0 | Planned |
+| v0.47.4 | 数据库连接池显式配置 | — | 2026-04-03 | 1 | ✅ Done |
 | v0.47.5 | 审计日志保留策略 + 归档 | — | — | 0 | Planned |
 | v0.47.6 | Pipeline per-stage 执行日志表 | — | — | 0 | Planned |
 | v0.47.7 | 模型 API Key 加密方案文档化 + 轮换 API | — | — | 0 | Planned |

@@ -30,6 +30,11 @@ class Settings(BaseSettings):
     postgres_db: str = "kb_platform"
     postgres_ssl: bool = False
 
+    # Connection pool
+    db_pool_size: int = 10
+    db_pool_recycle: int = 3600
+    db_max_overflow: int = 20
+
     @property
     def _pg_ssl_suffix(self) -> str:
         return "?ssl=require" if self.postgres_ssl else ""

@@ -3,6 +3,11 @@
 所有重要变更都将被记录在此文件中。
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/)。
 
+## [0.47.4] — 2026-04-03
+
+### 新增 (Added)
+- 数据库连接池显式配置：新增 `DB_POOL_SIZE`(默认10)、`DB_POOL_RECYCLE`(默认3600s)、`DB_MAX_OVERFLOW`(默认20) 环境变量，async/sync 引擎均使用统一配置，替换原硬编码值（v0.47.4）
+
 ## [0.47.3] — 2026-04-03
 
 ### 新增 (Added)
