@@ -96,6 +96,9 @@ class Settings(BaseSettings):
     auth_register_rate_limit: int = 5
     auth_refresh_rate_limit: int = 30
 
+    # Audit
+    audit_retention_days: int = 90
+
     # Logging
     log_level: str = "INFO"
 

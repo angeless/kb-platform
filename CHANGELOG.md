@@ -3,6 +3,11 @@
 所有重要变更都将被记录在此文件中。
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/)。
 
+## [0.47.5] — 2026-04-03
+
+### 新增 (Added)
+- 审计日志保留策略：新增 `AUDIT_RETENTION_DAYS` 环境变量（默认90天），`cleanup_old_audit_logs()` 函数分批删除超期记录（每批1000行），`POST /v1/audit-logs/cleanup` 管理端点（需 tenant_admin 权限）手动触发清理（v0.47.5）
+
 ## [0.47.6] — 2026-04-03
 
 ### 新增 (Added)

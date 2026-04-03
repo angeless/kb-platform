@@ -4,13 +4,17 @@ from __future__ import annotations
 
 import logging
 import uuid
+from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from shared_config.settings import get_settings
 from shared_models import AuditLog
 
 logger = logging.getLogger(__name__)
+
+CLEANUP_BATCH_SIZE = 1000
 
 
 class AuditService:
@@ -73,3 +77,39 @@ class AuditService:
         rows = (await self.db.execute(q)).scalars().all()
 
         return list(rows), total
+
+
+async def cleanup_old_audit_logs(db: AsyncSession) -> int:
+    """Delete audit logs older than the configured retention period.
+
+    Deletes in batches of CLEANUP_BATCH_SIZE to avoid long table locks.
+    Returns total number of deleted rows.
+    """
+    settings = get_settings()
+    cutoff = datetime.now(timezone.utc) - timedelta(days=settings.audit_retention_days)
+    total_deleted = 0
+
+    while True:
+        # Find IDs of expired rows (batch)
+        expired_ids_q = (
+            select(AuditLog.id)
+            .where(AuditLog.created_at < cutoff)
+            .limit(CLEANUP_BATCH_SIZE)
+        )
+        result = await db.execute(expired_ids_q)
+        ids = [row[0] for row in result.all()]
+
+        if not ids:
+            break
+
+        stmt = delete(AuditLog).where(AuditLog.id.in_(ids))
+        await db.execute(stmt)
+        await db.commit()
+        total_deleted += len(ids)
+
+        if len(ids) < CLEANUP_BATCH_SIZE:
+            break
+
+    logger.info("Audit log cleanup: deleted %d records older than %s (retention=%d days)",
+                total_deleted, cutoff.isoformat(), settings.audit_retention_days)
+    return total_deleted

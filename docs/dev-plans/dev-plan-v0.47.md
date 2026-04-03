@@ -71,7 +71,7 @@
 | v0.47.2 | suggest_tags entity_types 从 pipeline config 读取 | P0 | 待开发 | 审计 H-1 |
 | v0.47.3 | Pipeline params JSON Schema 校验 | P1 | 待开发 | 审计 H-4 |
 | v0.47.4 | 数据库连接池显式配置 | P1 | 待开发 | W-02 |
-| v0.47.5 | 审计日志保留策略 + 归档 | P1 | 待开发 | W-08 |
+| v0.47.5 | 审计日志保留策略 + 归档 | P1 | ✅ Done | W-08 |
 | v0.47.6 | Pipeline per-stage 执行日志表 | P1 | ✅ Done | W-12 |
 | v0.47.7 | 模型 API Key 加密方案文档化 + 轮换 API | P2 | 待开发 | W-09 |
 | v0.47.8 | 集成测试补全（ZIP/节点CRUD/跨租户拒绝） | P2 | 待开发 | W-16 |
@@ -863,7 +863,7 @@ Agent 在进入 Phase 2 编码之前，必须先输出以下三项：
 | v0.47.2 | suggest_tags entity_types 从 pipeline config 读取 | — | 2026-04-03 | 0 | ✅ Already done (v0.46.3) |
 | v0.47.3 | Pipeline params JSON Schema 校验 | — | 2026-04-03 | 1 | ✅ Done |
 | v0.47.4 | 数据库连接池显式配置 | — | 2026-04-03 | 1 | ✅ Done |
-| v0.47.5 | 审计日志保留策略 + 归档 | — | — | 0 | Planned |
+| v0.47.5 | 审计日志保留策略 + 归档 | — | 2026-04-03 | 1 | ✅ Done |
 | v0.47.6 | Pipeline per-stage 执行日志表 | — | 2026-04-03 | 1 | ✅ Done |
 | v0.47.7 | 模型 API Key 加密方案文档化 + 轮换 API | — | — | 0 | Planned |
 | v0.47.8 | 集成测试补全 | — | — | 0 | Planned |
