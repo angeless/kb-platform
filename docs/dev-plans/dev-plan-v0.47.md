@@ -859,7 +859,7 @@ Agent 在进入 Phase 2 编码之前，必须先输出以下三项：
 
 | 任务版本号 | 任务名称 | 计划周期 | 实际完成日期 | 迭代次数 | 状态 |
 |----------|--------|--------|----------|--------|------|
-| v0.47.1 | 矛盾检测排除 draft 文档 | — | — | 0 | Planned |
+| v0.47.1 | 矛盾检测排除 draft 文档 | — | 2026-04-03 | 1 | ✅ Done |
 | v0.47.2 | suggest_tags entity_types 从 pipeline config 读取 | — | — | 0 | Planned |
 | v0.47.3 | Pipeline params JSON Schema 校验 | — | — | 0 | Planned |
 | v0.47.4 | 数据库连接池显式配置 | — | — | 0 | Planned |

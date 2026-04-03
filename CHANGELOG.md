@@ -3,6 +3,11 @@
 所有重要变更都将被记录在此文件中。
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/)。
 
+## [0.47.1] — 2026-04-03
+
+### 修复 (Fixed)
+- 矛盾检测排除 draft 文档：`detect_contradictions` 查询从 `status.in_(["published", "draft"])` 修正为 `status != "draft"`，修复了双重 bug（`published` 不存在 + draft 不应参与），审计 C-3（v0.47.1）
+
 ## [未发布]
 
 ### 新增 (Added)
