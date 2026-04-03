@@ -55,9 +55,9 @@ Phase 8 ③ 门禁检查
 
 ### "通过"的判定标准
 
-- **Stage 通过** = 该 Stage 无 Critical 级发现
-- 存在 Important/Minor/Observation 级发现不阻断下一 Stage
-- Critical 发现修复后需重新 dispatch 该 Stage 的子 agent 验证
+- **Stage 通过** = 该 Stage 所有 bug（Critical/Important/Minor）均已修复，仅 Observation 可延后
+- Critical/Important/Minor 级发现均须修复后重新 dispatch 该 Stage 的子 agent 验证
+- Observation 级发现不阻断下一 Stage，记录即可
 
 ### 子 agent 上下文约束
 
@@ -184,14 +184,14 @@ Phase 8 完成后，检查以下门禁条件：
 
 - [ ] 三个 Stage 的审计报告均已生成
 - [ ] 整合报告已生成且包含：审计概要、发现统计、分级发现详情
-- [ ] 所有 Critical 级发现都有具体修复建议
+- [ ] 所有 bug（Critical/Important/Minor）均已修复，仅 Observation 可延后
 - [ ] 整合报告中每条"通过"判定都附有证据引用（非空 ✓）
 - [ ] 审计报告已归档到 `docs/audits/v{X.Y.Z}/`
 - [ ] `docs/audits/audit-index.md` 已更新
 
 **门禁失败处理**：
 - 报告不完整 → 重新 dispatch 缺失 Stage 的子 agent
-- Critical 发现无修复建议 → 要求整合 agent 补充
+- 存在未修复的 bug（Critical/Important/Minor） → 修复后重新审计对应 Stage，不可跳过
 - 归档未完成 → 发起器执行归档
 
 ---
