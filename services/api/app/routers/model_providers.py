@@ -9,6 +9,7 @@ from shared_schemas.common import DataResponse, ErrorDetail, ListResponse, Pagin
 from shared_schemas.model_config import (
     ModelProviderCreate,
     ModelProviderOut,
+    ModelProviderRotateKeyRequest,
     ModelProviderTestRequest,
     ModelRouteCreate,
     ModelRouteOut,
@@ -98,6 +99,31 @@ async def test_provider(
     svc = ModelProviderService(db, kb_id)
     result = await svc.test_provider(body.provider_id)
     return DataResponse(data=result)
+
+
+@router.post(
+    "/v1/model-providers/{provider_id}/rotate-key",
+    response_model=DataResponse[ModelProviderOut],
+    summary="Rotate model provider API key",
+    description="Replaces the encrypted API key for a model provider. The old key is immediately invalidated. Requires tenant_admin role.",
+    responses={
+        200: {"description": "Key rotated successfully"},
+        **_RESP_AUTH,
+        404: {"description": "Provider not found", "model": ErrorDetail},
+    },
+)
+async def rotate_provider_key(
+    provider_id: uuid.UUID,
+    body: ModelProviderRotateKeyRequest,
+    db: AsyncSession = Depends(get_db),
+    kb_id: uuid.UUID = Depends(get_kb_id),
+    current_user: User = require_role("tenant_admin"),
+):
+    svc = ModelProviderService(db, kb_id)
+    provider_dict = await svc.rotate_key(provider_id, body.new_api_key)
+    audit = AuditService(db, kb_id, current_user.id)
+    await audit.log("rotate_key", "model_provider", provider_id)
+    return DataResponse(data=ModelProviderOut.model_validate(provider_dict))
 
 
 @router.post(

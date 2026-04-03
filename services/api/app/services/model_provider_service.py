@@ -80,6 +80,24 @@ class ModelProviderService:
             )
         return {"status": "ok"}
 
+    async def rotate_key(self, provider_id: uuid.UUID, new_api_key: str) -> dict:
+        """Rotate the API key for a model provider."""
+        q = select(ModelProvider).where(
+            ModelProvider.id == provider_id,
+            ModelProvider.kb_id == self.kb_id,
+        )
+        result = await self.db.execute(q)
+        provider = result.scalar_one_or_none()
+        if provider is None:
+            raise NotFoundException(
+                error_code=ErrorCode.MODEL_PROVIDER_NOT_FOUND,
+                message="模型供应商不存在",
+            )
+        encrypted_bytes = encrypt(new_api_key, self._settings.encryption_key)
+        provider.api_key_encrypted = base64.b64encode(encrypted_bytes).decode("utf-8")
+        await self.db.flush()
+        return self._provider_to_dict(provider, new_api_key)
+
     async def create_route(self, data: dict) -> ModelRoute:
         """Create a model route."""
         route = ModelRoute(

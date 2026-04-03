@@ -30,8 +30,16 @@ interface DocDetail {
   doc_type: string;
   current_version: number;
   status: string;
+  update_type?: string | null;
   versions: DocVersion[];
 }
+
+const UPDATE_TYPE_LABELS: Record<string, { text: string; className: string }> = {
+  new: { text: "新增", className: "bg-blue-50 text-blue-600" },
+  supplement: { text: "补充", className: "bg-indigo-50 text-indigo-600" },
+  correction: { text: "纠正", className: "bg-orange-50 text-orange-600" },
+  conflict: { text: "冲突", className: "bg-red-50 text-red-600" },
+};
 
 interface ArchNode {
   id: string;
@@ -134,10 +142,15 @@ export default function WikiDocPage() {
         <WikiBreadcrumb nodes={nodes} nodeId={doc.node_id} projectId={projectId} />
 
         <h1 className="mb-4 text-2xl font-bold text-gray-900">{doc.title}</h1>
-        <div className="mb-6 flex gap-3 text-xs text-gray-400">
+        <div className="mb-6 flex items-center gap-3 text-xs text-gray-400">
           <span>{doc.doc_type}</span>
           <span>v{doc.current_version}</span>
           <span className="capitalize">{doc.status}</span>
+          {doc.update_type && UPDATE_TYPE_LABELS[doc.update_type] && (
+            <span className={`rounded px-1.5 py-0.5 ${UPDATE_TYPE_LABELS[doc.update_type].className}`}>
+              {UPDATE_TYPE_LABELS[doc.update_type].text}
+            </span>
+          )}
         </div>
 
         <div ref={contentRef} className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">

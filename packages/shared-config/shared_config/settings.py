@@ -30,6 +30,11 @@ class Settings(BaseSettings):
     postgres_db: str = "kb_platform"
     postgres_ssl: bool = False
 
+    # Connection pool
+    db_pool_size: int = 10
+    db_pool_recycle: int = 3600
+    db_max_overflow: int = 20
+
     @property
     def _pg_ssl_suffix(self) -> str:
         return "?ssl=require" if self.postgres_ssl else ""
@@ -90,6 +95,9 @@ class Settings(BaseSettings):
     auth_login_rate_limit: int = 10
     auth_register_rate_limit: int = 5
     auth_refresh_rate_limit: int = 30
+
+    # Audit
+    audit_retention_days: int = 90
 
     # Logging
     log_level: str = "INFO"

@@ -9,7 +9,7 @@ from shared_schemas.audit import AuditLogOut
 from shared_schemas.common import ErrorDetail, ListResponse, PaginationMeta
 
 from app.deps import get_db, get_kb_id, require_role
-from app.services.audit_service import AuditService
+from app.services.audit_service import AuditService, cleanup_old_audit_logs
 from shared_models import User
 
 router = APIRouter(prefix="/v1/audit-logs", tags=["audit"])
@@ -49,3 +49,21 @@ async def list_audit_logs(
         data=[AuditLogOut.model_validate(log) for log in logs],
         meta=PaginationMeta(page=page, page_size=page_size, total=total),
     )
+
+
+@router.post(
+    "/cleanup",
+    summary="Clean up old audit logs",
+    description="Deletes audit log entries older than the configured retention period (AUDIT_RETENTION_DAYS, default 90). Batch-deletes to avoid DB lock contention. Requires tenant_admin role.",
+    responses={
+        200: {"description": "Cleanup completed"},
+        401: {"description": "Unauthorized", "model": ErrorDetail},
+        403: {"description": "Forbidden — requires tenant_admin role", "model": ErrorDetail},
+    },
+)
+async def cleanup_audit_logs(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_role("tenant_admin"),
+):
+    deleted = await cleanup_old_audit_logs(db)
+    return {"deleted_count": deleted}

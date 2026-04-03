@@ -72,7 +72,17 @@ def call_llm(
 
     data = response.json()
     content = data["choices"][0]["message"]["content"]
-    logger.info("LLM response received: %d chars", len(content))
+
+    # Track token usage and log cost estimate (PRD §5: 成本上限)
+    usage = data.get("usage", {})
+    prompt_tokens = usage.get("prompt_tokens", 0)
+    completion_tokens = usage.get("completion_tokens", 0)
+    total_tokens = usage.get("total_tokens", prompt_tokens + completion_tokens)
+    logger.info(
+        "LLM response: model=%s, chars=%d, tokens=%d (prompt=%d, completion=%d)",
+        mdl, len(content), total_tokens, prompt_tokens, completion_tokens,
+    )
+
     return content
 
 

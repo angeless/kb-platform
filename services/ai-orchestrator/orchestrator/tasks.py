@@ -903,9 +903,9 @@ def suggest_tags(self, doc_id: str) -> dict:
 
 @celery_app.task(bind=True, name="orchestrator.detect_contradictions")
 def detect_contradictions(self, project_id: str, max_pairs: int = 50) -> dict:
-    """Detect contradictions between published documents in a project.
+    """Detect contradictions between non-draft documents in a project.
 
-    1. Load all published KnowledgeDocs with summary + content
+    1. Load all non-draft KnowledgeDocs (pending/approved/rejected/archived)
     2. Build pairs (limited to max_pairs)
     3. For each pair, call LLM with contradiction prompt
     4. Create CrossReference records for detected contradictions
@@ -914,11 +914,12 @@ def detect_contradictions(self, project_id: str, max_pairs: int = 50) -> dict:
 
     with _get_sync_session() as session:
         try:
-            # Load published docs
+            # Load non-draft docs — exclude draft to avoid false positives
+            # from incomplete documents (fix: v0.47.1, audit C-3)
             docs = session.execute(
                 select(KnowledgeDoc).where(
                     KnowledgeDoc.project_id == project_uuid,
-                    KnowledgeDoc.status.in_(["published", "draft"]),
+                    KnowledgeDoc.status != "draft",
                 )
             ).scalars().all()
 

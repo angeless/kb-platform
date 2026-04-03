@@ -33,6 +33,10 @@ class ModelProviderTestRequest(BaseModel):
     provider_id: UUID
 
 
+class ModelProviderRotateKeyRequest(BaseModel):
+    new_api_key: str = Field(..., min_length=1)
+
+
 class ModelRouteCreate(BaseModel):
     task_type: str = Field(..., min_length=1, max_length=30)
     provider_id: UUID

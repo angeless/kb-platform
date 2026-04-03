@@ -10,7 +10,15 @@ interface DocSummary {
   title: string;
   doc_type: string;
   status: string;
+  update_type?: string | null;
 }
+
+const UPDATE_TYPE_LABELS: Record<string, { text: string; className: string }> = {
+  new: { text: "新增", className: "bg-blue-50 text-blue-600" },
+  supplement: { text: "补充", className: "bg-indigo-50 text-indigo-600" },
+  correction: { text: "纠正", className: "bg-orange-50 text-orange-600" },
+  conflict: { text: "冲突", className: "bg-red-50 text-red-600" },
+};
 
 export default function WikiHomePage() {
   const params = useParams();
@@ -58,9 +66,14 @@ export default function WikiHomePage() {
                   href={`/projects/${projectId}/wiki/${doc.id}`}
                   className="flex items-center justify-between px-5 py-3.5 hover:bg-gray-50"
                 >
-                  <div>
+                  <div className="flex items-center gap-2">
                     <span className="text-sm font-medium text-gray-800">{doc.title}</span>
-                    <span className="ml-3 text-xs text-gray-400">{doc.doc_type}</span>
+                    <span className="text-xs text-gray-400">{doc.doc_type}</span>
+                    {doc.update_type && UPDATE_TYPE_LABELS[doc.update_type] && (
+                      <span className={`rounded px-1.5 py-0.5 text-xs ${UPDATE_TYPE_LABELS[doc.update_type].className}`}>
+                        {UPDATE_TYPE_LABELS[doc.update_type].text}
+                      </span>
+                    )}
                   </div>
                   <span className={`rounded-full px-2 py-0.5 text-xs ${
                     doc.status === "published" ? "bg-green-50 text-green-600" :
