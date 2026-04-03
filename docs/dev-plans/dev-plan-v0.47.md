@@ -67,10 +67,10 @@
 
 | 任务版本号 | 任务名称 | 优先级 | 状态 | 来源 |
 |----------|--------|------|------|------|
-| v0.47.1 | 矛盾检测排除 draft 文档 | P0 | 待开发 | 审计 C-3 |
-| v0.47.2 | suggest_tags entity_types 从 pipeline config 读取 | P0 | 待开发 | 审计 H-1 |
-| v0.47.3 | Pipeline params JSON Schema 校验 | P1 | 待开发 | 审计 H-4 |
-| v0.47.4 | 数据库连接池显式配置 | P1 | 待开发 | W-02 |
+| v0.47.1 | 矛盾检测排除 draft 文档 | P0 | ✅ Done | 审计 C-3 |
+| v0.47.2 | suggest_tags entity_types 从 pipeline config 读取 | P0 | ✅ Already done (v0.46.3) | 审计 H-1 |
+| v0.47.3 | Pipeline params JSON Schema 校验 | P1 | ✅ Done | 审计 H-4 |
+| v0.47.4 | 数据库连接池显式配置 | P1 | ✅ Done | W-02 |
 | v0.47.5 | 审计日志保留策略 + 归档 | P1 | ✅ Done | W-08 |
 | v0.47.6 | Pipeline per-stage 执行日志表 | P1 | ✅ Done | W-12 |
 | v0.47.7 | 模型 API Key 加密方案文档化 + 轮换 API | P2 | ✅ Done | W-09 |
@@ -87,6 +87,7 @@
 | v0.47.5 | - | - | ✅ 运维合规 | ✅ |
 | v0.47.6 | - | - | ✅ 成本追踪基础 | ✅ |
 | v0.47.7 | - | - | ✅ 安全合规 | ✅ |
+| v0.47.8 | - | - | ✅ 质量保障 | ✅ |
 | v0.47.8 | - | - | ✅ 质量保障 | ✅ |
 
 ### 3.3 明确不做的事项
@@ -878,6 +879,11 @@ Agent 在进入 Phase 2 编码之前，必须先输出以下三项：
 | 2026-03-31 | V2.0 按规范重写，补齐所有必填字段 | Claude Code |
 | 2026-04-01 | V2.1 交叉审查修复：v0.47.6 Phase 1 前置确认强化 pipeline_job 表名验证 | Claude Code |
 | 2026-04-01 | V2.2 交叉审查v2修复：C-1 pipeline_job→job FK 修正（4处）；C-2 published/reviewing→正确状态值（3处） | Claude Code |
+| 2026-04-03 | V2.3 v0.47 全部完成；交叉审查修复：§3.1 状态同步、CHANGELOG 排序、§3.2 补齐 v0.47.8 行 | Claude Code |
+
+> **实施偏离记录：**
+> - v0.47.5：端点路径 `POST /v1/audit-logs/cleanup`（计划写 `/v1/admin/cleanup-audit-logs`），实际路径更符合 RESTful 资源路由惯例；Celery beat 未实现（项目无 beat 基础设施），仅 API 手动触发（计划标注为备选方案）
+> - v0.47.7：角色要求使用 `tenant_admin`（计划写 `kb_admin`），因项目 ROLE_HIERARCHY 中无 `kb_admin` 角色，`tenant_admin` 是实际最高管理角色
 
 ---
 

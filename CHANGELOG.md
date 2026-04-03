@@ -14,15 +14,15 @@
 - 模型 API Key 轮换端点：`POST /v1/model-providers/{id}/rotate-key`（需 tenant_admin），使用 AES-256-GCM+PBKDF2 加密新 key，原子更新旧 key 立即失效，审计日志记录轮换事件（v0.47.7）
 - 安全文档：`docs/security/model-key-encryption.md` 文档化加密方案（KDF2 格式、密钥管理、轮换流程）
 
-## [0.47.5] — 2026-04-03
-
-### 新增 (Added)
-- 审计日志保留策略：新增 `AUDIT_RETENTION_DAYS` 环境变量（默认90天），`cleanup_old_audit_logs()` 函数分批删除超期记录（每批1000行），`POST /v1/audit-logs/cleanup` 管理端点（需 tenant_admin 权限）手动触发清理（v0.47.5）
-
 ## [0.47.6] — 2026-04-03
 
 ### 新增 (Added)
 - Pipeline per-stage 执行日志表：新增 `pipeline_stage_log` 表（job_id FK、stage_name、status、started_at/finished_at、token_usage JSONB、error_message），Alembic 迁移 `t9h0i1j2k3l4`，pipeline worker 每个 stage 自动记录 running/completed/skipped/failed 状态，异常处理器同步记录失败日志（v0.47.6）
+
+## [0.47.5] — 2026-04-03
+
+### 新增 (Added)
+- 审计日志保留策略：新增 `AUDIT_RETENTION_DAYS` 环境变量（默认90天），`cleanup_old_audit_logs()` 函数分批删除超期记录（每批1000行），`POST /v1/audit-logs/cleanup` 管理端点（需 tenant_admin 权限）手动触发清理（v0.47.5）
 
 ## [0.47.4] — 2026-04-03
 
