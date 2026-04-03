@@ -3,6 +3,12 @@
 所有重要变更都将被记录在此文件中。
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/)。
 
+## [0.47.7] — 2026-04-03
+
+### 新增 (Added)
+- 模型 API Key 轮换端点：`POST /v1/model-providers/{id}/rotate-key`（需 tenant_admin），使用 AES-256-GCM+PBKDF2 加密新 key，原子更新旧 key 立即失效，审计日志记录轮换事件（v0.47.7）
+- 安全文档：`docs/security/model-key-encryption.md` 文档化加密方案（KDF2 格式、密钥管理、轮换流程）
+
 ## [0.47.5] — 2026-04-03
 
 ### 新增 (Added)
