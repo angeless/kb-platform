@@ -556,7 +556,7 @@ Response 200：{"data": [...], "total": N, "page": 1}
 
 #### 背景与目标
 
-**目标（Goal）：** 新增"术语表"文档模板，从项目所有 chunk 中提取专业术语，按字母/拼音排序，生成结构化术语表。
+**目标（Goal）：** 新增"术语表"文档模板，从项目所有 chunk 中提取专业术语，按字母/拼音排序，生成结构化术语表。同时支持 pipeline 完成后自动增量更新术语表。
 
 ---
 
@@ -581,7 +581,10 @@ Response 200：{"data": [...], "total": N, "page": 1}
 ④ 按首字母/拼音排序
 ⑤ 生成 Markdown 表格：`| 术语 | 定义 | 首次出现 |`
 ⑥ 创建 KnowledgeDoc（doc_type="glossary"）存储结果
-⑦ 触发方式：`POST /v1/projects/{pid}/ai-generate-glossary`（editor+）
+⑦ 手动触发：`POST /v1/projects/{pid}/ai-generate-glossary`（editor+）
+⑧ 自动触发：pipeline `review_notify` 阶段完成后，若本次有新 approved 文档，自动将"术语表增量更新" Celery task 加入队列
+⑨ 增量更新逻辑：对比上次生成时的 doc_ids 列表，仅处理新增/变更的 chunks，合并到已有术语表
+⑩ 自动触发可通过 `PipelineStageConfig(stage_name='glossary_refresh', enabled=True/False)` 控制
 
 ---
 
@@ -599,17 +602,20 @@ Response 400：项目无 approved 文档
 
 #### 验收标准
 
-- [ ] 调用 API 后生成 glossary 类型的 KnowledgeDoc
+- [ ] 手动调用 API 后生成 glossary 类型的 KnowledgeDoc
 - [ ] 术语表包含术语名称、定义、首次出现文档
 - [ ] 术语按字母排序
 - [ ] 项目无 approved 文档 → 400 错误
 - [ ] 术语去重（同义词不重复列出）
+- [ ] pipeline 完成且有新 approved 文档 → 自动触发术语表增量更新
+- [ ] 增量更新仅处理新 chunks，结果合并到已有术语表
+- [ ] `glossary_refresh` stage 禁用时不自动触发
 
 ---
 
 #### 工作范围
 
-**包含：** generate_glossary 函数 + prompt + API 端点（~60 行）
+**包含：** generate_glossary 函数 + prompt + API 端点 + pipeline 自动触发 hook + 增量更新逻辑（~90 行）
 **不包含：** 术语表的前端专属展示页；术语的 CRUD 管理
 
 ---
@@ -645,7 +651,7 @@ Response 400：项目无 approved 文档
 
 #### 背景与目标
 
-**目标（Goal）：** 新增"维护指南"文档模板，分析架构节点的更新策略和审批流程，生成维护建议文档。
+**目标（Goal）：** 新增"维护指南"文档模板，分析架构节点的更新策略和审批流程，生成维护建议文档。同时支持架构变更后自动更新维护指南。
 
 ---
 
@@ -671,6 +677,9 @@ Response 200：{"data": {"doc_id": "uuid"}}
 ① 加载项目架构节点及其策略配置
 ② 调用 LLM 生成维护建议（更新频率、审批流程、质量标准）
 ③ 创建 KnowledgeDoc（doc_type="maintenance_guide"）
+④ 自动触发：架构节点新增/删除/移动后（`architecture_draft` stage 完成时），若已有 maintenance_guide 文档，自动加入"维护指南更新" Celery task
+⑤ 增量更新：仅重新分析变更的节点，与已有指南合并
+⑥ 自动触发可通过 `PipelineStageConfig(stage_name='maintenance_refresh', enabled=True/False)` 控制
 
 ---
 
@@ -680,13 +689,16 @@ Response 200：{"data": {"doc_id": "uuid"}}
 - [ ] 包含审批流程说明
 - [ ] 包含质量标准检查清单
 - [ ] 项目无架构节点 → 生成通用维护建议
+- [ ] 架构变更后自动触发维护指南增量更新
+- [ ] 增量更新仅处理变更节点，结果合并到已有文档
+- [ ] `maintenance_refresh` stage 禁用时不自动触发
 
 ---
 
 #### 工作范围
 
-**包含：** generate_maintenance_guide 函数 + API 端点（~40 行）
-**不包含：** 维护指南的自动执行/提醒
+**包含：** generate_maintenance_guide 函数 + API 端点 + pipeline 自动触发 hook + 增量更新逻辑（~70 行）
+**不包含：** 维护指南的自动执行提醒（如邮件通知定期维护）
 
 ---
 
