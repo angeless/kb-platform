@@ -108,6 +108,7 @@ function ReviewKanban({ projectId }: { projectId: string }) {
   const [assigned, setAssigned] = useState<ReviewTask[]>([]);
   const [completed, setCompleted] = useState<ReviewTask[]>([]);
   const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -130,7 +131,86 @@ function ReviewKanban({ projectId }: { projectId: string }) {
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
-  const KanbanColumn = ({ title, tasks, color }: { title: string; tasks: ReviewTask[]; color: string }) => (
+  // Kanban action handlers (v0.52.11 — Gap-11 fix)
+  const handleApprove = async (reviewId: string) => {
+    setActionLoading(reviewId);
+    try {
+      await api.post(`/v1/projects/${projectId}/reviews/${reviewId}/approve`, {});
+      await fetchAll();
+    } catch { /* toast handled by api client */ }
+    finally { setActionLoading(null); }
+  };
+
+  const handleReject = async (reviewId: string) => {
+    const reason = prompt("请输入驳回原因：");
+    if (!reason) return;
+    setActionLoading(reviewId);
+    try {
+      await api.post(`/v1/projects/${projectId}/reviews/${reviewId}/reject`, { note: reason });
+      await fetchAll();
+    } catch { /* toast handled by api client */ }
+    finally { setActionLoading(null); }
+  };
+
+  const handleResubmit = async (reviewId: string) => {
+    setActionLoading(reviewId);
+    try {
+      await api.post(`/v1/projects/${projectId}/reviews/${reviewId}/resubmit`, {});
+      await fetchAll();
+    } catch { /* toast handled by api client */ }
+    finally { setActionLoading(null); }
+  };
+
+  const KanbanCard = ({ t, column }: { t: ReviewTask; column: "pending" | "assigned" | "completed" }) => (
+    <div key={t.id} className="rounded-lg border border-gray-200 bg-white p-3 shadow-sm hover:shadow">
+      <div className="text-sm font-medium text-gray-800 truncate">
+        {t.doc_id.slice(0, 8)}...
+      </div>
+      <div className="mt-1 text-xs text-gray-400">
+        {new Date(t.created_at).toLocaleDateString("zh-CN")}
+      </div>
+      {t.reviewer_id && (
+        <div className="mt-1 text-xs text-primary-500">审批人: {t.reviewer_id.slice(0, 8)}...</div>
+      )}
+      {t.review_note && (
+        <div className="mt-1 text-xs text-gray-500 truncate">{t.review_note}</div>
+      )}
+      <div className="mt-1 flex items-center justify-between">
+        <StatusBadge status={t.status} />
+        <div className="flex gap-1">
+          {column === "assigned" && (
+            <>
+              <button
+                onClick={() => handleApprove(t.id)}
+                disabled={actionLoading === t.id}
+                className="rounded bg-green-500 px-2 py-0.5 text-xs text-white hover:bg-green-600 disabled:opacity-50"
+              >
+                通过
+              </button>
+              <button
+                onClick={() => handleReject(t.id)}
+                disabled={actionLoading === t.id}
+                className="rounded bg-red-500 px-2 py-0.5 text-xs text-white hover:bg-red-600 disabled:opacity-50"
+              >
+                驳回
+              </button>
+            </>
+          )}
+          {column === "completed" && t.status === "rejected" && (
+            <button
+              onClick={() => handleResubmit(t.id)}
+              disabled={actionLoading === t.id}
+              className="rounded bg-blue-500 px-2 py-0.5 text-xs text-white hover:bg-blue-600 disabled:opacity-50"
+            >
+              重新提交
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
+  const KanbanColumn = ({ title, tasks, color, column }: { title: string; tasks: ReviewTask[]; color: string; column: "pending" | "assigned" | "completed" }) => (
     <div className="flex-1 min-w-[280px]">
       <div className={`mb-3 flex items-center gap-2 border-b-2 ${color} pb-2`}>
         <h3 className="text-sm font-semibold text-gray-700">{title}</h3>
@@ -142,21 +222,7 @@ function ReviewKanban({ projectId }: { projectId: string }) {
             暂无任务
           </div>
         ) : tasks.map((t) => (
-          <div key={t.id} className="rounded-lg border border-gray-200 bg-white p-3 shadow-sm hover:shadow">
-            <div className="text-sm font-medium text-gray-800 truncate">
-              {t.doc_id.slice(0, 8)}...
-            </div>
-            <div className="mt-1 text-xs text-gray-400">
-              {new Date(t.created_at).toLocaleDateString("zh-CN")}
-            </div>
-            {t.reviewer_id && (
-              <div className="mt-1 text-xs text-primary-500">审批人: {t.reviewer_id.slice(0, 8)}...</div>
-            )}
-            {t.review_note && (
-              <div className="mt-1 text-xs text-gray-500 truncate">{t.review_note}</div>
-            )}
-            <StatusBadge status={t.status} />
-          </div>
+          <KanbanCard key={t.id} t={t} column={column} />
         ))}
       </div>
     </div>
@@ -168,9 +234,9 @@ function ReviewKanban({ projectId }: { projectId: string }) {
     <div className="mb-8">
       <h2 className="mb-4 text-lg font-bold text-gray-900">审批看板</h2>
       <div className="flex gap-4 overflow-x-auto pb-2">
-        <KanbanColumn title="待分配" tasks={pending} color="border-yellow-400" />
-        <KanbanColumn title="待审批" tasks={assigned} color="border-blue-400" />
-        <KanbanColumn title="已完成" tasks={completed} color="border-green-400" />
+        <KanbanColumn title="待分配" tasks={pending} color="border-yellow-400" column="pending" />
+        <KanbanColumn title="待审批" tasks={assigned} color="border-blue-400" column="assigned" />
+        <KanbanColumn title="已完成" tasks={completed} color="border-green-400" column="completed" />
       </div>
     </div>
   );

@@ -3,6 +3,7 @@
 import uuid
 
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared_schemas.common import DataResponse, ErrorDetail, ListResponse, PaginationMeta
@@ -141,10 +142,26 @@ async def update_project(
 )
 async def delete_project(
     project_id: uuid.UUID,
+    confirmation_id: str | None = Query(None),
+    code: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
     kb_id: uuid.UUID = Depends(get_kb_id),
     current_user: User = require_role("tenant_admin"),
 ):
+    # Confirmation code gate (v0.52.9 — Gap-7 fix)
+    from app.utils.confirmation import generate_confirmation, verify_confirmation
+    if not confirmation_id or not code:
+        conf = generate_confirmation("delete_project", str(current_user.id))
+        return JSONResponse(status_code=428, content={
+            "error": "CONFIRMATION_REQUIRED",
+            "message": "此操作需要确认码",
+            "confirmation_id": conf["confirmation_id"],
+            "code": conf["code"],
+            "expires_in": conf["expires_in"],
+        })
+    if not verify_confirmation(confirmation_id, code, str(current_user.id)):
+        return JSONResponse(status_code=403, content={"error": "CONFIRMATION_INVALID", "message": "确认码无效或已过期"})
+
     svc = ProjectService(db, kb_id)
     await svc.delete(project_id)
     audit = AuditService(db, kb_id, current_user.id)

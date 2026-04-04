@@ -69,6 +69,10 @@ class ErrorCode(StrEnum):
     BATCH_NOT_FOUND = "BATCH_NOT_FOUND"
     EMPTY_ARCHIVE = "EMPTY_ARCHIVE"
 
+    # Tenant / Quota
+    TENANT_QUOTA_EXCEEDED = "TENANT_QUOTA_EXCEEDED"
+    TENANT_FEATURE_DISABLED = "TENANT_FEATURE_DISABLED"
+
     # Validation
     VALIDATION_ERROR = "VALIDATION_ERROR"
 
@@ -121,6 +125,8 @@ ERROR_MESSAGES: dict[str, str] = {
     ErrorCode.QA_MODEL_NOT_CONFIGURED: "AI 问答功能需要先配置模型服务",
     ErrorCode.BATCH_NOT_FOUND: "批次不存在",
     ErrorCode.EMPTY_ARCHIVE: "压缩包中没有支持的文件格式",
+    ErrorCode.TENANT_QUOTA_EXCEEDED: "已达到当前套餐额度上限，请升级或联系管理员",
+    ErrorCode.TENANT_FEATURE_DISABLED: "当前套餐不支持该功能，请升级套餐",
     ErrorCode.VALIDATION_ERROR: "提交的信息有误，请检查后重试",
     ErrorCode.SYSTEM_INTERNAL_ERROR: "系统开了个小差，请稍后重试",
     ErrorCode.SYSTEM_RATE_LIMITED: "操作太频繁，请稍后再试",

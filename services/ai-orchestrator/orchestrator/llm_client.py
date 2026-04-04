@@ -83,6 +83,14 @@ def call_llm(
         mdl, len(content), total_tokens, prompt_tokens, completion_tokens,
     )
 
+    # Record usage in CostTracker (v0.52.2 — Gap-16 fix)
+    try:
+        from .cost_tracker import CostTracker
+        _cost_tracker = CostTracker()
+        _cost_tracker.record_usage(mdl, prompt_tokens, completion_tokens)
+    except Exception as e:
+        logger.debug("Cost tracking skipped: %s", e)
+
     return content
 
 

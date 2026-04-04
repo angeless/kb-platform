@@ -135,12 +135,28 @@ def run_pipeline(self, project_id: str, job_id: str, asset_ids: list[str], user_
         # Load per-project pipeline stage config (v0.46.2)
         stage_configs: dict[str, dict] = {}
         stage_enabled: dict[str, bool] = {}
+        stage_order: dict[str, int] = {}
+        stage_conditions: dict[str, dict | None] = {}
         config_rows = db.execute(
             select(PipelineStageConfig).where(PipelineStageConfig.project_id == pid)
         ).scalars().all()
         for row in config_rows:
             stage_configs[row.stage_name] = row.params
             stage_enabled[row.stage_name] = row.enabled
+            stage_order[row.stage_name] = row.execution_order
+            stage_conditions[row.stage_name] = row.condition
+
+        # Reorder stages by execution_order if any non-zero order configured (v0.52.4)
+        if any(v != 0 for v in stage_order.values()):
+            ordered = sorted(
+                STAGES,
+                key=lambda s: stage_order.get(s, STAGES.index(s) * 10),
+            )
+        else:
+            ordered = list(STAGES)
+
+        # Track which stages actually ran (for condition evaluation)
+        completed_stages: set[str] = set()
 
         def _is_enabled(stage: str) -> bool:
             return stage_enabled.get(stage, True)
@@ -148,10 +164,34 @@ def run_pipeline(self, project_id: str, job_id: str, asset_ids: list[str], user_
         def _get_config(stage: str) -> dict:
             return stage_configs.get(stage, DEFAULT_STAGE_PARAMS.get(stage, {}))
 
+        def _evaluate_condition(stage: str, context: dict) -> bool:
+            """Evaluate stage condition JSONB. Returns True if stage should run.
+
+            Supported conditions (v0.52.4 — Gap-4 fix):
+              {"requires_stage": "classify"}  — skip if that stage didn't complete
+              {"min_chunks": 5}               — skip if fewer chunks ingested
+            """
+            cond = stage_conditions.get(stage)
+            if not cond:
+                return True
+            req = cond.get("requires_stage")
+            if req and req not in completed_stages:
+                logger.info("Stage %s skipped: requires_stage '%s' not completed", stage, req)
+                return False
+            min_c = cond.get("min_chunks")
+            if min_c and context.get("chunk_count", 0) < min_c:
+                logger.info("Stage %s skipped: min_chunks=%d, actual=%d", stage, min_c, context.get("chunk_count", 0))
+                return False
+            return True
+
+        # Condition evaluation context (v0.52.4)
+        cond_ctx = {"chunk_count": len(aids)}
+        logger.info("Pipeline stage order: %s", ordered)
+
         # --- Stage 3: Classify ---
         current_stage = "classify"
-        if not _is_enabled(current_stage):
-            logger.info("Stage 3 classify: SKIPPED by config")
+        if not _is_enabled(current_stage) or not _evaluate_condition(current_stage, cond_ctx):
+            logger.info("Stage 3 classify: SKIPPED by config/condition")
             _publish_event(pid, jid, current_stage, "skipped")
             _log_stage_skip(db, jid, current_stage)
             classification = {"new": [], "supplement": [], "correction": [], "conflict": []}
@@ -161,6 +201,7 @@ def run_pipeline(self, project_id: str, job_id: str, asset_ids: list[str], user_
             classification = classify_chunks(db, pid, aids, config=_get_config(current_stage))
             _log_stage_end(db, stage_log, "completed")
             _publish_event(pid, jid, current_stage, "completed")
+            completed_stages.add(current_stage)
             logger.info("Stage 3 classify: new=%d, supplement=%d, correction=%d, conflict=%d",
                          len(classification.get("new", [])),
                          len(classification.get("supplement", [])),
@@ -169,8 +210,8 @@ def run_pipeline(self, project_id: str, job_id: str, asset_ids: list[str], user_
 
         # --- Stage 4: Architecture Draft ---
         current_stage = "architecture_draft"
-        if not _is_enabled(current_stage):
-            logger.info("Stage 4 architecture_draft: SKIPPED by config")
+        if not _is_enabled(current_stage) or not _evaluate_condition(current_stage, cond_ctx):
+            logger.info("Stage 4 architecture_draft: SKIPPED by config/condition")
             _publish_event(pid, jid, current_stage, "skipped")
             _log_stage_skip(db, jid, current_stage)
             arch_id = None
@@ -186,11 +227,12 @@ def run_pipeline(self, project_id: str, job_id: str, asset_ids: list[str], user_
                 logger.warning("Architecture quality warnings: %s", arch_qc["warnings"])
             _log_stage_end(db, stage_log, "completed")
             _publish_event(pid, jid, current_stage, "completed")
+            completed_stages.add(current_stage)
 
         # --- Stage 5: Document Generation ---
         current_stage = "doc_generate"
-        if not _is_enabled(current_stage) or arch_id is None:
-            logger.info("Stage 5 doc_generate: SKIPPED by config (or no architecture)")
+        if not _is_enabled(current_stage) or arch_id is None or not _evaluate_condition(current_stage, cond_ctx):
+            logger.info("Stage 5 doc_generate: SKIPPED by config/condition (or no architecture)")
             _publish_event(pid, jid, current_stage, "skipped")
             _log_stage_skip(db, jid, current_stage)
             doc_ids = []
@@ -200,12 +242,13 @@ def run_pipeline(self, project_id: str, job_id: str, asset_ids: list[str], user_
             doc_ids = generate_documents(db, pid, arch_id, classification, uid, config=_get_config(current_stage))
             _log_stage_end(db, stage_log, "completed")
             _publish_event(pid, jid, current_stage, "completed")
+            completed_stages.add(current_stage)
             logger.info("Stage 5: generated %d documents", len(doc_ids))
 
         # --- Stage 6: Quality Check ---
         current_stage = "quality_check"
-        if not _is_enabled(current_stage) or not doc_ids:
-            logger.info("Stage 6 quality_check: SKIPPED by config (or no docs)")
+        if not _is_enabled(current_stage) or not doc_ids or not _evaluate_condition(current_stage, cond_ctx):
+            logger.info("Stage 6 quality_check: SKIPPED by config/condition (or no docs)")
             _publish_event(pid, jid, current_stage, "skipped")
             _log_stage_skip(db, jid, current_stage)
             qc_result = {"passed": [], "flagged": []}
@@ -215,14 +258,15 @@ def run_pipeline(self, project_id: str, job_id: str, asset_ids: list[str], user_
             qc_result = quality_check(db, doc_ids, config=_get_config(current_stage))
             _log_stage_end(db, stage_log, "completed")
             _publish_event(pid, jid, current_stage, "completed")
+            completed_stages.add(current_stage)
             logger.info("Stage 6: %d passed, %d flagged",
                          len(qc_result.get("passed", [])),
                          len(qc_result.get("flagged", [])))
 
         # --- Stage 7: Conflict Detection ---
         current_stage = "conflict_detect"
-        if not _is_enabled(current_stage):
-            logger.info("Stage 7 conflict_detect: SKIPPED by config")
+        if not _is_enabled(current_stage) or not _evaluate_condition(current_stage, cond_ctx):
+            logger.info("Stage 7 conflict_detect: SKIPPED by config/condition")
             _publish_event(pid, jid, current_stage, "skipped")
             _log_stage_skip(db, jid, current_stage)
             conflict_ids = []
@@ -233,11 +277,12 @@ def run_pipeline(self, project_id: str, job_id: str, asset_ids: list[str], user_
             db.commit()
             _log_stage_end(db, stage_log, "completed")
             _publish_event(pid, jid, current_stage, "completed")
+            completed_stages.add(current_stage)
 
         # --- Stage 8: Embedding ---
         current_stage = "embed"
-        if not _is_enabled(current_stage) or not doc_ids:
-            logger.info("Stage 8 embed: SKIPPED by config (or no docs)")
+        if not _is_enabled(current_stage) or not doc_ids or not _evaluate_condition(current_stage, cond_ctx):
+            logger.info("Stage 8 embed: SKIPPED by config/condition (or no docs)")
             _publish_event(pid, jid, current_stage, "skipped")
             _log_stage_skip(db, jid, current_stage)
             embed_count = 0
@@ -248,12 +293,13 @@ def run_pipeline(self, project_id: str, job_id: str, asset_ids: list[str], user_
             db.commit()
             _log_stage_end(db, stage_log, "completed")
             _publish_event(pid, jid, current_stage, "completed")
+            completed_stages.add(current_stage)
             logger.info("Stage 8: embedded %d documents", embed_count)
 
         # --- Stage 9: Review Notification ---
         current_stage = "review_notify"
-        if not _is_enabled(current_stage):
-            logger.info("Stage 9 review_notify: SKIPPED by config")
+        if not _is_enabled(current_stage) or not _evaluate_condition(current_stage, cond_ctx):
+            logger.info("Stage 9 review_notify: SKIPPED by config/condition")
             _publish_event(pid, jid, current_stage, "skipped")
             _log_stage_skip(db, jid, current_stage)
         else:
@@ -262,6 +308,7 @@ def run_pipeline(self, project_id: str, job_id: str, asset_ids: list[str], user_
             notify_review(db, pid, doc_ids, conflict_ids, config=_get_config(current_stage))
             _log_stage_end(db, stage_log, "completed")
             _publish_event(pid, jid, current_stage, "completed")
+            completed_stages.add(current_stage)
 
         # Mark job completed
         if job:

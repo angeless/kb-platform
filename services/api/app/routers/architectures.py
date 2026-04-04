@@ -2,7 +2,8 @@
 
 import uuid
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
+from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared_schemas.architecture import ArchitectureOut, NodeCreate, NodeOut, NodeUpdate
@@ -107,10 +108,26 @@ async def list_nodes(
 )
 async def publish_architecture(
     arch_id: uuid.UUID,
+    confirmation_id: str | None = Query(None),
+    code: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
     kb_id: uuid.UUID = Depends(get_kb_id),
     _user: User = require_role("project_admin"),
 ):
+    # Confirmation code gate (v0.52.9 — Gap-7 fix)
+    from app.utils.confirmation import generate_confirmation, verify_confirmation
+    if not confirmation_id or not code:
+        conf = generate_confirmation("publish_architecture", str(_user.id))
+        return JSONResponse(status_code=428, content={
+            "error": "CONFIRMATION_REQUIRED",
+            "message": "发布架构需要确认码",
+            "confirmation_id": conf["confirmation_id"],
+            "code": conf["code"],
+            "expires_in": conf["expires_in"],
+        })
+    if not verify_confirmation(confirmation_id, code, str(_user.id)):
+        return JSONResponse(status_code=403, content={"error": "CONFIRMATION_INVALID", "message": "确认码无效或已过期"})
+
     svc = ArchitectureService(db, kb_id)
     arch = await svc.publish(arch_id)
     return DataResponse(data=ArchitectureOut.model_validate(arch))

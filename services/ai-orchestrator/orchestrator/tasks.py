@@ -13,6 +13,7 @@ from shared_models import (
     KnowledgeDoc, KnowledgeDocVersion, SourceRef, ConflictRecord,
 )
 from shared_models.pipeline_stage_config import PipelineStageConfig
+from shared_models.skill import Skill
 
 from .celery_app import celery_app
 from .llm_client import call_llm, parse_json_response
@@ -28,6 +29,7 @@ from .prompts import (
     build_contradiction_prompt,
     build_pattern_discovery_prompt,
     build_reflection_v2_prompt,
+    build_ontology_extraction_prompt,
 )
 
 logger = logging.getLogger(__name__)
@@ -56,6 +58,23 @@ def _get_entity_types(session: Session, project_id: uuid.UUID, stage_name: str) 
         return None
     types = row.params.get("entity_types", [])
     return types if types else None
+
+
+def _get_skill_prompt(session: Session, project_id: uuid.UUID, stage_name: str) -> str | None:
+    """Load active SKILL prompt_template for a project+stage.
+
+    Returns the prompt_template string, or None if no active SKILL exists.
+    """
+    row = session.execute(
+        select(Skill).where(
+            Skill.project_id == project_id,
+            Skill.stage_name == stage_name,
+            Skill.is_active.is_(True),
+        ).order_by(Skill.version.desc()).limit(1)
+    ).scalar_one_or_none()
+    if row and row.prompt_template:
+        return row.prompt_template
+    return None
 
 
 @celery_app.task(bind=True, name="orchestrator.propose_architecture")
@@ -344,6 +363,11 @@ def generate_docs(self, project_id: str, job_id: str) -> dict:
                     chunks=chunk_dicts,
                     entity_types=doc_gen_entity_types,
                 )
+
+                # Override with SKILL prompt_template if available (v0.52.3)
+                skill_prompt = _get_skill_prompt(session, project_uuid, "doc_generate")
+                if skill_prompt:
+                    system_prompt = skill_prompt
 
                 # Call LLM
                 llm_response = call_llm(
@@ -1212,3 +1236,108 @@ def _auto_fix_format(content: str, issues: list[str]) -> tuple[str, bool]:
             new_lines.append(line)
         content = "\n".join(new_lines)
     return content, fixed
+
+
+# ---------------------------------------------------------------------------
+# Ontology extraction (v0.52.7 — Gap-9 fix)
+# ---------------------------------------------------------------------------
+
+@celery_app.task(bind=True, name="orchestrator.extract_ontology")
+def extract_ontology(self, project_id: str, doc_id: str) -> dict:
+    """Extract concepts and relations from a knowledge document into OntologyConcept/Relation.
+
+    1. Load doc content
+    2. Call LLM with ontology extraction prompt
+    3. Upsert OntologyConcept and OntologyRelation rows
+    """
+    from shared_models.ontology import OntologyConcept, OntologyRelation
+
+    project_uuid = uuid.UUID(project_id)
+    doc_uuid = uuid.UUID(doc_id)
+
+    with _get_sync_session() as session:
+        try:
+            doc = session.execute(
+                select(KnowledgeDoc).where(KnowledgeDoc.id == doc_uuid)
+            ).scalar_one_or_none()
+            if doc is None:
+                return {"status": "error", "message": f"Doc {doc_id} not found"}
+
+            # Get latest version content
+            version = session.execute(
+                select(KnowledgeDocVersion).where(
+                    KnowledgeDocVersion.doc_id == doc_uuid,
+                    KnowledgeDocVersion.version == doc.current_version,
+                )
+            ).scalar_one_or_none()
+            if version is None or not version.content_md:
+                return {"status": "skipped", "message": "No content to extract from"}
+
+            system_prompt, user_prompt = build_ontology_extraction_prompt(version.content_md)
+            llm_response = call_llm(prompt=user_prompt, system_prompt=system_prompt)
+            result = parse_json_response(llm_response)
+
+            concepts_data = result.get("concepts", [])
+            relations_data = result.get("relations", [])
+
+            # Upsert concepts — keyed by (project_id, name)
+            concept_map: dict[str, uuid.UUID] = {}
+            for c in concepts_data:
+                name = c.get("name", "").strip()
+                if not name:
+                    continue
+                existing = session.execute(
+                    select(OntologyConcept).where(
+                        OntologyConcept.project_id == project_uuid,
+                        OntologyConcept.name == name,
+                    )
+                ).scalar_one_or_none()
+                if existing:
+                    existing.definition = c.get("definition") or existing.definition
+                    existing.concept_type = c.get("type", existing.concept_type)
+                    concept_map[name] = existing.id
+                else:
+                    new_concept = OntologyConcept(
+                        project_id=project_uuid,
+                        name=name,
+                        definition=c.get("definition"),
+                        concept_type=c.get("type", "entity"),
+                    )
+                    session.add(new_concept)
+                    session.flush()
+                    concept_map[name] = new_concept.id
+
+            # Insert relations
+            relations_created = 0
+            for rel in relations_data:
+                src = rel.get("source", "").strip()
+                tgt = rel.get("target", "").strip()
+                if src not in concept_map or tgt not in concept_map:
+                    continue
+                new_rel = OntologyRelation(
+                    project_id=project_uuid,
+                    source_concept_id=concept_map[src],
+                    target_concept_id=concept_map[tgt],
+                    relation_type=rel.get("type", "related-to"),
+                    confidence=rel.get("confidence"),
+                    evidence={"doc_id": str(doc_uuid), "doc_title": doc.title},
+                )
+                session.add(new_rel)
+                relations_created += 1
+
+            session.commit()
+
+            logger.info(
+                "Ontology extracted for doc %s: %d concepts, %d relations",
+                doc_id, len(concept_map), relations_created,
+            )
+            return {
+                "status": "success",
+                "concepts_count": len(concept_map),
+                "relations_count": relations_created,
+            }
+
+        except Exception as e:
+            session.rollback()
+            logger.error("Ontology extraction failed for doc %s: %s", doc_id, e)
+            return {"status": "error", "message": str(e)}

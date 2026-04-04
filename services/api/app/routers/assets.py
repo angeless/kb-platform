@@ -17,6 +17,14 @@ from shared_models import User
 
 router = APIRouter(prefix="/v1/assets", tags=["assets"])
 
+
+def _asset_out(asset) -> AssetOut:
+    """Build AssetOut with tags aggregated from first chunk (v0.52.10 — Gap-15 fix)."""
+    out = _asset_out(asset)
+    if hasattr(asset, "chunks") and asset.chunks:
+        out.tags = asset.chunks[0].tags
+    return out
+
 _RESP_AUTH = {
     401: {"description": "Unauthorized", "model": ErrorDetail},
     403: {"description": "Forbidden", "model": ErrorDetail},
@@ -82,7 +90,7 @@ async def upload_asset(
     )
     audit = AuditService(db, kb_id, current_user.id)
     await audit.log("upload", "asset", asset.id, project_id=project_id)
-    return DataResponse(data=AssetOut.model_validate(asset))
+    return DataResponse(data=_asset_out(asset))
 
 
 @router.post(
@@ -116,7 +124,7 @@ async def import_url(
     asset = await svc.import_url(body.project_id, str(body.url))
     audit = AuditService(db, kb_id, current_user.id)
     await audit.log("import_url", "asset", asset.id, project_id=body.project_id)
-    return DataResponse(data=AssetOut.model_validate(asset))
+    return DataResponse(data=_asset_out(asset))
 
 
 @router.post(
@@ -176,7 +184,7 @@ async def list_assets(
     svc = AssetService(db, kb_id, current_user.id)
     assets, total = await svc.list(project_id=project_id, page=page, page_size=page_size)
     return ListResponse(
-        data=[AssetOut.model_validate(a) for a in assets],
+        data=[_asset_out(a) for a in assets],
         meta=PaginationMeta(page=page, page_size=page_size, total=total),
     )
 
@@ -201,4 +209,4 @@ async def get_asset(
 ):
     svc = AssetService(db, kb_id, current_user.id)
     asset = await svc.get(asset_id)
-    return DataResponse(data=AssetOut.model_validate(asset))
+    return DataResponse(data=_asset_out(asset))
