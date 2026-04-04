@@ -431,6 +431,47 @@ def build_tags_reflection_prompt(
 
 
 # ---------------------------------------------------------------------------
+# Reflection v2: quality-issue-driven document revision (v0.49.5)
+# ---------------------------------------------------------------------------
+
+SYSTEM_PROMPT_REFLECTION_V2 = """你是一个知识文档质量改进专家。你的任务是根据质量检查发现的问题，修正文档内容。
+
+修正规则：
+1. 仅修正提出的问题，不改动无关内容
+2. 保持原文的核心信息和论述逻辑不变
+3. 如果问题是格式问题，调整格式但不改文意
+4. 如果问题是术语不一致，选择文档中出现频率更高的用法统一
+5. 如果问题是缺少来源引用，在断言性语句后添加"[来源待补]"标注
+6. 输出完整的修正后文档（Markdown 格式）"""
+
+USER_PROMPT_REFLECTION_V2_TEMPLATE = """以下是质量检查发现的问题和原始文档。请修正文档。
+
+## 质量问题
+{issues_text}
+
+## 原始文档
+{document_content}
+
+## 请输出修正后的完整文档（Markdown 格式）："""
+
+
+def build_reflection_v2_prompt(
+    document_content: str, issues: list[str], max_content_chars: int = 6000
+) -> tuple[str, str]:
+    """Build prompts for v2 reflection — quality-issue-driven revision."""
+    truncated = document_content[:max_content_chars]
+    if len(document_content) > max_content_chars:
+        truncated += "\n...(截断)"
+
+    issues_text = "\n".join(f"- {issue}" for issue in issues)
+    user_prompt = USER_PROMPT_REFLECTION_V2_TEMPLATE.format(
+        issues_text=issues_text,
+        document_content=truncated,
+    )
+    return SYSTEM_PROMPT_REFLECTION_V2, user_prompt
+
+
+# ---------------------------------------------------------------------------
 # Cross-document contradiction detection prompts (v0.46.5)
 # ---------------------------------------------------------------------------
 

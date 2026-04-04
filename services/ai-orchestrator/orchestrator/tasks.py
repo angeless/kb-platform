@@ -27,6 +27,7 @@ from .prompts import (
     build_tags_reflection_prompt,
     build_contradiction_prompt,
     build_pattern_discovery_prompt,
+    build_reflection_v2_prompt,
 )
 
 logger = logging.getLogger(__name__)
@@ -1114,3 +1115,100 @@ def discover_patterns(self, project_id: str) -> dict:
             session.rollback()
             logger.error("Failed pattern discovery for project %s: %s", project_id, e)
             return {"status": "error", "message": str(e)}
+
+
+# ---------------------------------------------------------------------------
+# Reflection v2: quality-issue-driven document revision (v0.49.5)
+# ---------------------------------------------------------------------------
+
+MAX_REFLECTION_ROUNDS = 5  # Hard upper limit
+
+
+@celery_app.task(bind=True, name="orchestrator.reflect_and_revise")
+def reflect_and_revise(self, doc_id: str, issues: list[str], round_num: int = 1, max_rounds: int = 3) -> dict:
+    """Reflect on quality issues and revise the document content.
+
+    1. Try rule-based auto-fix first (format issues)
+    2. If issues remain, call LLM to revise
+    3. Update doc version content
+    4. Re-run quality check next round
+    """
+    import re as _re
+    max_rounds = min(max_rounds, MAX_REFLECTION_ROUNDS)
+    doc_uuid = uuid.UUID(doc_id)
+
+    with Session(_sync_engine) as session:
+        try:
+            doc = session.execute(
+                select(KnowledgeDoc).where(KnowledgeDoc.id == doc_uuid)
+            ).scalar_one_or_none()
+            if doc is None:
+                return {"status": "error", "message": f"Doc {doc_id} not found"}
+
+            version = session.execute(
+                select(KnowledgeDocVersion).where(
+                    KnowledgeDocVersion.doc_id == doc_uuid,
+                    KnowledgeDocVersion.version == doc.current_version,
+                )
+            ).scalar_one_or_none()
+            if version is None:
+                return {"status": "error", "message": "Doc has no version"}
+
+            content = version.content_md
+            remaining_issues = list(issues)
+
+            # Step 1: Rule-based auto-fix (format issues — no LLM needed)
+            content, auto_fixed = _auto_fix_format(content, remaining_issues)
+            if auto_fixed:
+                remaining_issues = [i for i in remaining_issues if "标题层级" not in i]
+
+            # Step 2: If issues remain, call LLM
+            if remaining_issues:
+                system_prompt, user_prompt = build_reflection_v2_prompt(content, remaining_issues)
+                revised = call_llm(system_prompt, user_prompt, max_tokens=4000)
+                if revised and len(revised.strip()) > 50:
+                    content = revised.strip()
+
+            # Step 3: Update doc content
+            version.content_md = content
+            session.commit()
+
+            # Step 4: Check if more rounds needed
+            if round_num < max_rounds and remaining_issues:
+                return reflect_and_revise(doc_id, remaining_issues, round_num + 1, max_rounds)
+
+            return {
+                "status": "success",
+                "rounds": round_num,
+                "auto_fixed": auto_fixed,
+                "remaining_issues": remaining_issues,
+            }
+
+        except Exception as e:
+            session.rollback()
+            logger.error("Reflection v2 failed for doc %s round %d: %s", doc_id, round_num, e)
+            return {"status": "error", "message": str(e), "rounds": round_num}
+
+
+def _auto_fix_format(content: str, issues: list[str]) -> tuple[str, bool]:
+    """Auto-fix heading level skips without LLM."""
+    import re
+    fixed = False
+    for issue in issues:
+        if "标题层级跳跃" not in issue:
+            continue
+        lines = content.split("\n")
+        new_lines = []
+        prev_level = 0
+        for line in lines:
+            m = re.match(r"^(#{1,6})\s", line)
+            if m:
+                level = len(m.group(1))
+                if prev_level > 0 and level > prev_level + 1:
+                    new_level = prev_level + 1
+                    line = "#" * new_level + line[level:]
+                    fixed = True
+                prev_level = len(re.match(r"^(#{1,6})", line).group(1))
+            new_lines.append(line)
+        content = "\n".join(new_lines)
+    return content, fixed

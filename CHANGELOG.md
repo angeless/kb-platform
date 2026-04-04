@@ -3,6 +3,11 @@
 所有重要变更都将被记录在此文件中。
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/)。
 
+## [0.49.5] — 2026-04-03
+
+### 新增 (Added)
+- 反思循环 v2 AI 自检：`reflect_and_revise` Celery task 接收 quality_check issues，先尝试规则自动修正（标题层级修复），规则修正后仍有问题则调 LLM 修正文档内容，最多 max_rounds 轮（默认 3，硬上限 5），新增 `build_reflection_v2_prompt` 提示模板（v0.49.5）
+
 ## [0.49.4] — 2026-04-03
 
 ### 新增 (Added)
