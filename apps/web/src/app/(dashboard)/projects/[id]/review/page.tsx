@@ -16,6 +16,18 @@ interface Doc {
   current_version: number;
 }
 
+interface ReviewTask {
+  id: string;
+  doc_id: string;
+  reviewer_id: string | null;
+  status: string;
+  review_note: string | null;
+  created_by: string;
+  created_at: string;
+  assigned_at: string | null;
+  reviewed_at: string | null;
+}
+
 interface BatchResult {
   succeeded: string[];
   failed: { id: string; reason: string }[];
@@ -87,6 +99,79 @@ function MeceInfoCard({ projectId }: { projectId: string }) {
           未覆盖内容: {meta.uncovered_chunks.join("、")}
         </div>
       )}
+    </div>
+  );
+}
+
+function ReviewKanban({ projectId }: { projectId: string }) {
+  const [pending, setPending] = useState<ReviewTask[]>([]);
+  const [assigned, setAssigned] = useState<ReviewTask[]>([]);
+  const [completed, setCompleted] = useState<ReviewTask[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchAll = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [p, a, ap, rj] = await Promise.all([
+        api.get<ReviewTask[]>(`/v1/projects/${projectId}/reviews?status=pending`),
+        api.get<ReviewTask[]>(`/v1/projects/${projectId}/reviews?status=assigned`),
+        api.get<ReviewTask[]>(`/v1/projects/${projectId}/reviews?status=approved`),
+        api.get<ReviewTask[]>(`/v1/projects/${projectId}/reviews?status=rejected`),
+      ]);
+      setPending(p.data);
+      setAssigned(a.data);
+      setCompleted([...ap.data, ...rj.data]);
+    } catch {
+      // Non-critical
+    } finally {
+      setLoading(false);
+    }
+  }, [projectId]);
+
+  useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  const KanbanColumn = ({ title, tasks, color }: { title: string; tasks: ReviewTask[]; color: string }) => (
+    <div className="flex-1 min-w-[280px]">
+      <div className={`mb-3 flex items-center gap-2 border-b-2 ${color} pb-2`}>
+        <h3 className="text-sm font-semibold text-gray-700">{title}</h3>
+        <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-500">{tasks.length}</span>
+      </div>
+      <div className="space-y-2">
+        {tasks.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-gray-200 py-6 text-center text-xs text-gray-400">
+            暂无任务
+          </div>
+        ) : tasks.map((t) => (
+          <div key={t.id} className="rounded-lg border border-gray-200 bg-white p-3 shadow-sm hover:shadow">
+            <div className="text-sm font-medium text-gray-800 truncate">
+              {t.doc_id.slice(0, 8)}...
+            </div>
+            <div className="mt-1 text-xs text-gray-400">
+              {new Date(t.created_at).toLocaleDateString("zh-CN")}
+            </div>
+            {t.reviewer_id && (
+              <div className="mt-1 text-xs text-primary-500">审批人: {t.reviewer_id.slice(0, 8)}...</div>
+            )}
+            {t.review_note && (
+              <div className="mt-1 text-xs text-gray-500 truncate">{t.review_note}</div>
+            )}
+            <StatusBadge status={t.status} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  if (loading) return <div className="py-4 text-center text-gray-400 text-sm">加载审批看板...</div>;
+
+  return (
+    <div className="mb-8">
+      <h2 className="mb-4 text-lg font-bold text-gray-900">审批看板</h2>
+      <div className="flex gap-4 overflow-x-auto pb-2">
+        <KanbanColumn title="待分配" tasks={pending} color="border-yellow-400" />
+        <KanbanColumn title="待审批" tasks={assigned} color="border-blue-400" />
+        <KanbanColumn title="已完成" tasks={completed} color="border-green-400" />
+      </div>
     </div>
   );
 }
@@ -184,6 +269,9 @@ export default function ReviewQueuePage() {
       </div>
 
       <h1 className="mb-6 text-2xl font-bold text-gray-900">审核管理</h1>
+
+      {/* Review Kanban (v0.50.3) */}
+      <ReviewKanban projectId={projectId} />
 
       {/* MECE Architecture Quality Card */}
       <MeceInfoCard projectId={projectId} />

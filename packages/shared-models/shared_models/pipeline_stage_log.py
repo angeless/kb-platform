@@ -29,3 +29,4 @@ class PipelineStageLog(Base):
     )
     token_usage: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    input_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)

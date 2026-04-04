@@ -3,7 +3,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import BigInteger, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -48,6 +48,13 @@ class AssetChunk(Base):
     content_text: Mapped[str] = mapped_column(Text, nullable=False)
     page_or_timestamp: Mapped[str | None] = mapped_column(String(50), nullable=True)
     tags: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+
+    # IR (Intermediate Representation) fields — v0.49.1
+    original_format: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    structure_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    extraction_confidence: Mapped[float | None] = mapped_column(nullable=True)
+    semantic_boundaries: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    language: Mapped[str | None] = mapped_column(String(10), nullable=True)
 
     # Relationships
     asset = relationship("Asset", back_populates="chunks")

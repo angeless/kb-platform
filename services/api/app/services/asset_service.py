@@ -8,13 +8,27 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared_errors import AppException, ConflictException, ErrorCode, NotFoundException
-from shared_models import Asset
+from shared_models import Asset, AssetChunk
 
 from app.utils.storage import PARSEABLE_ASSET_TYPES, StorageClient, is_allowed_file
 
 from . import TenantService
 
 logger = logging.getLogger(__name__)
+
+
+def _detect_language_simple(text: str) -> str:
+    """Simple CJK-based language detection. Returns 'zh', 'en', or 'mixed'."""
+    import re
+    if not text:
+        return "en"
+    cjk = len(re.findall(r"[\u4e00-\u9fff]", text))
+    alpha = len(re.findall(r"[a-zA-Z]", text))
+    total = cjk + alpha
+    if total == 0:
+        return "en"
+    ratio = cjk / total
+    return "zh" if ratio > 0.5 else ("en" if ratio < 0.1 else "mixed")
 
 # ZIP archive decompression limits (DoS protection)
 MAX_ARCHIVE_TOTAL_BYTES = 500 * 1024 * 1024  # 500MB total decompressed
@@ -63,6 +77,18 @@ class AssetService(TenantService):
                 error_code=ErrorCode.ASSET_TOO_LARGE,
                 message=f"文件大小超过限制 ({self.max_upload_size_bytes // (1024 * 1024)}MB)",
             )
+
+        # Malware scan (if ClamAV enabled)
+        from shared_config.settings import get_settings
+        settings = get_settings()
+        if settings.clamav_enabled:
+            from app.utils.malware_scanner import scan_file
+            is_clean, threat = scan_file(file_content, settings.clamav_socket)
+            if not is_clean:
+                raise AppException(
+                    error_code=ErrorCode.ASSET_TYPE_NOT_ALLOWED,
+                    message=f"文件被拒绝：检测到恶意内容 ({threat})",
+                )
 
         file_hash = hashlib.sha256(file_content).hexdigest()
 
@@ -149,9 +175,14 @@ class AssetService(TenantService):
         asset_id = uuid.uuid4()
         object_path = f"{self.kb_id}/{project_id}/{asset_id}/{filename}"
 
-        # Upload to MinIO/S3
+        # Upload raw HTML to MinIO/S3 (preserve original for traceability)
         if self.storage is not None:
             self.storage.upload_file(object_path, content, content_type)
+
+        # Extract article content using readability
+        from app.utils.readability import extract_article
+        html_text = content.decode("utf-8", errors="replace")
+        article = extract_article(html_text, url)
 
         asset = Asset(
             id=asset_id,
@@ -162,10 +193,30 @@ class AssetService(TenantService):
             object_path=object_path,
             file_hash=file_hash,
             file_size=len(content),
-            parse_status="pending",
+            parse_status="completed",
             uploaded_by=self.user_id,
         )
         self.db.add(asset)
+
+        # Create chunk with extracted content (not raw HTML) + IR fields
+        body = article["body"] or html_text
+        chunk = AssetChunk(
+            asset_id=asset_id,
+            chunk_index=0,
+            content_text=body,
+            tags={
+                "extracted_title": article["title"],
+                "extracted_author": article["author"],
+                "extracted_date": article["date"],
+                "source": "readability",
+            },
+            original_format="url",
+            structure_type="paragraph",
+            extraction_confidence=0.9 if article["body"] else 0.5,
+            language=_detect_language_simple(body),
+        )
+        self.db.add(chunk)
+
         try:
             await self.db.flush()
         except Exception:

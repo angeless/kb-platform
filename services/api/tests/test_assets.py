@@ -199,7 +199,7 @@ async def test_import_url_success(client: AsyncClient, auth_headers: dict):
     assert data["asset_type"] == "url"
     assert data["source_url"] == "https://example.com/page.html"
     assert data["filename"] == "page.html"
-    assert data["parse_status"] == "pending"
+    assert data["parse_status"] == "completed"  # v0.48.2: URL import now extracts content inline
 
 
 @pytest.mark.asyncio

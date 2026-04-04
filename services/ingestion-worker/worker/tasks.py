@@ -95,7 +95,7 @@ def parse_asset(self, asset_id: str, job_id: str) -> dict:
                 delete(AssetChunk).where(AssetChunk.asset_id == asset_uuid)
             )
 
-            # Write new chunks
+            # Write new chunks (including IR fields if provided by parser)
             for i, chunk_data in enumerate(chunks):
                 chunk = AssetChunk(
                     id=uuid.uuid4(),
@@ -104,6 +104,11 @@ def parse_asset(self, asset_id: str, job_id: str) -> dict:
                     content_text=chunk_data["content_text"],
                     page_or_timestamp=chunk_data.get("page_or_timestamp"),
                     tags=chunk_data.get("tags"),
+                    original_format=chunk_data.get("original_format"),
+                    structure_type=chunk_data.get("structure_type"),
+                    extraction_confidence=chunk_data.get("extraction_confidence"),
+                    semantic_boundaries=chunk_data.get("semantic_boundaries"),
+                    language=chunk_data.get("language"),
                 )
                 session.add(chunk)
 

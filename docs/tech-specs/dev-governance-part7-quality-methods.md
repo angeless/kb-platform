@@ -315,7 +315,7 @@ Code Review 结果**必须**保存到文件，不允许在对话中消失：
 | 计划审计报告 | `docs/versions/plan-audit-report-V{x.y.0}.md` | plan-audit 完成后 | /mode-autocode Phase 1：计划状态为"已确认"才可执行 |
 | 封板审计报告 | `docs/versions/seal-audit-vX.Y.md` | §1.10 封板检查 | Phase 8 前置条件：封板审计必须存在 |
 | Phase 8 Stage 报告 | `docs/audits/v{X.Y.Z}/stage{1,2,3}-*.md` | Phase 8 各 Stage | Phase 8 ③ 门禁：三份报告齐全 |
-| Phase 8 整合报告 | `docs/audits/v{X.Y.Z}/audit-report.md` | Phase 8 整合 | 版本收尾前置条件：审计报告存在且无 Critical |
+| Phase 8 整合报告 | `docs/audits/v{X.Y.Z}/audit-report.md` | Phase 8 整合 | 版本收尾前置条件：审计报告存在且所有 bug 已修复（仅 Observation 可延后） |
 
 ### 修复时的编辑历史规则
 

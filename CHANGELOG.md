@@ -3,6 +3,123 @@
 所有重要变更都将被记录在此文件中。
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/)。
 
+## [0.50.8] — 2026-04-04
+
+### 新增 (Added)
+- 模型成本看板页：`/admin/cost-dashboard` 展示今日总费用/总 Token/活跃模型数汇总卡片 + 按模型维度的 Token 消耗明细表格，`GET /v1/admin/cost-summary` 后端端点从 Redis 读取每日成本数据（v0.50.8）
+
+## [0.50.7] — 2026-04-04
+
+### 新增 (Added)
+- 维护指南文档模板：`build_maintenance_guide_prompt` 从架构节点生成维护指南（更新频率/审批流程/质量检查），通过 `POST /v1/projects/{pid}/ai-generate-maintenance-guide` 手动触发，存为 doc_type=maintenance_guide 的 KnowledgeDoc（v0.50.7）
+
+## [0.50.6] — 2026-04-04
+
+### 新增 (Added)
+- 术语表文档模板：`build_glossary_extraction_prompt` 从项目 chunks 提取专业术语（名称/定义/别名），按字母排序生成 Markdown 表格，通过 `POST /v1/projects/{pid}/ai-generate-glossary` 手动触发，存为 doc_type=glossary 的 KnowledgeDoc（v0.50.6）
+
+## [0.50.5] — 2026-04-04
+
+### 新增 (Added)
+- 高危操作确认码：`confirmation.py` 生成 6 位随机码存 Redis（TTL 5 分钟），`hmac.compare_digest` 时序安全比较，验证后一次性删除，内存降级含 TTL 淘汰，用于高危操作二次确认（v0.50.5）
+
+## [0.50.3-4] — 2026-04-04
+
+### 新增 (Added)
+- 审批看板 + 操作组件（合并实现）：审批中心三列看板（待分配/待审批/已完成），每列卡片显示文档信息、审批人、审批备注、状态标签，空状态友好提示（v0.50.3+4）
+
+## [0.50.2] — 2026-04-04
+
+### 新增 (Added)
+- 审批工作流 API：6 个端点（创建/分配/批准/驳回/重新提交/列表），ReviewService 含完整状态机校验 + 租户隔离，批准时自动同步 doc.status=approved，驳回需填写原因，重新提交自动重分配原审批人，所有操作记录审计日志（v0.50.2）
+
+## [0.50.1] — 2026-04-03
+
+### 新增 (Added)
+- 审批工作流 DB 模型：`review_task` 表（11 字段）+ 状态机（pending→assigned→approved/rejected→resubmitted→assigned），`validate_transition()` 函数校验合法转换，3 个索引，Alembic migration `x3y4z5a6b7c8`，12 个单元测试（v0.50.1）
+
+## [0.49.9] — 2026-04-03
+
+### 新增 (Added)
+- 成本追踪器：`cost_tracker.py` 按 model 累计每日 token 消耗（Redis 存储），`check_budget()` 对比 cost_limit_usd 阈值，超限拒绝 LLM 调用，无配置/Redis 不可用时降级允许（v0.49.9）
+
+## [0.49.8] — 2026-04-03
+
+### 新增 (Added)
+- Prometheus LLM 指标：新增 `llm_calls_total`（Counter, 按 model）、`llm_tokens_total`（Counter, 按 model+type）、`active_connections`（Gauge），MetricsMiddleware 追踪活跃连接数（v0.49.8）
+
+## [0.49.7] — 2026-04-03
+
+### 新增 (Added)
+- Per-stage 幂等性：PipelineStageLog 新增 `input_hash` 字段（VARCHAR(64)），带联合索引（job_id + stage_name + input_hash），支持同一 stage 重跑时根据输入 hash 跳过已完成的执行，Alembic migration `w2x3y4z5a6b7`（v0.49.7）
+
+## [0.49.5] — 2026-04-03
+
+### 新增 (Added)
+- 反思循环 v2 AI 自检：`reflect_and_revise` Celery task 接收 quality_check issues，先尝试规则自动修正（标题层级修复），规则修正后仍有问题则调 LLM 修正文档内容，最多 max_rounds 轮（默认 3，硬上限 5），新增 `build_reflection_v2_prompt` 提示模板（v0.49.5）
+
+## [0.49.4] — 2026-04-03
+
+### 新增 (Added)
+- 反思循环 v2 规则校验层：quality_check 新增 3 类检查——格式一致性（标题层级跳跃检测）、来源引用完整性（断言性语句无引用警告）、术语一致性（中英混用检测），每类可通过 pipeline config params 单独开关，9 个单元测试覆盖全部 AC（v0.49.4）
+
+## [0.49.6] — 2026-04-03
+
+### 新增 (Added)
+- pgvector HNSW 索引：为 doc_embedding.embedding_vec 创建 HNSW 索引（m=16, ef_construction=64, CONCURRENTLY），从 JSONB embedding 列回填数据到 vector 列，语义搜索从 O(n) 降至 O(log n)，Alembic migration `v1w2x3y4z5a6`（v0.49.6）
+
+## [0.49.3] — 2026-04-03
+
+### 变更 (Changed)
+- classify stage IR 适配：heading chunk 添加 [HEADING] 前缀提升分类权重，低置信度 chunk 标记 [LOW_QUALITY]，chunk 数据携带 structure_type/extraction_confidence/language 传给 orchestrator（v0.49.3）
+- doc_generate stage IR 适配：fallback 模式按 structure_type 排序（heading 优先），heading 内容作为文档标题，低置信度 chunk 添加 OCR uncertainty 标注（v0.49.3）
+
+## [0.49.2] — 2026-04-03
+
+### 新增 (Added)
+- 解析器 IR 字段填充：text_parser 设置 original_format/structure_type/extraction_confidence/language，asr_parser 设置 original_format/semantic_boundaries/language，URL import 设置 original_format/extraction_confidence/language，新增 ir_utils.py（语言检测 + 结构类型推断），tasks.py 映射 IR 字段到 AssetChunk（v0.49.2）
+
+## [0.49.1] — 2026-04-03
+
+### 新增 (Added)
+- IR 中间表示字段：AssetChunk 新增 5 个 nullable 字段（original_format/structure_type/extraction_confidence/semantic_boundaries/language），向后兼容旧 chunk，Alembic migration `u0i1j2k3l4m5`（v0.49.1）
+
+## [0.48.6] — 2026-04-03
+
+### 新增 (Added)
+- 前端资产列表视频增强：视频文件显示视频图标 + 时长标签（MM:SS 格式，从 Asset.tags.duration_s 读取），各类型资产显示对应图标（视频/音频/图片/PDF/其他），非视频文件不受影响（v0.48.6）
+
+## [0.48.4] — 2026-04-03
+
+### 新增 (Added)
+- 视频帧提取 + OCR：扩展 video_parser 支持定时截取关键帧（默认每 30s），FFmpeg scene filter 去重，帧图片通过 ocr_parser 识别文字，有文字帧创建 AssetChunk（tags 含 source:video_frame + timestamp_s），适用于 PPT 录屏/白板场景，最大帧数限制 50（v0.48.4）
+
+## [0.48.5] — 2026-04-03
+
+### 新增 (Added)
+- 文件恶意扫描：`malware_scanner.py` 通过 ClamAV daemon Unix socket 扫描上传文件，检测到恶意内容返回 400 拒绝上传，ClamAV 不可用时降级为允许上传并记录 WARNING，通过 `CLAMAV_ENABLED` 环境变量控制（默认关闭）（v0.48.5）
+- 配置项：`clamav_enabled` (bool, default=False) + `clamav_socket` (str, default=/var/run/clamav/clamd.ctl)
+- 单元测试 7 个用例覆盖全部 5 条验收标准
+
+## [0.48.3] — 2026-04-03
+
+### 新增 (Added)
+- 视频解析器：`video_parser.py` 使用 FFmpeg 提取音轨交给 ASR 转文字、检测内嵌字幕创建独立 chunk、提取视频元数据（时长/分辨率/帧率），无 FFmpeg 时返回友好错误，临时文件完成后自动清理（v0.48.3）
+- 解析器注册：`video` 类型映射到 video_parser，新增 `ffmpeg-python` 依赖
+- 单元测试 10 个用例覆盖全部 6 条验收标准
+
+## [0.48.2] — 2026-04-03
+
+### 变更 (Changed)
+- URL import 升级：`import_url()` 集成 readability 正文提取，AssetChunk 存储提取后纯文本（非原始 HTML），元数据（title/author/date）存入 chunk.tags，原始 HTML 仍保存在 MinIO 保留溯源，parse_status 设为 completed 跳过 worker 重处理（v0.48.2）
+
+## [0.48.1] — 2026-04-03
+
+### 新增 (Added)
+- 网页正文提取模块：`readability.py` 使用 trafilatura 从 HTML 提取纯正文/标题/作者/日期，去除导航/广告/脚本噪音，提取失败时降级为简单 HTML 去标签（v0.48.1）
+- 新增依赖：`trafilatura` 2.0.0 + `lxml_html_clean`
+- 单元测试 8 个用例覆盖全部 5 条验收标准
+
 ## [0.47.8] — 2026-04-03
 
 ### 新增 (Added)

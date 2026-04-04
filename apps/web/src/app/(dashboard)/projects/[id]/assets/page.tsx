@@ -16,6 +16,7 @@ interface Asset {
   parse_status: string;
   file_size: number | null;
   uploaded_at: string;
+  tags?: Record<string, unknown>;
 }
 
 export default function ProjectAssetsPage() {
@@ -55,6 +56,22 @@ export default function ProjectAssetsPage() {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const formatDuration = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60);
+    return `${m}:${s.toString().padStart(2, "0")}`;
+  };
+
+  const assetTypeIcon = (type: string) => {
+    switch (type) {
+      case "video": return "🎬";
+      case "audio": return "🎵";
+      case "image": return "🖼️";
+      case "pdf": return "📄";
+      default: return "📎";
+    }
   };
 
   const totalPages = Math.ceil(total / 20);
@@ -147,8 +164,14 @@ export default function ProjectAssetsPage() {
                         href={`/assets/${asset.id}`}
                         className="font-medium text-primary-600 hover:underline"
                       >
+                        <span className="mr-1.5">{assetTypeIcon(asset.asset_type)}</span>
                         {asset.filename}
                       </Link>
+                      {asset.asset_type === "video" && typeof asset.tags?.duration_s === "number" && (
+                        <span className="ml-2 text-xs text-gray-400">
+                          {formatDuration(asset.tags.duration_s as number)}
+                        </span>
+                      )}
                     </td>
                     <td className="px-5 py-3 text-gray-500">{asset.asset_type}</td>
                     <td className="px-5 py-3 text-gray-500">{formatSize(asset.file_size)}</td>

@@ -2,7 +2,7 @@
 
 import time
 
-from prometheus_client import Counter, Histogram
+from prometheus_client import Counter, Gauge, Histogram
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
 from starlette.responses import Response
@@ -34,6 +34,25 @@ http_response_size_bytes = Histogram(
     "HTTP response body size in bytes",
     labelnames=["method", "path"],
     buckets=(100, 1_000, 10_000, 100_000, 1_000_000),
+)
+
+# --- LLM metrics (v0.49.8) ---
+
+llm_calls_total = Counter(
+    "llm_calls_total",
+    "Total LLM API calls",
+    labelnames=["model"],
+)
+
+llm_tokens_total = Counter(
+    "llm_tokens_total",
+    "Total LLM tokens consumed",
+    labelnames=["model", "type"],  # type: prompt | completion
+)
+
+active_connections = Gauge(
+    "active_connections",
+    "Number of active HTTP connections",
 )
 
 # Paths to skip from metrics collection (avoid high-cardinality)
@@ -75,8 +94,12 @@ class MetricsMiddleware(BaseHTTPMiddleware):
             except (ValueError, TypeError):
                 pass
 
+        active_connections.inc()
         start = time.monotonic()
-        response = await call_next(request)
+        try:
+            response = await call_next(request)
+        finally:
+            active_connections.dec()
         duration = time.monotonic() - start
 
         status = str(response.status_code)
