@@ -9,6 +9,10 @@ import importlib.util
 import os
 import sys
 
+# Ensure ffmpeg module exists (may not be installed in CI)
+if "ffmpeg" not in sys.modules:
+    sys.modules["ffmpeg"] = MagicMock()
+
 # Direct import to avoid __init__.py loading all sibling parsers (which need pymupdf, whisper, etc.)
 _spec = importlib.util.spec_from_file_location(
     "video_parser",
