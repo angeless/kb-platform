@@ -205,6 +205,18 @@ def run_pipeline(self, project_id: str, job_id: str, asset_ids: list[str], user_
                 _log_stage_skip(db, jid, current_stage)
                 continue
 
+            # Check data-dependency prerequisites BEFORE emitting "running"
+            if current_stage == "doc_generate" and arch_id is None:
+                logger.info("Stage doc_generate: SKIPPED (no architecture)")
+                _publish_event(pid, jid, current_stage, "skipped")
+                _log_stage_skip(db, jid, current_stage)
+                continue
+            if current_stage in ("quality_check", "embed") and not doc_ids:
+                logger.info("Stage %s: SKIPPED (no docs)", current_stage)
+                _publish_event(pid, jid, current_stage, "skipped")
+                _log_stage_skip(db, jid, current_stage)
+                continue
+
             _publish_event(pid, jid, current_stage, "running")
             stage_log = _log_stage_start(db, jid, current_stage)
 
@@ -224,20 +236,10 @@ def run_pipeline(self, project_id: str, job_id: str, asset_ids: list[str], user_
                     logger.warning("Architecture quality warnings: %s", arch_qc["warnings"])
 
             elif current_stage == "doc_generate":
-                if arch_id is None:
-                    logger.info("Stage doc_generate: SKIPPED (no architecture)")
-                    _log_stage_end(db, stage_log, "skipped")
-                    _publish_event(pid, jid, current_stage, "skipped")
-                    continue
                 doc_ids = generate_documents(db, pid, arch_id, classification, uid, config=_get_config(current_stage))
                 logger.info("Stage doc_generate: generated %d documents", len(doc_ids))
 
             elif current_stage == "quality_check":
-                if not doc_ids:
-                    logger.info("Stage quality_check: SKIPPED (no docs)")
-                    _log_stage_end(db, stage_log, "skipped")
-                    _publish_event(pid, jid, current_stage, "skipped")
-                    continue
                 qc_result = quality_check(db, doc_ids, config=_get_config(current_stage))
                 logger.info("Stage quality_check: %d passed, %d flagged",
                              len(qc_result.get("passed", [])),
@@ -248,11 +250,6 @@ def run_pipeline(self, project_id: str, job_id: str, asset_ids: list[str], user_
                 db.commit()
 
             elif current_stage == "embed":
-                if not doc_ids:
-                    logger.info("Stage embed: SKIPPED (no docs)")
-                    _log_stage_end(db, stage_log, "skipped")
-                    _publish_event(pid, jid, current_stage, "skipped")
-                    continue
                 embed_count = generate_embeddings(db, doc_ids, config=_get_config(current_stage))
                 db.commit()
                 logger.info("Stage embed: embedded %d documents", embed_count)
@@ -303,8 +300,8 @@ def run_pipeline(self, project_id: str, job_id: str, asset_ids: list[str], user_
                 new_db.commit()
             finally:
                 new_db.close()
-        except Exception:
-            pass
+        except Exception as inner_exc:
+            logger.exception("Failed to record stage failure for job %s: %s", jid, inner_exc)
 
         _publish_event(pid, jid, current_stage, "failed")
         raise self.retry(exc=exc)

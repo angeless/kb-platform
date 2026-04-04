@@ -1,6 +1,7 @@
 """FastAPI dependency injection functions."""
 
 import hashlib
+import logging
 import uuid
 from collections.abc import AsyncGenerator
 from datetime import datetime, timezone
@@ -15,6 +16,8 @@ from sqlalchemy import func as sa_func
 
 from shared_errors import ErrorCode, ForbiddenException, UnauthorizedException
 from shared_models import ApiKey, User
+
+logger = logging.getLogger(__name__)
 from shared_models.database import async_session_factory
 from shared_models.tenant import Tenant
 
@@ -159,7 +162,11 @@ def check_quota(resource: str):
     ) -> None:
         tenant = await db.get(Tenant, current_user.kb_id)
         if tenant is None:
-            return  # no tenant record — skip check
+            logger.warning("check_quota(%s): no Tenant row for kb_id=%s — denying", resource, current_user.kb_id)
+            raise ForbiddenException(
+                error_code=ErrorCode.TENANT_QUOTA_EXCEEDED,
+                message="租户信息缺失，请联系管理员",
+            )
 
         if resource == "projects" and tenant.quota_projects is not None:
             from shared_models.project import Project
@@ -197,7 +204,11 @@ def check_feature(feature_name: str):
     ) -> None:
         tenant = await db.get(Tenant, current_user.kb_id)
         if tenant is None:
-            return
+            logger.warning("check_feature(%s): no Tenant row for kb_id=%s — denying", feature_name, current_user.kb_id)
+            raise ForbiddenException(
+                error_code=ErrorCode.TENANT_FEATURE_DISABLED,
+                message="租户信息缺失，请联系管理员",
+            )
         flags = tenant.feature_flags or {}
         if not flags.get(feature_name, False):
             raise ForbiddenException(

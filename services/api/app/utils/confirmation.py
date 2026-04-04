@@ -27,9 +27,11 @@ def generate_confirmation(action: str, user_id: str) -> dict:
     try:
         from shared_config.settings import get_redis_client
         r = get_redis_client()
-        key = f"confirm:{confirmation_id}"
-        r.setex(key, CONFIRMATION_TTL, f"{code}:{user_id}:{action}")
-        r.close()
+        try:
+            key = f"confirm:{confirmation_id}"
+            r.setex(key, CONFIRMATION_TTL, f"{code}:{user_id}:{action}")
+        finally:
+            r.close()
     except Exception as e:
         logger.warning("Redis unavailable for confirmation codes: %s — using memory fallback", e)
         _memory_set(confirmation_id, f"{code}:{user_id}:{action}")
@@ -45,16 +47,17 @@ def verify_confirmation(confirmation_id: str, code: str, user_id: str) -> bool:
     try:
         from shared_config.settings import get_redis_client
         r = get_redis_client()
-        key = f"confirm:{confirmation_id}"
-        stored = r.get(key)
-        if stored:
-            stored_str = stored.decode() if isinstance(stored, bytes) else stored
-            stored_code, stored_user, _action = stored_str.split(":", 2)
-            if hmac.compare_digest(stored_code, code) and hmac.compare_digest(stored_user, user_id):
-                r.delete(key)
-                r.close()
-                return True
-        r.close()
+        try:
+            key = f"confirm:{confirmation_id}"
+            stored = r.get(key)
+            if stored:
+                stored_str = stored.decode() if isinstance(stored, bytes) else stored
+                stored_code, stored_user, _action = stored_str.split(":", 2)
+                if hmac.compare_digest(stored_code, code) and hmac.compare_digest(stored_user, user_id):
+                    r.delete(key)
+                    return True
+        finally:
+            r.close()
     except Exception as e:
         logger.warning("Redis verification failed: %s — trying memory fallback", e)
         stored = _memory_store.pop(confirmation_id, None)

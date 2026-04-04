@@ -194,9 +194,14 @@ def get_redis_client(decode_responses: bool = False):
         sentinels = []
         for entry in sentinel_hosts.split(","):
             entry = entry.strip()
+            if not entry:
+                continue
             if ":" in entry:
-                host, port = entry.rsplit(":", 1)
-                sentinels.append((host, int(port)))
+                host, port_str = entry.rsplit(":", 1)
+                try:
+                    sentinels.append((host, int(port_str)))
+                except ValueError:
+                    raise ValueError(f"Invalid Redis Sentinel host format: '{entry}'. Expected 'host:port'")
             else:
                 sentinels.append((entry, 26379))
 
@@ -230,9 +235,14 @@ def get_async_redis_client(decode_responses: bool = False):
         sentinels = []
         for entry in sentinel_hosts.split(","):
             entry = entry.strip()
+            if not entry:
+                continue
             if ":" in entry:
-                host, port = entry.rsplit(":", 1)
-                sentinels.append((host, int(port)))
+                host, port_str = entry.rsplit(":", 1)
+                try:
+                    sentinels.append((host, int(port_str)))
+                except ValueError:
+                    raise ValueError(f"Invalid Redis Sentinel host format: '{entry}'. Expected 'host:port'")
             else:
                 sentinels.append((entry, 26379))
 

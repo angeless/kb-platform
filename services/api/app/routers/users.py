@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from shared_schemas.common import DataResponse, ErrorDetail, ListResponse, PaginationMeta
 from shared_schemas.user import UserInviteRequest, UserOut, UserUpdate
 
-from app.deps import get_db, get_kb_id, require_role
+from app.deps import check_quota, get_db, get_kb_id, require_role
 from app.services.audit_service import AuditService
 from app.services.user_service import UserService
 from shared_models import User
@@ -65,6 +65,7 @@ async def invite_user(
     db: AsyncSession = Depends(get_db),
     kb_id: uuid.UUID = Depends(get_kb_id),
     _user: User = require_role("tenant_admin"),
+    _quota=check_quota("users"),
 ):
     svc = UserService(db, kb_id)
     user = await svc.invite(email=body.email, role=body.role, operator_role=_user.role)

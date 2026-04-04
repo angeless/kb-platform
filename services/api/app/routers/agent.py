@@ -40,9 +40,14 @@ _background_tasks: set[asyncio.Task] = set()
 
 def _fire_and_forget(coro) -> None:
     """Schedule a coroutine as a background task with GC-safe reference."""
+    def _on_done(t: asyncio.Task) -> None:
+        _background_tasks.discard(t)
+        if not t.cancelled() and t.exception():
+            logger.warning("Background task failed: %s", t.exception())
+
     task = asyncio.create_task(coro)
     _background_tasks.add(task)
-    task.add_done_callback(_background_tasks.discard)
+    task.add_done_callback(_on_done)
 
 
 _RESP_AUTH = {

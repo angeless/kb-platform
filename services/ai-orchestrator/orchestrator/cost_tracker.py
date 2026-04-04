@@ -97,5 +97,6 @@ class CostTracker:
             prices = DEFAULT_PRICES.get(model, DEFAULT_PRICE)
             cost = pt / 1000 * prices["prompt"] + ct / 1000 * prices["completion"]
             return {"prompt_tokens": pt, "completion_tokens": ct, "cost_usd": round(cost, 6)}
-        except Exception:
+        except Exception as e:
+            logger.warning("Failed to get usage summary for %s: %s", model, e)
             return {"prompt_tokens": 0, "completion_tokens": 0, "cost_usd": 0.0}

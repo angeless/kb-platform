@@ -1342,5 +1342,5 @@ def extract_ontology(self, project_id: str, doc_id: str) -> dict:
 
         except Exception as e:
             session.rollback()
-            logger.error("Ontology extraction failed for doc %s: %s", doc_id, e)
-            return {"status": "error", "message": str(e)}
+            logger.error("Ontology extraction failed for doc %s: %s", doc_id, e, exc_info=True)
+            raise self.retry(exc=e)

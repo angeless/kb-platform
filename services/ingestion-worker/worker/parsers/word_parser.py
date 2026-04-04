@@ -152,4 +152,5 @@ def _make_chunk(
         "structure_type": "heading" if heading_level > 0 else infer_structure_type(text),
         "extraction_confidence": 1.0,
         "language": detect_language(text),
+        "semantic_boundaries": None,
     }

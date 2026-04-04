@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { api, ApiClientError } from "@/lib/api";
+import { showErrorToast } from "@/components/error-toast";
 import { StatusBadge } from "@/components/status-badge";
 import { PermissionGuard } from "@/components/PermissionGuard";
 import { RejectModal } from "@/components/reject-modal";
@@ -138,7 +139,7 @@ function ReviewKanban({ projectId }: { projectId: string }) {
     try {
       await api.post(`/v1/projects/${projectId}/reviews/${reviewId}/approve`, {});
       await fetchAll();
-    } catch { /* toast handled by api client */ }
+    } catch (e) { if (e instanceof ApiClientError) showErrorToast(e.message); }
     finally { setActionLoading(null); }
   };
 
@@ -152,7 +153,7 @@ function ReviewKanban({ projectId }: { projectId: string }) {
     try {
       await api.post(`/v1/projects/${projectId}/reviews/${reviewId}/reject`, { note: reason });
       await fetchAll();
-    } catch { /* toast handled by api client */ }
+    } catch (e) { if (e instanceof ApiClientError) showErrorToast(e.message); }
     finally { setActionLoading(null); }
   };
 
@@ -161,7 +162,7 @@ function ReviewKanban({ projectId }: { projectId: string }) {
     try {
       await api.post(`/v1/projects/${projectId}/reviews/${reviewId}/resubmit`, {});
       await fetchAll();
-    } catch { /* toast handled by api client */ }
+    } catch (e) { if (e instanceof ApiClientError) showErrorToast(e.message); }
     finally { setActionLoading(null); }
   };
 

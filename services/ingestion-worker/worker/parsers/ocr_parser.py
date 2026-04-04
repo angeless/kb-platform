@@ -92,6 +92,7 @@ def parse(content: bytes, filename: str) -> list[dict]:
             "structure_type": infer_structure_type(cleaned),
             "extraction_confidence": 0.7,
             "language": detect_language(cleaned),
+            "semantic_boundaries": None,
         })
 
     logger.info("OCR parsed %s (%s, %dx%d): %d chunks", filename, img_format, width, height, len(chunks))

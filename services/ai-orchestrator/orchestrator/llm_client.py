@@ -89,7 +89,7 @@ def call_llm(
         _cost_tracker = CostTracker()
         _cost_tracker.record_usage(mdl, prompt_tokens, completion_tokens)
     except Exception as e:
-        logger.debug("Cost tracking skipped: %s", e)
+        logger.warning("Cost tracking failed: %s", e)
 
     return content
 

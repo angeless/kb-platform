@@ -6,6 +6,7 @@ import uuid
 logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
+from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared_config.settings import Settings
@@ -213,3 +214,63 @@ async def get_asset(
     svc = AssetService(db, kb_id, current_user.id)
     asset = await svc.get(asset_id)
     return DataResponse(data=_asset_out(asset))
+
+
+@router.get(
+    "/{asset_id}/download",
+    summary="Download an asset file",
+    description="Downloads the raw file bytes from S3/MinIO storage.",
+    responses={
+        200: {"description": "File content returned"},
+        **_RESP_AUTH,
+        404: {"description": "Asset not found or storage unavailable", "model": ErrorDetail},
+    },
+)
+async def download_asset(
+    asset_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    kb_id: uuid.UUID = Depends(get_kb_id),
+    current_user: User = Depends(get_current_user),
+    storage: StorageClient | None = Depends(get_storage),
+):
+    from shared_errors import AppException, ErrorCode
+    if storage is None:
+        raise AppException(ErrorCode.SYSTEM_INTERNAL_ERROR, detail="存储服务不可用")
+    svc = AssetService(db, kb_id, current_user.id)
+    asset = await svc.get(asset_id)
+    object_key = f"{kb_id}/{asset.project_id}/{asset.id}/{asset.filename}"
+    content = storage.download_file(object_key)
+    media_type = "application/octet-stream"
+    return Response(
+        content=content,
+        media_type=media_type,
+        headers={"Content-Disposition": f'attachment; filename="{asset.filename}"'},
+    )
+
+
+@router.get(
+    "/{asset_id}/presign",
+    response_model=DataResponse,
+    summary="Get a presigned download URL",
+    description="Generates a pre-signed S3/MinIO URL valid for 1 hour.",
+    responses={
+        200: {"description": "Presigned URL returned"},
+        **_RESP_AUTH,
+        404: {"description": "Asset not found or storage unavailable", "model": ErrorDetail},
+    },
+)
+async def presign_asset(
+    asset_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    kb_id: uuid.UUID = Depends(get_kb_id),
+    current_user: User = Depends(get_current_user),
+    storage: StorageClient | None = Depends(get_storage),
+):
+    from shared_errors import AppException, ErrorCode
+    if storage is None:
+        raise AppException(ErrorCode.SYSTEM_INTERNAL_ERROR, detail="存储服务不可用")
+    svc = AssetService(db, kb_id, current_user.id)
+    asset = await svc.get(asset_id)
+    object_key = f"{kb_id}/{asset.project_id}/{asset.id}/{asset.filename}"
+    url = storage.presign_url(object_key)
+    return DataResponse(data={"url": url, "expires_in": 3600})
