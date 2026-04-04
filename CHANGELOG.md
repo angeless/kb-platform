@@ -3,6 +3,21 @@
 所有重要变更都将被记录在此文件中。
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/)。
 
+## [0.51.4] — 2026-04-04
+
+### 新增 (Added)
+- 用户组织层级：User 模型新增 department/team 字段（均 nullable），Alembic migration `y4z5a6b7c8d9`（v0.51.4）
+
+## [0.51.3] — 2026-04-04
+
+### 新增 (Added)
+- 租户分级：Tenant 模型新增 tier(free/pro/enterprise) + feature_flags(JSONB) + quota_storage_bytes/quota_projects/quota_users，migration `y4z5a6b7c8d9`（v0.51.3）
+
+## [0.51.2] — 2026-04-04
+
+### 新增 (Added)
+- Redis Sentinel 支持：新增 `redis_sentinel_hosts` + `redis_sentinel_master` 配置项，Sentinel hosts 非空时通过 Sentinel 发现 master，空时保持单实例行为不变（v0.51.2）
+
 ## [0.51.1] — 2026-04-04
 
 ### 新增 (Added)

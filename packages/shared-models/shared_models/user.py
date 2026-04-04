@@ -27,6 +27,10 @@ class User(Base):
     role: Mapped[str] = mapped_column(String(30), nullable=False, default="viewer")
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
 
+    # Organization hierarchy (v0.51.4)
+    department: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    team: Mapped[str | None] = mapped_column(String(100), nullable=True)
+
     # Password reset fields
     reset_token: Mapped[str | None] = mapped_column(String(255), nullable=True)
     reset_token_expires_at: Mapped[datetime | None] = mapped_column(

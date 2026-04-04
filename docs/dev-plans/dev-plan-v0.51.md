@@ -52,9 +52,9 @@
 | 任务版本号 | 任务名称 | 优先级 | 状态 | 来源 |
 |----------|--------|------|------|------|
 | v0.51.1 | 水平扩展 — S3 存储适配 | P0 | ✅ Done | W-03 |
-| v0.51.2 | 水平扩展 — Redis Sentinel 支持 | P0 | 待开发 | W-03 |
-| v0.51.3 | 租户分级 — tier + feature_flags + quota | P0 | 待开发 | W-05 |
-| v0.51.4 | 用户组织层级 — department/team 字段 | P1 | 待开发 | W-06 |
+| v0.51.2 | 水平扩展 — Redis Sentinel 支持 | P0 | ✅ Done | W-03 |
+| v0.51.3 | 租户分级 — tier + feature_flags + quota | P0 | ✅ Done | W-05 |
+| v0.51.4 | 用户组织层级 — department/team 字段 | P1 | ✅ Done | W-06 |
 | v0.51.5 | Stage 条件执行 — 重排序 + 规则引擎 | P1 | 待开发 | W-10 |
 | v0.51.6 | SKILL 驱动 Pipeline — DB 模型 + CRUD API | P1 | 待开发 | W-14 |
 | v0.51.7 | SKILL 驱动 Pipeline — Stage 集成 | P1 | 待开发 | W-14 |
