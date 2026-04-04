@@ -1,26 +1,27 @@
 # TODO_NEXT
 
 ## 上次停在
-- 版本：v0.48.6 | 分支：test-v-0-48-a | 最后完成：v0.48.6 前端视频预览
-- v0.45-v0.47 全部完成 ✅
-- v0.48 全部完成 ✅（v0.48.1-6 共 6 个任务）
+- 版本：v0.49.4 | 分支：test-v-0-48-a | 最后完成：v0.49.4 反思循环 v2 规则校验层
+- v0.45-v0.48 全部完成 ✅
+- v0.49.1 ✅ IR schema 升级（5 个 IR 字段）
+- v0.49.2 ✅ 解析器 IR 填充（text/asr/url）
+- v0.49.3 ✅ classify + doc_generate IR 适配
+- v0.49.6 ✅ pgvector HNSW 索引
+- v0.49.4 ✅ 规则校验层（格式/来源/术语）
 
 ## 下一步
 
-### 版本边界：v0.48 版本封板
-- 执行 §0.11 无任务空闲循环（PRD Gap 扫描 + 全量测试）
-- 执行 §1.10 封板检查清单
-- 执行 Phase 8 版本交叉审计
-- 版本收尾 → CI 闭环
+### v0.49.5 — 反思循环 v2 — AI 自检 + 循环集成
+- 新增 reflect_and_revise Celery task
+- 接收 quality_check issues → 调用 LLM 修正 → 重新 quality_check
+- 最多 3 轮
 
-### 进入 v0.49 开发
-- 读取 `docs/dev-plans/dev-plan-v0.49.md`
-- Pipeline 智能化 + IR
+### 随后
+- v0.49.7: Per-stage 幂等性保障
+- v0.49.8: Prometheus 指标导出
+- v0.49.9: 模型成本限制执行
 
 ## 注意事项
-- FFmpeg 需在 Docker 镜像中安装
-- trafilatura 2.0.0 + lxml_html_clean + ffmpeg-python 需加入部署依赖
-- ClamAV 默认关闭，需要 ClamAV daemon 才能启用
-- URL import parse_status 现在设为 "completed"
-- Asset 解析状态字段名为 `parse_status`
-- Node.js 未安装在当前环境，前端代码未经 tsc 验证
+- migrations 待执行：u0i1j2k3l4m5（IR 字段）, v1w2x3y4z5a6（HNSW 索引）
+- pymupdf 已安装到 .venv
+- 分支 test-v-0-48-a 包含 v0.48 全部 + v0.49 前 5 任务
