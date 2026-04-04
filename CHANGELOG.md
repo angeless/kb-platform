@@ -3,6 +3,11 @@
 所有重要变更都将被记录在此文件中。
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/)。
 
+## [0.49.6] — 2026-04-03
+
+### 新增 (Added)
+- pgvector HNSW 索引：为 doc_embedding.embedding_vec 创建 HNSW 索引（m=16, ef_construction=64, CONCURRENTLY），从 JSONB embedding 列回填数据到 vector 列，语义搜索从 O(n) 降至 O(log n)，Alembic migration `v1w2x3y4z5a6`（v0.49.6）
+
 ## [0.49.3] — 2026-04-03
 
 ### 变更 (Changed)
