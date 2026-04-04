@@ -83,19 +83,28 @@ def generate_documents(
     except Exception as e:
         logger.warning("Doc generation via Celery failed, using fallback: %s", e)
 
-    # Fallback: create raw docs from chunks locally
+    # Fallback: create raw docs from chunks locally (IR-aware)
     chunks = db.execute(
         select(AssetChunk).where(AssetChunk.id.in_(all_ids))
     ).scalars().all()
 
+    # IR-enriched: sort chunks by structure_type (headings first for better titles)
+    _type_order = {"heading": 0, "paragraph": 1, "list": 2, "table": 3, "code": 4, "caption": 5}
+    chunks_sorted = sorted(chunks, key=lambda c: _type_order.get(c.structure_type or "paragraph", 9))
+
     doc_ids = []
-    for c in chunks[:10]:  # Limit fallback
+    for c in chunks_sorted[:10]:  # Limit fallback
+        # IR-enriched: use heading content as document title if available
+        title = f"文档-{c.id.hex[:8]}"
+        if c.structure_type == "heading" and len(c.content_text) < 100:
+            title = c.content_text.strip()
+
         doc = KnowledgeDoc(
             id=uuid.uuid4(),
             project_id=project_id,
             node_id=None,
             doc_type="topic",
-            title=f"文档-{c.id.hex[:8]}",
+            title=title,
             current_version=1,
             status="draft",
             update_type=_resolve_update_type(str(c.id)),
@@ -103,11 +112,16 @@ def generate_documents(
         db.add(doc)
         db.flush()
 
+        # IR-enriched: annotate low-confidence content
+        content = c.content_text
+        if c.extraction_confidence is not None and c.extraction_confidence < 0.5:
+            content = f"> [OCR uncertainty] 以下内容提取置信度较低，可能存在识别错误。\n\n{content}"
+
         version = KnowledgeDocVersion(
             id=uuid.uuid4(),
             doc_id=doc.id,
             version=1,
-            content_md=c.content_text,
+            content_md=content,
             change_reason="Pipeline 自动生成（降级模式）",
             created_by=user_id,
         )

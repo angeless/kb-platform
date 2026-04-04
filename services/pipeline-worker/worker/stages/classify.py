@@ -30,7 +30,7 @@ def classify_chunks(
         {"new": [...], "supplement": [...], "correction": [...], "conflict": [...]}
         Each list contains chunk_id strings.
     """
-    # Gather all chunks from the assets
+    # Gather all chunks from the assets, enriched with IR metadata
     chunks = []
     for asset_id in asset_ids:
         rows = db.execute(
@@ -38,7 +38,20 @@ def classify_chunks(
             .order_by(AssetChunk.chunk_index)
         ).scalars().all()
         for c in rows:
-            chunks.append({"chunk_id": str(c.id), "content": c.content_text[:2000]})
+            content = c.content_text[:2000]
+            # IR-enriched: prefix heading chunks for higher classification weight
+            if c.structure_type == "heading":
+                content = f"[HEADING] {content}"
+            # IR-enriched: mark low-confidence content
+            if c.extraction_confidence is not None and c.extraction_confidence < 0.5:
+                content = f"[LOW_QUALITY] {content}"
+            chunks.append({
+                "chunk_id": str(c.id),
+                "content": content,
+                "structure_type": c.structure_type,
+                "extraction_confidence": c.extraction_confidence,
+                "language": c.language,
+            })
 
     if not chunks:
         return {"new": [], "supplement": [], "correction": [], "conflict": [], "restructure": []}

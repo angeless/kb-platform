@@ -3,6 +3,12 @@
 所有重要变更都将被记录在此文件中。
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/)。
 
+## [0.49.3] — 2026-04-03
+
+### 变更 (Changed)
+- classify stage IR 适配：heading chunk 添加 [HEADING] 前缀提升分类权重，低置信度 chunk 标记 [LOW_QUALITY]，chunk 数据携带 structure_type/extraction_confidence/language 传给 orchestrator（v0.49.3）
+- doc_generate stage IR 适配：fallback 模式按 structure_type 排序（heading 优先），heading 内容作为文档标题，低置信度 chunk 添加 OCR uncertainty 标注（v0.49.3）
+
 ## [0.49.2] — 2026-04-03
 
 ### 新增 (Added)
