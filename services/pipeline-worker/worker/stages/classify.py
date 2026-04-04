@@ -43,7 +43,7 @@ def classify_chunks(
             if c.structure_type == "heading":
                 content = f"[HEADING] {content}"
             # IR-enriched: mark low-confidence content
-            if c.extraction_confidence is not None and c.extraction_confidence < 0.5:
+            if isinstance(c.extraction_confidence, (int, float)) and c.extraction_confidence < 0.5:
                 content = f"[LOW_QUALITY] {content}"
             chunks.append({
                 "chunk_id": str(c.id),
