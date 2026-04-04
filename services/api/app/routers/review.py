@@ -74,6 +74,7 @@ def _to_out(task) -> ReviewTaskOut:
     response_model=DataResponse[ReviewTaskOut],
     status_code=201,
     summary="Create review task",
+    description="Create a review task for a document. Document must be in draft or pending status.",
     responses={**_RESP_AUTH, 400: {"model": ErrorDetail}},
 )
 async def create_review(
@@ -94,6 +95,7 @@ async def create_review(
     "/{review_id}/assign",
     response_model=DataResponse[ReviewTaskOut],
     summary="Assign reviewer",
+    description="Assign a reviewer to a pending or resubmitted review task. Requires project_admin role.",
     responses={**_RESP_AUTH, 400: {"model": ErrorDetail}},
 )
 async def assign_reviewer(
@@ -115,6 +117,7 @@ async def assign_reviewer(
     "/{review_id}/approve",
     response_model=DataResponse[ReviewTaskOut],
     summary="Approve review",
+    description="Approve an assigned review. Only the assigned reviewer can approve. Syncs doc status to approved.",
     responses={**_RESP_AUTH, 400: {"model": ErrorDetail}, 403: {"model": ErrorDetail}},
 )
 async def approve_review(
@@ -136,6 +139,7 @@ async def approve_review(
     "/{review_id}/reject",
     response_model=DataResponse[ReviewTaskOut],
     summary="Reject review",
+    description="Reject an assigned review with a mandatory note explaining the reason.",
     responses={**_RESP_AUTH, 400: {"model": ErrorDetail}, 403: {"model": ErrorDetail}},
 )
 async def reject_review(
@@ -157,6 +161,7 @@ async def reject_review(
     "/{review_id}/resubmit",
     response_model=DataResponse[ReviewTaskOut],
     summary="Resubmit rejected review",
+    description="Resubmit a rejected review for re-evaluation. Auto-reassigns to the original reviewer.",
     responses={**_RESP_AUTH, 400: {"model": ErrorDetail}, 403: {"model": ErrorDetail}},
 )
 async def resubmit_review(
@@ -177,6 +182,7 @@ async def resubmit_review(
     "",
     response_model=ListResponse[ReviewTaskOut],
     summary="List review tasks",
+    description="List review tasks for a project with optional status filter and pagination.",
     responses={**_RESP_AUTH},
 )
 async def list_reviews(
