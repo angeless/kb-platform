@@ -3,6 +3,21 @@
 所有重要变更都将被记录在此文件中。
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/)。
 
+## [0.50.7] — 2026-04-04
+
+### 新增 (Added)
+- 维护指南文档模板：`build_maintenance_guide_prompt` 从架构节点生成维护指南（更新频率/审批流程/质量检查），通过 `POST /v1/projects/{pid}/ai-generate-maintenance-guide` 手动触发，存为 doc_type=maintenance_guide 的 KnowledgeDoc（v0.50.7）
+
+## [0.50.6] — 2026-04-04
+
+### 新增 (Added)
+- 术语表文档模板：`build_glossary_extraction_prompt` 从项目 chunks 提取专业术语（名称/定义/别名），按字母排序生成 Markdown 表格，通过 `POST /v1/projects/{pid}/ai-generate-glossary` 手动触发，存为 doc_type=glossary 的 KnowledgeDoc（v0.50.6）
+
+## [0.50.5] — 2026-04-04
+
+### 新增 (Added)
+- 高危操作确认码：`confirmation.py` 生成 6 位随机码存 Redis（TTL 5 分钟），验证后一次性删除，Redis 不可用时内存降级，用于项目删除/架构发布/文档回滚等高危操作的二次确认（v0.50.5）
+
 ## [0.50.2] — 2026-04-04
 
 ### 新增 (Added)

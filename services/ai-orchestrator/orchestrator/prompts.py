@@ -472,6 +472,73 @@ def build_reflection_v2_prompt(
 
 
 # ---------------------------------------------------------------------------
+# Glossary extraction prompts (v0.50.6)
+# ---------------------------------------------------------------------------
+
+SYSTEM_PROMPT_GLOSSARY = """你是一个专业术语提取专家。你的任务是从知识文档中识别并定义专业术语。
+
+提取规则：
+1. 仅提取领域专业术语，不包括通用词汇
+2. 每个术语提供简短定义（一句话）
+3. 同义词合并（如"机器学习"和"ML"只保留一条，注明别名）
+4. 按术语名称的字母/拼音排序
+
+输出格式（严格 JSON）：
+[{"term": "术语名", "definition": "简短定义", "aliases": ["别名1"]}]"""
+
+USER_PROMPT_GLOSSARY_TEMPLATE = """从以下知识文档片段中提取专业术语。
+
+--- 文档片段 ---
+{chunks_text}
+--- 文档片段结束 ---
+
+请输出 JSON 格式的术语列表。"""
+
+
+def build_glossary_extraction_prompt(chunks_text: str, max_chars: int = 8000) -> tuple[str, str]:
+    """Build prompts for glossary term extraction."""
+    truncated = chunks_text[:max_chars]
+    if len(chunks_text) > max_chars:
+        truncated += "\n...(截断)"
+    user_prompt = USER_PROMPT_GLOSSARY_TEMPLATE.format(chunks_text=truncated)
+    return SYSTEM_PROMPT_GLOSSARY, user_prompt
+
+
+# ---------------------------------------------------------------------------
+# Maintenance guide prompts (v0.50.7)
+# ---------------------------------------------------------------------------
+
+SYSTEM_PROMPT_MAINTENANCE = """你是一个知识系统维护专家。你的任务是根据知识架构生成维护指南。
+
+指南应包含：
+1. 各模块的建议更新频率
+2. 审批流程说明
+3. 质量检查清单
+4. 常见维护场景和处理方法
+
+输出格式：Markdown 文档。"""
+
+USER_PROMPT_MAINTENANCE_TEMPLATE = """以下是项目的知识架构节点信息。请生成维护指南。
+
+项目名称：{project_name}
+
+--- 架构节点 ---
+{nodes_text}
+--- 架构节点结束 ---
+
+请输出完整的维护指南（Markdown 格式）。"""
+
+
+def build_maintenance_guide_prompt(project_name: str, nodes_text: str, max_chars: int = 6000) -> tuple[str, str]:
+    """Build prompts for maintenance guide generation."""
+    truncated = nodes_text[:max_chars]
+    if len(nodes_text) > max_chars:
+        truncated += "\n...(截断)"
+    user_prompt = USER_PROMPT_MAINTENANCE_TEMPLATE.format(project_name=project_name, nodes_text=truncated)
+    return SYSTEM_PROMPT_MAINTENANCE, user_prompt
+
+
+# ---------------------------------------------------------------------------
 # Cross-document contradiction detection prompts (v0.46.5)
 # ---------------------------------------------------------------------------
 
