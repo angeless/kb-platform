@@ -14,14 +14,16 @@ interface CostSummary {
 export default function CostDashboardPage() {
   const [costs, setCosts] = useState<CostSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   const fetchCosts = useCallback(async () => {
     setLoading(true);
+    setError("");
     try {
       const resp = await api.get<CostSummary[]>("/v1/admin/cost-summary");
       setCosts(resp.data);
-    } catch {
-      // API may not exist yet — show empty
+    } catch (e) {
+      setError("加载成本数据失败，请稍后重试");
     } finally {
       setLoading(false);
     }
@@ -57,6 +59,10 @@ export default function CostDashboardPage() {
           <div className="mt-1 text-2xl font-bold text-gray-900">{costs.length}</div>
         </div>
       </div>
+
+      {error && (
+        <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-600">{error}</div>
+      )}
 
       {/* Per-model table */}
       {loading ? (

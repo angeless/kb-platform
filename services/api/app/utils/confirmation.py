@@ -4,8 +4,10 @@ Generates and verifies one-time confirmation codes stored in Redis.
 Used for dangerous operations like project deletion, architecture publish, doc rollback.
 """
 
+import hmac
 import logging
 import secrets
+import time
 import uuid
 
 logger = logging.getLogger(__name__)
@@ -31,7 +33,7 @@ def generate_confirmation(action: str, user_id: str) -> dict:
         r.close()
     except Exception as e:
         logger.warning("Redis unavailable for confirmation codes: %s — using memory fallback", e)
-        _memory_store[confirmation_id] = f"{code}:{user_id}:{action}"
+        _memory_set(confirmation_id, f"{code}:{user_id}:{action}")
 
     return {"confirmation_id": confirmation_id, "code": code, "expires_in": CONFIRMATION_TTL}
 
@@ -50,7 +52,7 @@ def verify_confirmation(confirmation_id: str, code: str, user_id: str) -> bool:
         if stored:
             stored_str = stored.decode() if isinstance(stored, bytes) else stored
             stored_code, stored_user, _action = stored_str.split(":", 2)
-            if stored_code == code and stored_user == user_id:
+            if hmac.compare_digest(stored_code, code) and hmac.compare_digest(stored_user, user_id):
                 r.delete(key)
                 r.close()
                 return True
@@ -60,10 +62,22 @@ def verify_confirmation(confirmation_id: str, code: str, user_id: str) -> bool:
         stored = _memory_store.pop(confirmation_id, None)
         if stored:
             stored_code, stored_user, _action = stored.split(":", 2)
-            return stored_code == code and stored_user == user_id
+            return hmac.compare_digest(stored_code, code) and hmac.compare_digest(stored_user, user_id)
 
     return False
 
 
-# In-memory fallback (single instance only)
+# In-memory fallback with TTL eviction (I-001 fix)
 _memory_store: dict[str, str] = {}
+_memory_expiry: dict[str, float] = {}
+
+
+def _memory_set(key: str, value: str) -> None:
+    _memory_store[key] = value
+    _memory_expiry[key] = time.time() + CONFIRMATION_TTL
+    # Evict expired entries
+    now = time.time()
+    expired = [k for k, exp in _memory_expiry.items() if exp < now]
+    for k in expired:
+        _memory_store.pop(k, None)
+        _memory_expiry.pop(k, None)
