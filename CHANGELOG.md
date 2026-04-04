@@ -3,6 +3,41 @@
 所有重要变更都将被记录在此文件中。
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/)。
 
+## [0.51.11] — 2026-04-04
+
+### 新增 (Added)
+- 知识本体可视化页：`/projects/{id}/ontology` 展示概念层级树 + 关系列表，概念含类型标签 + 定义，关系含类型 + 置信度百分比（v0.51.11）
+
+## [0.51.10] — 2026-04-04
+
+### 新增 (Added)
+- 知识本体 AI 提取：`build_ontology_extraction_prompt` 从文档中提取概念（名称/定义/类型/父子）和关系（source/target/type/confidence），输出 JSON 格式（v0.51.10）
+
+## [0.51.9] — 2026-04-04
+
+### 新增 (Added)
+- 知识本体 DB 模型：`ontology_concept` 表（project_id/name/definition/concept_type/parent_id/properties）+ `ontology_relation` 表（source/target/relation_type/confidence/evidence），Alembic migration `z5a6b7c8d9e0`（v0.51.9）
+
+## [0.51.8] — 2026-04-04
+
+### 新增 (Added)
+- SKILL 管理 UI：`/projects/{id}/skills` 展示项目 SKILL 列表卡片（名称/stage/版本/激活状态/prompt 预览），错误/空状态处理（v0.51.8）
+
+## [0.51.7] — 2026-04-04
+
+### 新增 (Added)
+- SKILL Pipeline 集成基础：Skill 模型通过 stage_name 关联 pipeline stage，is_active 字段控制是否参与执行，prompt_template 为用户自定义处理规则（v0.51.7）
+
+## [0.51.6] — 2026-04-04
+
+### 新增 (Added)
+- SKILL DB 模型：`skill` 表（project_id/stage_name/name/prompt_template/input_schema/output_schema/version/is_active），migration `z5a6b7c8d9e0`（v0.51.6）
+
+## [0.51.5] — 2026-04-04
+
+### 新增 (Added)
+- Stage 条件执行：PipelineStageConfig 新增 execution_order(int) + condition(JSONB) 字段，支持 stage 重排序和 min_docs/if_feature 条件跳过，migration `z5a6b7c8d9e0`（v0.51.5）
+
 ## [0.51.4] — 2026-04-04
 
 ### 新增 (Added)

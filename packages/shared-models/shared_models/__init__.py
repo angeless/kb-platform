@@ -17,6 +17,8 @@ from .pipeline_stage_log import PipelineStageLog
 from .embedding import DocEmbedding
 from .refresh_token import RefreshToken
 from .review_task import ReviewTask
+from .skill import Skill
+from .ontology import OntologyConcept, OntologyRelation
 from .database import engine, async_session_factory, sync_session_factory, get_db_session
 
 __all__ = [
@@ -37,5 +39,7 @@ __all__ = [
     "DocEmbedding",
     "RefreshToken",
     "ReviewTask",
+    "Skill",
+    "OntologyConcept", "OntologyRelation",
     "engine", "async_session_factory", "sync_session_factory", "get_db_session",
 ]
