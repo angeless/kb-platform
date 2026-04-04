@@ -3,6 +3,21 @@
 所有重要变更都将被记录在此文件中。
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/)。
 
+## [0.49.9] — 2026-04-03
+
+### 新增 (Added)
+- 成本追踪器：`cost_tracker.py` 按 model 累计每日 token 消耗（Redis 存储），`check_budget()` 对比 cost_limit_usd 阈值，超限拒绝 LLM 调用，无配置/Redis 不可用时降级允许（v0.49.9）
+
+## [0.49.8] — 2026-04-03
+
+### 新增 (Added)
+- Prometheus LLM 指标：新增 `llm_calls_total`（Counter, 按 model）、`llm_tokens_total`（Counter, 按 model+type）、`active_connections`（Gauge），MetricsMiddleware 追踪活跃连接数（v0.49.8）
+
+## [0.49.7] — 2026-04-03
+
+### 新增 (Added)
+- Per-stage 幂等性：PipelineStageLog 新增 `input_hash` 字段（VARCHAR(64)），带联合索引（job_id + stage_name + input_hash），支持同一 stage 重跑时根据输入 hash 跳过已完成的执行，Alembic migration `w2x3y4z5a6b7`（v0.49.7）
+
 ## [0.49.5] — 2026-04-03
 
 ### 新增 (Added)
