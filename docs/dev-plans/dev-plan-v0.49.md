@@ -55,7 +55,7 @@
 | v0.49.1 | IR 中间表示 — AssetChunk schema 升级 | P0 | ✅ Done | PRD §2.3 |
 | v0.49.2 | IR 适配 — 解析器填充 IR 字段 | P0 | ✅ Done | PRD §2.3 |
 | v0.49.3 | IR 适配 — classify + doc_generate 利用 IR 数据 | P0 | ✅ Done | PRD §2.3 |
-| v0.49.4 | 反思循环 v2 — 规则校验层 | P0 | 待开发 | W-13 |
+| v0.49.4 | 反思循环 v2 — 规则校验层 | P0 | ✅ Done | W-13 |
 | v0.49.5 | 反思循环 v2 — AI 自检 + 循环集成 | P0 | 待开发 | W-13 |
 | v0.49.6 | pgvector 原生迁移 | P1 | ✅ Done | W-04 |
 | v0.49.7 | Per-stage 幂等性保障 | P1 | 待开发 | W-11 |

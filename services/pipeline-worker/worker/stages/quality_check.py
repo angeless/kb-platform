@@ -43,6 +43,77 @@ def _detect_pii(text: str) -> list[str]:
     return found
 
 
+def _check_format_consistency(content_md: str) -> list[dict]:
+    """Check heading hierarchy and list format consistency."""
+    issues = []
+    lines = content_md.split("\n")
+    prev_level = 0
+    list_styles: set[str] = set()
+
+    for line in lines:
+        stripped = line.strip()
+        # Check heading hierarchy (H1→H2→H3, no skipping)
+        heading_match = re.match(r"^(#{1,6})\s", stripped)
+        if heading_match:
+            level = len(heading_match.group(1))
+            if prev_level > 0 and level > prev_level + 1:
+                issues.append({
+                    "type": "format",
+                    "severity": "low",
+                    "message": f"标题层级跳跃：H{prev_level} 直接到 H{level}（应为 H{prev_level + 1}）",
+                })
+            prev_level = level
+
+        # Track list styles
+        if re.match(r"^[-*]\s", stripped):
+            list_styles.add("unordered")
+        elif re.match(r"^\d+[.、)]\s", stripped):
+            list_styles.add("ordered")
+
+    # Mixed list styles in same doc is not necessarily an issue — skip
+    return issues
+
+
+def _check_source_references(content_md: str, has_source_refs: bool) -> list[dict]:
+    """Check if assertive statements have source references."""
+    issues = []
+    if not has_source_refs:
+        # Count assertive sentences (ending with period, containing claim words)
+        claim_patterns = [r"研究表明", r"数据显示", r"据.*报道", r"根据.*统计", r"证明了", r"已经确认"]
+        for pattern in claim_patterns:
+            if re.search(pattern, content_md):
+                issues.append({
+                    "type": "source",
+                    "severity": "low",
+                    "message": f"包含断言性语句（匹配: {pattern}），但缺少来源引用",
+                })
+                break  # One issue is enough
+    return issues
+
+
+def _check_terminology_consistency(content_md: str) -> list[dict]:
+    """Check for inconsistent terminology in the same document."""
+    issues = []
+    # Common synonym pairs that should be consistent
+    term_pairs = [
+        (r"机器学习", r"\bML\b"),
+        (r"深度学习", r"\bDL\b"),
+        (r"人工智能", r"\bAI\b"),
+        (r"自然语言处理", r"\bNLP\b"),
+        (r"数据库", r"\bDB\b"),
+    ]
+    for zh_term, en_term in term_pairs:
+        zh_found = bool(re.search(zh_term, content_md))
+        en_found = bool(re.search(en_term, content_md))
+        if zh_found and en_found:
+            issues.append({
+                "type": "terminology",
+                "severity": "low",
+                "message": f"术语不一致：同时使用了 '{zh_term}' 和 '{en_term.strip(chr(92))}' 的缩写，建议统一",
+            })
+    return issues
+
+
 def quality_check(
     db: Session,
     doc_ids: list[uuid.UUID],
@@ -105,6 +176,27 @@ def quality_check(
             if pii_issues:
                 issues.extend(pii_issues)
                 logger.warning("PII detected in doc %s: %s", doc_id, pii_issues)
+
+        # v0.49.4: Extended quality checks (configurable via params)
+        if content_text:
+            if cfg.get("check_format", True):
+                format_issues = _check_format_consistency(content_text)
+                issues.extend(i["message"] for i in format_issues)
+
+            if cfg.get("check_sources", True):
+                # Check if doc has any SourceRefs
+                from shared_models import SourceRef
+                has_refs = db.execute(
+                    select(SourceRef).where(
+                        SourceRef.doc_version_id == (version.id if version else None)
+                    ).limit(1)
+                ).scalar_one_or_none() is not None if version else False
+                source_issues = _check_source_references(content_text, has_refs)
+                issues.extend(i["message"] for i in source_issues)
+
+            if cfg.get("check_terminology", True):
+                term_issues = _check_terminology_consistency(content_text)
+                issues.extend(i["message"] for i in term_issues)
 
         if issues:
             flagged.append({"doc_id": str(doc_id), "issues": issues})
