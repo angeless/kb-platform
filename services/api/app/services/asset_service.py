@@ -8,7 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared_errors import AppException, ConflictException, ErrorCode, NotFoundException
-from shared_models import Asset
+from shared_models import Asset, AssetChunk
 
 from app.utils.storage import PARSEABLE_ASSET_TYPES, StorageClient, is_allowed_file
 
@@ -149,9 +149,14 @@ class AssetService(TenantService):
         asset_id = uuid.uuid4()
         object_path = f"{self.kb_id}/{project_id}/{asset_id}/{filename}"
 
-        # Upload to MinIO/S3
+        # Upload raw HTML to MinIO/S3 (preserve original for traceability)
         if self.storage is not None:
             self.storage.upload_file(object_path, content, content_type)
+
+        # Extract article content using readability
+        from app.utils.readability import extract_article
+        html_text = content.decode("utf-8", errors="replace")
+        article = extract_article(html_text, url)
 
         asset = Asset(
             id=asset_id,
@@ -162,10 +167,25 @@ class AssetService(TenantService):
             object_path=object_path,
             file_hash=file_hash,
             file_size=len(content),
-            parse_status="pending",
+            parse_status="completed",
             uploaded_by=self.user_id,
         )
         self.db.add(asset)
+
+        # Create chunk with extracted content (not raw HTML)
+        chunk = AssetChunk(
+            asset_id=asset_id,
+            chunk_index=0,
+            content_text=article["body"] or html_text,
+            tags={
+                "extracted_title": article["title"],
+                "extracted_author": article["author"],
+                "extracted_date": article["date"],
+                "source": "readability",
+            },
+        )
+        self.db.add(chunk)
+
         try:
             await self.db.flush()
         except Exception:

@@ -3,6 +3,11 @@
 所有重要变更都将被记录在此文件中。
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/)。
 
+## [0.48.2] — 2026-04-03
+
+### 变更 (Changed)
+- URL import 升级：`import_url()` 集成 readability 正文提取，AssetChunk 存储提取后纯文本（非原始 HTML），元数据（title/author/date）存入 chunk.tags，原始 HTML 仍保存在 MinIO 保留溯源，parse_status 设为 completed 跳过 worker 重处理（v0.48.2）
+
 ## [0.48.1] — 2026-04-03
 
 ### 新增 (Added)
