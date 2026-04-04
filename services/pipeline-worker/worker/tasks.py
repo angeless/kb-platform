@@ -52,8 +52,8 @@ STAGES = [
 def _publish_event(project_id: uuid.UUID, job_id: uuid.UUID, stage: str, status: str) -> None:
     """Publish pipeline stage progress via Redis."""
     try:
-        settings = get_settings()
-        r = redis.from_url(settings.redis_url)
+        from shared_config.settings import get_redis_client
+        r = get_redis_client()
         event = {
             "type": "pipeline_stage",
             "job_id": str(job_id),
@@ -188,124 +188,78 @@ def run_pipeline(self, project_id: str, job_id: str, asset_ids: list[str], user_
         cond_ctx = {"chunk_count": len(aids)}
         logger.info("Pipeline stage order: %s", ordered)
 
-        # --- Stage 3: Classify ---
-        current_stage = "classify"
-        if not _is_enabled(current_stage) or not _evaluate_condition(current_stage, cond_ctx):
-            logger.info("Stage 3 classify: SKIPPED by config/condition")
-            _publish_event(pid, jid, current_stage, "skipped")
-            _log_stage_skip(db, jid, current_stage)
-            classification = {"new": [], "supplement": [], "correction": [], "conflict": []}
-        else:
+        # Initialize stage outputs with defaults
+        classification: dict = {"new": [], "supplement": [], "correction": [], "conflict": []}
+        arch_id = None
+        doc_ids: list = []
+        qc_result: dict = {"passed": [], "flagged": []}
+        conflict_ids: list = []
+        embed_count: int = 0
+
+        # --- Execute stages in configured order (v0.52 — ordered list now drives execution) ---
+        for current_stage in ordered:
+            # Common skip check: disabled or condition not met
+            if not _is_enabled(current_stage) or not _evaluate_condition(current_stage, cond_ctx):
+                logger.info("Stage %s: SKIPPED by config/condition", current_stage)
+                _publish_event(pid, jid, current_stage, "skipped")
+                _log_stage_skip(db, jid, current_stage)
+                continue
+
             _publish_event(pid, jid, current_stage, "running")
             stage_log = _log_stage_start(db, jid, current_stage)
-            classification = classify_chunks(db, pid, aids, config=_get_config(current_stage))
-            _log_stage_end(db, stage_log, "completed")
-            _publish_event(pid, jid, current_stage, "completed")
-            completed_stages.add(current_stage)
-            logger.info("Stage 3 classify: new=%d, supplement=%d, correction=%d, conflict=%d",
-                         len(classification.get("new", [])),
-                         len(classification.get("supplement", [])),
-                         len(classification.get("correction", [])),
-                         len(classification.get("conflict", [])))
 
-        # --- Stage 4: Architecture Draft ---
-        current_stage = "architecture_draft"
-        if not _is_enabled(current_stage) or not _evaluate_condition(current_stage, cond_ctx):
-            logger.info("Stage 4 architecture_draft: SKIPPED by config/condition")
-            _publish_event(pid, jid, current_stage, "skipped")
-            _log_stage_skip(db, jid, current_stage)
-            arch_id = None
-        else:
-            _publish_event(pid, jid, current_stage, "running")
-            stage_log = _log_stage_start(db, jid, current_stage)
-            arch_id = generate_architecture_draft(db, pid, classification, config=_get_config(current_stage))
+            if current_stage == "classify":
+                classification = classify_chunks(db, pid, aids, config=_get_config(current_stage))
+                logger.info("Stage classify: new=%d, supplement=%d, correction=%d, conflict=%d",
+                             len(classification.get("new", [])),
+                             len(classification.get("supplement", [])),
+                             len(classification.get("correction", [])),
+                             len(classification.get("conflict", [])))
 
-            # Architecture quality gate
-            from .stages.architecture_draft import validate_architecture
-            arch_qc = validate_architecture(db, arch_id)
-            if arch_qc["warnings"]:
-                logger.warning("Architecture quality warnings: %s", arch_qc["warnings"])
-            _log_stage_end(db, stage_log, "completed")
-            _publish_event(pid, jid, current_stage, "completed")
-            completed_stages.add(current_stage)
+            elif current_stage == "architecture_draft":
+                arch_id = generate_architecture_draft(db, pid, classification, config=_get_config(current_stage))
+                from .stages.architecture_draft import validate_architecture
+                arch_qc = validate_architecture(db, arch_id)
+                if arch_qc["warnings"]:
+                    logger.warning("Architecture quality warnings: %s", arch_qc["warnings"])
 
-        # --- Stage 5: Document Generation ---
-        current_stage = "doc_generate"
-        if not _is_enabled(current_stage) or arch_id is None or not _evaluate_condition(current_stage, cond_ctx):
-            logger.info("Stage 5 doc_generate: SKIPPED by config/condition (or no architecture)")
-            _publish_event(pid, jid, current_stage, "skipped")
-            _log_stage_skip(db, jid, current_stage)
-            doc_ids = []
-        else:
-            _publish_event(pid, jid, current_stage, "running")
-            stage_log = _log_stage_start(db, jid, current_stage)
-            doc_ids = generate_documents(db, pid, arch_id, classification, uid, config=_get_config(current_stage))
-            _log_stage_end(db, stage_log, "completed")
-            _publish_event(pid, jid, current_stage, "completed")
-            completed_stages.add(current_stage)
-            logger.info("Stage 5: generated %d documents", len(doc_ids))
+            elif current_stage == "doc_generate":
+                if arch_id is None:
+                    logger.info("Stage doc_generate: SKIPPED (no architecture)")
+                    _log_stage_end(db, stage_log, "skipped")
+                    _publish_event(pid, jid, current_stage, "skipped")
+                    continue
+                doc_ids = generate_documents(db, pid, arch_id, classification, uid, config=_get_config(current_stage))
+                logger.info("Stage doc_generate: generated %d documents", len(doc_ids))
 
-        # --- Stage 6: Quality Check ---
-        current_stage = "quality_check"
-        if not _is_enabled(current_stage) or not doc_ids or not _evaluate_condition(current_stage, cond_ctx):
-            logger.info("Stage 6 quality_check: SKIPPED by config/condition (or no docs)")
-            _publish_event(pid, jid, current_stage, "skipped")
-            _log_stage_skip(db, jid, current_stage)
-            qc_result = {"passed": [], "flagged": []}
-        else:
-            _publish_event(pid, jid, current_stage, "running")
-            stage_log = _log_stage_start(db, jid, current_stage)
-            qc_result = quality_check(db, doc_ids, config=_get_config(current_stage))
-            _log_stage_end(db, stage_log, "completed")
-            _publish_event(pid, jid, current_stage, "completed")
-            completed_stages.add(current_stage)
-            logger.info("Stage 6: %d passed, %d flagged",
-                         len(qc_result.get("passed", [])),
-                         len(qc_result.get("flagged", [])))
+            elif current_stage == "quality_check":
+                if not doc_ids:
+                    logger.info("Stage quality_check: SKIPPED (no docs)")
+                    _log_stage_end(db, stage_log, "skipped")
+                    _publish_event(pid, jid, current_stage, "skipped")
+                    continue
+                qc_result = quality_check(db, doc_ids, config=_get_config(current_stage))
+                logger.info("Stage quality_check: %d passed, %d flagged",
+                             len(qc_result.get("passed", [])),
+                             len(qc_result.get("flagged", [])))
 
-        # --- Stage 7: Conflict Detection ---
-        current_stage = "conflict_detect"
-        if not _is_enabled(current_stage) or not _evaluate_condition(current_stage, cond_ctx):
-            logger.info("Stage 7 conflict_detect: SKIPPED by config/condition")
-            _publish_event(pid, jid, current_stage, "skipped")
-            _log_stage_skip(db, jid, current_stage)
-            conflict_ids = []
-        else:
-            _publish_event(pid, jid, current_stage, "running")
-            stage_log = _log_stage_start(db, jid, current_stage)
-            conflict_ids = detect_conflicts(db, pid, classification, config=_get_config(current_stage))
-            db.commit()
-            _log_stage_end(db, stage_log, "completed")
-            _publish_event(pid, jid, current_stage, "completed")
-            completed_stages.add(current_stage)
+            elif current_stage == "conflict_detect":
+                conflict_ids = detect_conflicts(db, pid, classification, config=_get_config(current_stage))
+                db.commit()
 
-        # --- Stage 8: Embedding ---
-        current_stage = "embed"
-        if not _is_enabled(current_stage) or not doc_ids or not _evaluate_condition(current_stage, cond_ctx):
-            logger.info("Stage 8 embed: SKIPPED by config/condition (or no docs)")
-            _publish_event(pid, jid, current_stage, "skipped")
-            _log_stage_skip(db, jid, current_stage)
-            embed_count = 0
-        else:
-            _publish_event(pid, jid, current_stage, "running")
-            stage_log = _log_stage_start(db, jid, current_stage)
-            embed_count = generate_embeddings(db, doc_ids, config=_get_config(current_stage))
-            db.commit()
-            _log_stage_end(db, stage_log, "completed")
-            _publish_event(pid, jid, current_stage, "completed")
-            completed_stages.add(current_stage)
-            logger.info("Stage 8: embedded %d documents", embed_count)
+            elif current_stage == "embed":
+                if not doc_ids:
+                    logger.info("Stage embed: SKIPPED (no docs)")
+                    _log_stage_end(db, stage_log, "skipped")
+                    _publish_event(pid, jid, current_stage, "skipped")
+                    continue
+                embed_count = generate_embeddings(db, doc_ids, config=_get_config(current_stage))
+                db.commit()
+                logger.info("Stage embed: embedded %d documents", embed_count)
 
-        # --- Stage 9: Review Notification ---
-        current_stage = "review_notify"
-        if not _is_enabled(current_stage) or not _evaluate_condition(current_stage, cond_ctx):
-            logger.info("Stage 9 review_notify: SKIPPED by config/condition")
-            _publish_event(pid, jid, current_stage, "skipped")
-            _log_stage_skip(db, jid, current_stage)
-        else:
-            _publish_event(pid, jid, current_stage, "running")
-            stage_log = _log_stage_start(db, jid, current_stage)
-            notify_review(db, pid, doc_ids, conflict_ids, config=_get_config(current_stage))
+            elif current_stage == "review_notify":
+                notify_review(db, pid, doc_ids, conflict_ids, config=_get_config(current_stage))
+
             _log_stage_end(db, stage_log, "completed")
             _publish_event(pid, jid, current_stage, "completed")
             completed_stages.add(current_stage)

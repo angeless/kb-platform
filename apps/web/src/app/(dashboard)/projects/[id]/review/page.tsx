@@ -109,6 +109,7 @@ function ReviewKanban({ projectId }: { projectId: string }) {
   const [completed, setCompleted] = useState<ReviewTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [rejectingId, setRejectingId] = useState<string | null>(null);
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -141,9 +142,12 @@ function ReviewKanban({ projectId }: { projectId: string }) {
     finally { setActionLoading(null); }
   };
 
-  const handleReject = async (reviewId: string) => {
-    const reason = prompt("请输入驳回原因：");
-    if (!reason) return;
+  const handleReject = (reviewId: string) => {
+    setRejectingId(reviewId);
+  };
+
+  const doReject = async (reviewId: string, reason: string) => {
+    setRejectingId(null);
     setActionLoading(reviewId);
     try {
       await api.post(`/v1/projects/${projectId}/reviews/${reviewId}/reject`, { note: reason });
@@ -238,6 +242,13 @@ function ReviewKanban({ projectId }: { projectId: string }) {
         <KanbanColumn title="待审批" tasks={assigned} color="border-blue-400" column="assigned" />
         <KanbanColumn title="已完成" tasks={completed} color="border-green-400" column="completed" />
       </div>
+      {rejectingId && (
+        <RejectModal
+          title="驳回审批"
+          onConfirm={(reason) => doReject(rejectingId, reason)}
+          onCancel={() => setRejectingId(null)}
+        />
+      )}
     </div>
   );
 }

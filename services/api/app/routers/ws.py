@@ -89,9 +89,9 @@ async def ws_job_status(websocket: WebSocket, project_id: str):
     redis_client = None
     pubsub = None
     try:
-        import redis.asyncio as aioredis
+        from shared_config.settings import get_async_redis_client
 
-        redis_client = aioredis.from_url(settings.redis_url, decode_responses=True)
+        redis_client = get_async_redis_client(decode_responses=True)
         pubsub = redis_client.pubsub()
         await pubsub.subscribe(channel_name)
 

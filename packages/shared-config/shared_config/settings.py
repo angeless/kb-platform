@@ -213,3 +213,39 @@ def get_redis_client(decode_responses: bool = False):
         )
 
     return _redis.from_url(settings.redis_url, decode_responses=decode_responses)
+
+
+def get_async_redis_client(decode_responses: bool = False):
+    """Create an async Redis client, using Sentinel if configured.
+
+    Async counterpart of get_redis_client() for FastAPI/aioredis contexts.
+    """
+    import redis.asyncio as _aioredis
+
+    settings = get_settings()
+    sentinel_hosts = settings.redis_sentinel_hosts.strip()
+
+    if sentinel_hosts:
+        from redis.asyncio.sentinel import Sentinel
+        sentinels = []
+        for entry in sentinel_hosts.split(","):
+            entry = entry.strip()
+            if ":" in entry:
+                host, port = entry.rsplit(":", 1)
+                sentinels.append((host, int(port)))
+            else:
+                sentinels.append((entry, 26379))
+
+        sentinel = Sentinel(
+            sentinels,
+            password=settings.redis_password or None,
+            db=settings.redis_db,
+            decode_responses=decode_responses,
+        )
+        return sentinel.master_for(
+            settings.redis_sentinel_master,
+            password=settings.redis_password or None,
+            db=settings.redis_db,
+        )
+
+    return _aioredis.from_url(settings.redis_url, decode_responses=decode_responses)

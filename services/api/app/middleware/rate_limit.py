@@ -117,8 +117,8 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     async def _get_redis(self) -> aioredis.Redis | None:
         if self._redis is None:
             try:
-                settings = get_settings()
-                self._redis = aioredis.from_url(settings.redis_url)
+                from shared_config.settings import get_async_redis_client
+                self._redis = get_async_redis_client()
             except Exception as e:
                 self._log_redis_unavailable(e)
                 return None

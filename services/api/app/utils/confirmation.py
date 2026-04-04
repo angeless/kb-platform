@@ -25,9 +25,8 @@ def generate_confirmation(action: str, user_id: str) -> dict:
     confirmation_id = str(uuid.uuid4())
 
     try:
-        import redis
-        from shared_config.settings import get_settings
-        r = redis.from_url(get_settings().redis_url)
+        from shared_config.settings import get_redis_client
+        r = get_redis_client()
         key = f"confirm:{confirmation_id}"
         r.setex(key, CONFIRMATION_TTL, f"{code}:{user_id}:{action}")
         r.close()
@@ -44,9 +43,8 @@ def verify_confirmation(confirmation_id: str, code: str, user_id: str) -> bool:
     Returns True if valid, False otherwise.
     """
     try:
-        import redis
-        from shared_config.settings import get_settings
-        r = redis.from_url(get_settings().redis_url)
+        from shared_config.settings import get_redis_client
+        r = get_redis_client()
         key = f"confirm:{confirmation_id}"
         stored = r.get(key)
         if stored:

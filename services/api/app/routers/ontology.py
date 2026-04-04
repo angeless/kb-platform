@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from shared_config.settings import get_settings
 from shared_schemas.common import DataResponse, ErrorDetail, ListResponse, PaginationMeta
 
-from app.deps import get_current_user, get_db, get_kb_id, require_role
+from app.deps import check_feature, get_current_user, get_db, get_kb_id, require_role
 from shared_models import OntologyConcept, OntologyRelation, User
 
 router = APIRouter(prefix="/v1/projects/{project_id}/ontology", tags=["ontology"])
@@ -88,6 +88,7 @@ async def extract_ontology(
     project_id: uuid.UUID,
     body: ExtractOntologyRequest,
     _user: User = require_role("editor"),
+    _feature=check_feature("ontology_extraction"),
 ):
     global _celery_app
     if _celery_app is None:

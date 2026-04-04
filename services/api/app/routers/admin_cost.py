@@ -38,9 +38,8 @@ async def get_cost_summary(
     from datetime import date
 
     try:
-        import redis
-        from shared_config.settings import get_settings
-        r = redis.from_url(get_settings().redis_url)
+        from shared_config.settings import get_redis_client
+        r = get_redis_client()
     except Exception as e:
         logger.warning("Redis unavailable for cost summary: %s", e)
         return DataResponse(data=[])

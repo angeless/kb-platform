@@ -34,7 +34,8 @@ def notify_review(
     }
 
     try:
-        r = redis.from_url(settings.redis_url)
+        from shared_config.settings import get_redis_client
+        r = get_redis_client()
         channel = f"job_events:{project_id}"
         r.publish(channel, json.dumps(event))
         logger.info(

@@ -699,8 +699,8 @@ def _publish_job_event(job: Job, error_message: str | None = None) -> None:
     """Publish job status change to Redis for WebSocket subscribers."""
     try:
         import json
-        import redis
-        r = redis.from_url(settings.redis_url)
+        from shared_config.settings import get_redis_client
+        r = get_redis_client()
         event = json.dumps({
             "event": "job_status_changed",
             "job_id": str(job.id),
@@ -1075,7 +1075,8 @@ def discover_patterns(self, project_id: str) -> dict:
 
     # Check Redis cache first
     try:
-        r = redis_lib.from_url(settings.redis_url)
+        from shared_config.settings import get_redis_client
+        r = get_redis_client()
         cached = r.get(cache_key)
         if cached:
             logger.info("Returning cached patterns for project %s", project_id)

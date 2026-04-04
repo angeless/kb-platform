@@ -62,8 +62,8 @@ async def _check_rate_limit(
         return auth  # no limit
 
     try:
-        import redis
-        r = redis.from_url(settings.redis_url, decode_responses=True)
+        from shared_config.settings import get_redis_client
+        r = get_redis_client(decode_responses=True)
         minute = int(time.time()) // 60
         key = f"rl:api:{api_key.id}:{minute}"
         count = r.incr(key)

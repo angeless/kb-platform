@@ -179,8 +179,8 @@ def _trigger_pipeline(session: Session, asset: Asset, ingest_job_id: uuid.UUID) 
 def _publish_job_event(job: Job, error_message: str | None = None) -> None:
     """Publish job status change to Redis for WebSocket subscribers."""
     try:
-        import redis
-        r = redis.from_url(settings.redis_url)
+        from shared_config.settings import get_redis_client
+        r = get_redis_client()
         import json
         event = json.dumps({
             "event": "job_status_changed",

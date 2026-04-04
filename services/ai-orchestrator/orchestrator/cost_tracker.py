@@ -29,9 +29,8 @@ class CostTracker:
         if self._redis:
             return self._redis
         try:
-            import redis
-            from shared_config.settings import get_settings
-            self._redis = redis.from_url(get_settings().redis_url)
+            from shared_config.settings import get_redis_client
+            self._redis = get_redis_client()
             return self._redis
         except Exception as e:
             logger.warning("Redis unavailable for cost tracking: %s", e)

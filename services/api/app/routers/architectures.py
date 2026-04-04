@@ -248,10 +248,26 @@ async def compare_architectures(
 async def rollback_architecture(
     arch_id: uuid.UUID,
     target_id: uuid.UUID,
+    confirmation_id: str | None = Query(None),
+    code: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
     kb_id: uuid.UUID = Depends(get_kb_id),
     _user: User = require_role("project_admin"),
 ):
+    # Confirmation code gate (v0.52 — rollback is destructive)
+    from app.utils.confirmation import generate_confirmation, verify_confirmation
+    if not confirmation_id or not code:
+        conf = generate_confirmation("rollback_architecture", str(_user.id))
+        return JSONResponse(status_code=428, content={
+            "error": "CONFIRMATION_REQUIRED",
+            "message": "回滚架构需要确认码",
+            "confirmation_id": conf["confirmation_id"],
+            "code": conf["code"],
+            "expires_in": conf["expires_in"],
+        })
+    if not verify_confirmation(confirmation_id, code, str(_user.id)):
+        return JSONResponse(status_code=403, content={"error": "CONFIRMATION_INVALID", "message": "确认码无效或已过期"})
+
     svc = ArchitectureService(db, kb_id)
     new_arch = await svc.rollback(arch_id, target_id)
     return DataResponse(data=ArchitectureOut.model_validate(new_arch))
