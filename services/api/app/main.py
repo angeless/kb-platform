@@ -40,6 +40,8 @@ from .routers.ai_actions import router as ai_actions_router
 from .routers.pipeline_config import router as pipeline_config_router
 from .routers.review import router as review_router
 from .routers.admin_cost import router as admin_cost_router
+from .routers.skills import router as skills_router
+from .routers.ontology import router as ontology_router
 
 logger = logging.getLogger(__name__)
 
@@ -121,6 +123,12 @@ def create_app() -> FastAPI:
     app.include_router(pipeline_config_router)
     app.include_router(review_router)
     app.include_router(admin_cost_router)
+    app.include_router(skills_router)
+    app.include_router(ontology_router)
+
+    # Initialize OpenTelemetry tracing (v0.51.12)
+    from .middleware.tracing import init_tracing
+    init_tracing()
 
     # Custom OpenAPI schema: add Bearer security scheme
     _PUBLIC_PATHS = {"/api/health", "/healthz", "/readyz", "/metrics", "/api/versions", "/api/health/ready", "/_version"}

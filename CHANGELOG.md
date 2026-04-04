@@ -3,6 +3,71 @@
 所有重要变更都将被记录在此文件中。
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/)。
 
+## [0.51.13] — 2026-04-04
+
+### 新增 (Added)
+- 团队文档：`docs/deployment-guide.md` 部署指南（环境变量/Docker/监控）+ `docs/developer-onboarding.md` 开发者上手指南（项目结构/本地开发/关键概念）（v0.51.13）
+
+## [0.51.12] — 2026-04-04
+
+### 新增 (Added)
+- OpenTelemetry 全链路追踪：`tracing.py` 中间件初始化 OTel TracerProvider + OTLP gRPC exporter，通过 `OTEL_EXPORTER_OTLP_ENDPOINT` 环境变量配置，SDK 未安装时自动禁用（v0.51.12）
+
+## [0.51.11] — 2026-04-04
+
+### 新增 (Added)
+- 知识本体可视化页：`/projects/{id}/ontology` 展示概念层级树 + 关系列表，概念含类型标签 + 定义，关系含类型 + 置信度百分比（v0.51.11）
+
+## [0.51.10] — 2026-04-04
+
+### 新增 (Added)
+- 知识本体 AI 提取：`build_ontology_extraction_prompt` 从文档中提取概念（名称/定义/类型/父子）和关系（source/target/type/confidence），输出 JSON 格式（v0.51.10）
+
+## [0.51.9] — 2026-04-04
+
+### 新增 (Added)
+- 知识本体 DB 模型：`ontology_concept` 表（project_id/name/definition/concept_type/parent_id/properties）+ `ontology_relation` 表（source/target/relation_type/confidence/evidence），Alembic migration `z5a6b7c8d9e0`（v0.51.9）
+
+## [0.51.8] — 2026-04-04
+
+### 新增 (Added)
+- SKILL 管理 UI：`/projects/{id}/skills` 展示项目 SKILL 列表卡片（名称/stage/版本/激活状态/prompt 预览），错误/空状态处理（v0.51.8）
+
+## [0.51.7] — 2026-04-04
+
+### 新增 (Added)
+- SKILL Pipeline 集成基础：Skill 模型通过 stage_name 关联 pipeline stage，is_active 字段控制是否参与执行，prompt_template 为用户自定义处理规则（v0.51.7）
+
+## [0.51.6] — 2026-04-04
+
+### 新增 (Added)
+- SKILL DB 模型：`skill` 表（project_id/stage_name/name/prompt_template/input_schema/output_schema/version/is_active），migration `z5a6b7c8d9e0`（v0.51.6）
+
+## [0.51.5] — 2026-04-04
+
+### 新增 (Added)
+- Stage 条件执行：PipelineStageConfig 新增 execution_order(int) + condition(JSONB) 字段，支持 stage 重排序和 min_docs/if_feature 条件跳过，migration `z5a6b7c8d9e0`（v0.51.5）
+
+## [0.51.4] — 2026-04-04
+
+### 新增 (Added)
+- 用户组织层级：User 模型新增 department/team 字段（均 nullable），Alembic migration `y4z5a6b7c8d9`（v0.51.4）
+
+## [0.51.3] — 2026-04-04
+
+### 新增 (Added)
+- 租户分级：Tenant 模型新增 tier(free/pro/enterprise) + feature_flags(JSONB) + quota_storage_bytes/quota_projects/quota_users，migration `y4z5a6b7c8d9`（v0.51.3）
+
+## [0.51.2] — 2026-04-04
+
+### 新增 (Added)
+- Redis Sentinel 支持：新增 `redis_sentinel_hosts` + `redis_sentinel_master` 配置项，Sentinel hosts 非空时通过 Sentinel 发现 master，空时保持单实例行为不变（v0.51.2）
+
+## [0.51.1] — 2026-04-04
+
+### 新增 (Added)
+- S3 存储适配：StorageClient 新增 `download_file()` + `presign_url()` 方法，`create_storage_client()` 工厂函数根据 `STORAGE_BACKEND` 环境变量选择 minio/s3 后端（纯 S3 不设 endpoint_url），新增 `storage_backend` 配置项（v0.51.1）
+
 ## [0.50.8] — 2026-04-04
 
 ### 新增 (Added)

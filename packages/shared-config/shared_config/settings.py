@@ -99,6 +99,13 @@ class Settings(BaseSettings):
     # Audit
     audit_retention_days: int = 90
 
+    # Storage backend (v0.51.1)
+    storage_backend: str = "minio"  # "minio" | "s3"
+
+    # Redis Sentinel (v0.51.2)
+    redis_sentinel_hosts: str = ""  # comma-separated "host1:26379,host2:26379"
+    redis_sentinel_master: str = "mymaster"
+
     # ClamAV malware scanning
     clamav_enabled: bool = False
     clamav_socket: str = "/var/run/clamav/clamd.ctl"

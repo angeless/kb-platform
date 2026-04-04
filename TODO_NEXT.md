@@ -1,20 +1,20 @@
 # TODO_NEXT
 
 ## 上次停在
-- 版本：v0.50.8 | 分支：test-v-0-48-a | 最后完成：v0.50 全部 8 任务
-- v0.45-v0.49 全部完成 ✅
-- v0.50 全部完成 ✅（v0.50.1-8 共 8 个任务）
+- 版本：v0.51.13 | 分支：test-v-0-51-a | 最后完成：v0.51.13 团队文档
+- v0.45-v0.50 全部完成 ✅（PR #7 已合并）
+- v0.51 全部完成 ✅（v0.51.1-13 共 13 个任务）
 
 ## 下一步
 
-### 版本边界：v0.50 封板
-- §0.11 空闲循环 → §1.10 封板 → Phase 8 审计 → CI 闭环
+### 版本边界：v0.51 封板
+- 需要交叉审计 + CI 闭环 + PR 合并
 
-### 进入 v0.51 开发
-- 读取 `docs/dev-plans/dev-plan-v0.51.md`
-- Production Ready & Scale
+### 所有已规划版本开发完成
+- v0.47-v0.51 roadmap 全部执行完毕
+- 共计 43 个版本任务 + 审计修复
 
 ## 注意事项
-- migrations: u0i1j2k3l4m5(IR), v1w2x3y4z5a6(HNSW), w2x3y4z5a6b7(idempotency), x3y4z5a6b7c8(review_task)
-- 分支 test-v-0-48-a 包含 v0.48+v0.49+v0.50 全部（24 个任务）
+- migrations 待执行：y4z5a6b7c8d9 + z5a6b7c8d9e0
 - Node.js 未安装，前端代码未经 tsc 验证
+- gh CLI: /tmp/gh/gh_2.67.0_macOS_arm64/bin/gh

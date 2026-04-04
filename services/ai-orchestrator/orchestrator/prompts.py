@@ -539,6 +539,42 @@ def build_maintenance_guide_prompt(project_name: str, nodes_text: str, max_chars
 
 
 # ---------------------------------------------------------------------------
+# Ontology extraction prompts (v0.51.10)
+# ---------------------------------------------------------------------------
+
+SYSTEM_PROMPT_ONTOLOGY = """你是一个知识本体提取专家。你的任务是从知识文档中识别概念、关系和层级结构。
+
+提取规则：
+1. 识别核心概念（名词实体），为每个概念提供简短定义
+2. 识别概念间的关系类型：is-a（继承）、part-of（组成）、causes（因果）、related-to（关联）
+3. 构建概念层级（父子关系）
+4. 为每个关系标注置信度（0.0-1.0）
+
+输出格式（严格 JSON）：
+{
+  "concepts": [{"name": "概念名", "definition": "定义", "type": "entity|process|attribute", "parent": "父概念名或null"}],
+  "relations": [{"source": "概念A", "target": "概念B", "type": "is-a|part-of|causes|related-to", "confidence": 0.9}]
+}"""
+
+USER_PROMPT_ONTOLOGY_TEMPLATE = """从以下知识文档中提取概念和关系。
+
+--- 文档内容 ---
+{content_text}
+--- 文档内容结束 ---
+
+请输出 JSON 格式的本体结构。"""
+
+
+def build_ontology_extraction_prompt(content_text: str, max_chars: int = 8000) -> tuple[str, str]:
+    """Build prompts for ontology concept and relation extraction."""
+    truncated = content_text[:max_chars]
+    if len(content_text) > max_chars:
+        truncated += "\n...(截断)"
+    user_prompt = USER_PROMPT_ONTOLOGY_TEMPLATE.format(content_text=truncated)
+    return SYSTEM_PROMPT_ONTOLOGY, user_prompt
+
+
+# ---------------------------------------------------------------------------
 # Cross-document contradiction detection prompts (v0.46.5)
 # ---------------------------------------------------------------------------
 

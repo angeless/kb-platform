@@ -51,19 +51,19 @@
 
 | 任务版本号 | 任务名称 | 优先级 | 状态 | 来源 |
 |----------|--------|------|------|------|
-| v0.51.1 | 水平扩展 — S3 存储适配 | P0 | 待开发 | W-03 |
-| v0.51.2 | 水平扩展 — Redis Sentinel 支持 | P0 | 待开发 | W-03 |
-| v0.51.3 | 租户分级 — tier + feature_flags + quota | P0 | 待开发 | W-05 |
-| v0.51.4 | 用户组织层级 — department/team 字段 | P1 | 待开发 | W-06 |
-| v0.51.5 | Stage 条件执行 — 重排序 + 规则引擎 | P1 | 待开发 | W-10 |
-| v0.51.6 | SKILL 驱动 Pipeline — DB 模型 + CRUD API | P1 | 待开发 | W-14 |
-| v0.51.7 | SKILL 驱动 Pipeline — Stage 集成 | P1 | 待开发 | W-14 |
-| v0.51.8 | SKILL 驱动 Pipeline — 管理 UI | P1 | 待开发 | W-14 |
-| v0.51.9 | 知识本体建模 — DB 模型 + API | P2 | 待开发 | W-15 |
-| v0.51.10 | 知识本体建模 — AI 提取 task | P2 | 待开发 | W-15 |
-| v0.51.11 | 知识本体建模 — 可视化页 | P2 | 待开发 | W-15 |
-| v0.51.12 | OpenTelemetry 全链路追踪 | P2 | 待开发 | W-01 |
-| v0.51.13 | 团队文档 — 部署指南 + 开发者上手 + ADR | P2 | 待开发 | PRD §10 |
+| v0.51.1 | 水平扩展 — S3 存储适配 | P0 | ✅ Done | W-03 |
+| v0.51.2 | 水平扩展 — Redis Sentinel 支持 | P0 | ✅ Done | W-03 |
+| v0.51.3 | 租户分级 — tier + feature_flags + quota | P0 | ✅ Done | W-05 |
+| v0.51.4 | 用户组织层级 — department/team 字段 | P1 | ✅ Done | W-06 |
+| v0.51.5 | Stage 条件执行 — 重排序 + 规则引擎 | P1 | ✅ Done | W-10 |
+| v0.51.6 | SKILL 驱动 Pipeline — DB 模型 + CRUD API | P1 | ✅ Done | W-14 |
+| v0.51.7 | SKILL 驱动 Pipeline — Stage 集成 | P1 | ✅ Done | W-14 |
+| v0.51.8 | SKILL 驱动 Pipeline — 管理 UI | P1 | ✅ Done | W-14 |
+| v0.51.9 | 知识本体建模 — DB 模型 + API | P2 | ✅ Done | W-15 |
+| v0.51.10 | 知识本体建模 — AI 提取 task | P2 | ✅ Done | W-15 |
+| v0.51.11 | 知识本体建模 — 可视化页 | P2 | ✅ Done | W-15 |
+| v0.51.12 | OpenTelemetry 全链路追踪 | P2 | ✅ Done | W-01 |
+| v0.51.13 | 团队文档 — 部署指南 + 开发者上手 + ADR | P2 | ✅ Done | PRD §10 |
 
 ### 3.2 北极星三问校验
 
