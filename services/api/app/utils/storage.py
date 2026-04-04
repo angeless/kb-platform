@@ -111,16 +111,24 @@ class StorageClient:
 
     def download_file(self, object_key: str) -> bytes:
         """Download file bytes from S3/MinIO."""
-        resp = self.client.get_object(Bucket=self.bucket, Key=object_key)
-        return resp["Body"].read()
+        try:
+            resp = self.client.get_object(Bucket=self.bucket, Key=object_key)
+            return resp["Body"].read()
+        except ClientError as e:
+            logger.error("Failed to download %s from bucket %s: %s", object_key, self.bucket, e)
+            raise
 
     def presign_url(self, object_key: str, expires_in: int = 3600) -> str:
         """Generate a pre-signed URL for downloading a file."""
-        return self.client.generate_presigned_url(
-            "get_object",
-            Params={"Bucket": self.bucket, "Key": object_key},
-            ExpiresIn=expires_in,
-        )
+        try:
+            return self.client.generate_presigned_url(
+                "get_object",
+                Params={"Bucket": self.bucket, "Key": object_key},
+                ExpiresIn=expires_in,
+            )
+        except ClientError as e:
+            logger.error("Failed to generate presign URL for %s: %s", object_key, e)
+            raise
 
     def delete_file(self, object_key: str) -> None:
         """Delete a file from S3/MinIO. Best-effort: logs warning on failure."""
