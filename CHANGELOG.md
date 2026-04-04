@@ -3,6 +3,11 @@
 所有重要变更都将被记录在此文件中。
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/)。
 
+## [0.49.1] — 2026-04-03
+
+### 新增 (Added)
+- IR 中间表示字段：AssetChunk 新增 5 个 nullable 字段（original_format/structure_type/extraction_confidence/semantic_boundaries/language），向后兼容旧 chunk，Alembic migration `u0i1j2k3l4m5`（v0.49.1）
+
 ## [0.48.6] — 2026-04-03
 
 ### 新增 (Added)
