@@ -26,6 +26,8 @@ def parse(content: bytes, filename: str) -> list[dict]:
     # Split on double newlines (blank line = paragraph boundary)
     paragraphs = text.split("\n\n")
     chunks = []
+    from .ir_utils import detect_language, infer_structure_type
+
     for i, para in enumerate(paragraphs):
         cleaned = para.strip()
         if not cleaned:
@@ -34,6 +36,10 @@ def parse(content: bytes, filename: str) -> list[dict]:
             "content_text": cleaned,
             "page_or_timestamp": f"paragraph-{i + 1}",
             "tags": {"source_type": "text", "filename": filename},
+            "original_format": "text",
+            "structure_type": infer_structure_type(cleaned),
+            "extraction_confidence": 1.0,
+            "language": detect_language(cleaned),
         })
 
     logger.info("Parsed %s into %d chunks", filename, len(chunks))

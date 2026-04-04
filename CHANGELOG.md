@@ -3,6 +3,11 @@
 所有重要变更都将被记录在此文件中。
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/)。
 
+## [0.49.2] — 2026-04-03
+
+### 新增 (Added)
+- 解析器 IR 字段填充：text_parser 设置 original_format/structure_type/extraction_confidence/language，asr_parser 设置 original_format/semantic_boundaries/language，URL import 设置 original_format/extraction_confidence/language，新增 ir_utils.py（语言检测 + 结构类型推断），tasks.py 映射 IR 字段到 AssetChunk（v0.49.2）
+
 ## [0.49.1] — 2026-04-03
 
 ### 新增 (Added)

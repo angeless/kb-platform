@@ -16,6 +16,20 @@ from . import TenantService
 
 logger = logging.getLogger(__name__)
 
+
+def _detect_language_simple(text: str) -> str:
+    """Simple CJK-based language detection. Returns 'zh', 'en', or 'mixed'."""
+    import re
+    if not text:
+        return "en"
+    cjk = len(re.findall(r"[\u4e00-\u9fff]", text))
+    alpha = len(re.findall(r"[a-zA-Z]", text))
+    total = cjk + alpha
+    if total == 0:
+        return "en"
+    ratio = cjk / total
+    return "zh" if ratio > 0.5 else ("en" if ratio < 0.1 else "mixed")
+
 # ZIP archive decompression limits (DoS protection)
 MAX_ARCHIVE_TOTAL_BYTES = 500 * 1024 * 1024  # 500MB total decompressed
 MAX_COMPRESSION_RATIO = 100  # skip files with ratio > 100
@@ -184,17 +198,22 @@ class AssetService(TenantService):
         )
         self.db.add(asset)
 
-        # Create chunk with extracted content (not raw HTML)
+        # Create chunk with extracted content (not raw HTML) + IR fields
+        body = article["body"] or html_text
         chunk = AssetChunk(
             asset_id=asset_id,
             chunk_index=0,
-            content_text=article["body"] or html_text,
+            content_text=body,
             tags={
                 "extracted_title": article["title"],
                 "extracted_author": article["author"],
                 "extracted_date": article["date"],
                 "source": "readability",
             },
+            original_format="url",
+            structure_type="paragraph",
+            extraction_confidence=0.9 if article["body"] else 0.5,
+            language=_detect_language_simple(body),
         )
         self.db.add(chunk)
 

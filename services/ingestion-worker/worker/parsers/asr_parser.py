@@ -111,6 +111,11 @@ def parse(content: bytes, filename: str) -> list[dict]:
                 "start_seconds": round(start, 2),
                 "end_seconds": round(end, 2),
             },
+            "original_format": "asr",
+            "structure_type": "paragraph",
+            "extraction_confidence": 0.85,
+            "semantic_boundaries": {"timestamp_ms": int(start * 1000)},
+            "language": detected_lang if detected_lang != "unknown" else None,
         })
 
     # Fallback: if no segments but full_text exists, return as single chunk
@@ -123,6 +128,10 @@ def parse(content: bytes, filename: str) -> list[dict]:
                 "filename": filename,
                 "language": detected_lang,
             },
+            "original_format": "asr",
+            "structure_type": "paragraph",
+            "extraction_confidence": 0.85,
+            "language": detected_lang if detected_lang != "unknown" else None,
         })
 
     logger.info(
