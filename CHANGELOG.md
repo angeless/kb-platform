@@ -3,6 +3,11 @@
 所有重要变更都将被记录在此文件中。
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/)。
 
+## [0.48.4] — 2026-04-03
+
+### 新增 (Added)
+- 视频帧提取 + OCR：扩展 video_parser 支持定时截取关键帧（默认每 30s），FFmpeg scene filter 去重，帧图片通过 ocr_parser 识别文字，有文字帧创建 AssetChunk（tags 含 source:video_frame + timestamp_s），适用于 PPT 录屏/白板场景，最大帧数限制 50（v0.48.4）
+
 ## [0.48.5] — 2026-04-03
 
 ### 新增 (Added)

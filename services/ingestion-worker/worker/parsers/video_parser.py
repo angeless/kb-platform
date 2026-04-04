@@ -117,8 +117,93 @@ def _extract_subtitles(video_path: str, stream_index: int) -> str:
     return ""
 
 
+DEFAULT_FRAME_INTERVAL_S = 30  # Extract one frame every N seconds
+MAX_FRAMES = 50  # Maximum frames to extract
+SCENE_CHANGE_THRESHOLD = 0.4  # FFmpeg scene detection threshold
+
+
+def _extract_keyframes(video_path: str, interval_s: int = DEFAULT_FRAME_INTERVAL_S) -> list[tuple[str, float]]:
+    """Extract keyframes from video at regular intervals with scene change dedup.
+
+    Args:
+        video_path: Path to video file.
+        interval_s: Seconds between frame captures.
+
+    Returns:
+        List of (frame_path, timestamp_seconds) tuples.
+    """
+    frames_dir = tempfile.mkdtemp(prefix="video_frames_")
+    frame_pattern = os.path.join(frames_dir, "frame_%04d.jpg")
+
+    try:
+        import ffmpeg
+        # Use fps filter for interval-based extraction + scene detection for dedup
+        (
+            ffmpeg.input(video_path)
+            .filter("fps", fps=f"1/{interval_s}")
+            .filter("select", f"gt(scene,{SCENE_CHANGE_THRESHOLD})+not(mod(n,1))")
+            .output(frame_pattern, vframes=MAX_FRAMES, **{"q:v": 2})
+            .overwrite_output()
+            .run(capture_stdout=True, capture_stderr=True)
+        )
+    except Exception as e:
+        logger.warning("Keyframe extraction failed: %s", e)
+        # Cleanup on failure
+        import shutil
+        shutil.rmtree(frames_dir, ignore_errors=True)
+        return []
+
+    # Collect extracted frames with timestamps
+    frames = []
+    for fname in sorted(os.listdir(frames_dir)):
+        if not fname.endswith(".jpg"):
+            continue
+        fpath = os.path.join(frames_dir, fname)
+        # Estimate timestamp from frame index
+        idx = int(fname.replace("frame_", "").replace(".jpg", "")) - 1
+        timestamp = idx * interval_s
+        frames.append((fpath, timestamp))
+
+    return frames
+
+
+def _ocr_frames(frames: list[tuple[str, float]], filename: str) -> list[dict]:
+    """Run OCR on extracted frames and return chunks for frames with text.
+
+    Args:
+        frames: List of (frame_path, timestamp_s) tuples.
+        filename: Original video filename for tagging.
+
+    Returns:
+        List of chunk dicts with OCR text.
+    """
+    chunks = []
+    try:
+        from worker.parsers import ocr_parser
+    except Exception:
+        logger.warning("OCR parser not available, skipping frame OCR")
+        return []
+
+    for frame_path, timestamp_s in frames:
+        try:
+            with open(frame_path, "rb") as f:
+                frame_content = f.read()
+            ocr_chunks = ocr_parser.parse(frame_content, f"frame_{timestamp_s:.0f}s.jpg")
+            for chunk in ocr_chunks:
+                chunk["tags"] = chunk.get("tags", {})
+                chunk["tags"]["source"] = "video_frame"
+                chunk["tags"]["timestamp_s"] = timestamp_s
+                chunk["tags"]["video_filename"] = filename
+                chunk["page_or_timestamp"] = f"frame_{timestamp_s:.0f}s"
+                chunks.append(chunk)
+        except Exception as e:
+            logger.warning("OCR failed for frame at %.0fs: %s", timestamp_s, e)
+
+    return chunks
+
+
 def parse(content: bytes, filename: str) -> list[dict]:
-    """Parse a video file: extract audio for ASR + detect embedded subtitles.
+    """Parse a video file: extract audio for ASR, detect subtitles, extract keyframes for OCR.
 
     Returns list of dicts with keys: content_text, page_or_timestamp, tags.
     Returns empty list if ffmpeg is unavailable or video has no extractable content.
@@ -174,6 +259,17 @@ def parse(content: bytes, filename: str) -> list[dict]:
                         "video_filename": filename,
                     },
                 })
+
+        # Extract keyframes → OCR (v0.48.4)
+        frames = _extract_keyframes(tmp_video)
+        if frames:
+            ocr_chunks = _ocr_frames(frames, filename)
+            chunks.extend(ocr_chunks)
+            # Cleanup frame files
+            import shutil
+            frames_dir = os.path.dirname(frames[0][0]) if frames else None
+            if frames_dir:
+                shutil.rmtree(frames_dir, ignore_errors=True)
 
         # Add metadata to first chunk, or create metadata-only chunk if no content
         video_meta_tags = {

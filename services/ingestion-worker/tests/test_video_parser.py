@@ -123,16 +123,16 @@ class TestParse:
         mock_asr.parse = MagicMock(return_value=mock_asr_chunks)
 
         with patch.object(video_parser, "_extract_audio", return_value=True):
-            with patch.object(video_parser, "_check_ffmpeg"):
-                with patch.object(video_parser, "_probe_metadata", return_value=mock_probe.return_value |
-                                  {"duration_s": 60.0, "has_audio": True, "subtitle_streams": 0,
-                                   "width": 1280, "height": 720, "fps": 24.0}):
-                    # Mock the dynamic import of asr_parser inside parse()
-                    with patch.dict("sys.modules", {"worker.parsers.asr_parser": mock_asr, "worker.parsers": MagicMock(asr_parser=mock_asr)}):
-                        with patch("tempfile.NamedTemporaryFile", return_value=_make_tmp_mock()):
-                            with patch("builtins.open", mock_open(read_data=b"fake_wav")):
-                                with patch("os.unlink"):
-                                    chunks = video_parser.parse(b"fake_video", "test.mp4")
+            with patch.object(video_parser, "_extract_keyframes", return_value=[]):
+                with patch.object(video_parser, "_check_ffmpeg"):
+                    with patch.object(video_parser, "_probe_metadata", return_value=mock_probe.return_value |
+                                      {"duration_s": 60.0, "has_audio": True, "subtitle_streams": 0,
+                                       "width": 1280, "height": 720, "fps": 24.0}):
+                        with patch.dict("sys.modules", {"worker.parsers.asr_parser": mock_asr, "worker.parsers": MagicMock(asr_parser=mock_asr)}):
+                            with patch("tempfile.NamedTemporaryFile", return_value=_make_tmp_mock()):
+                                with patch("builtins.open", mock_open(read_data=b"fake_wav")):
+                                    with patch("os.unlink"):
+                                        chunks = video_parser.parse(b"fake_video", "test.mp4")
 
         assert len(chunks) >= 1
         assert chunks[0]["content_text"] == "Hello from video"
@@ -156,9 +156,10 @@ class TestParse:
                 "width": 640, "height": 480, "fps": 25.0,
             }):
                 with patch.object(video_parser, "_extract_subtitles", return_value="Subtitle text here"):
-                    with patch("tempfile.NamedTemporaryFile", return_value=_make_tmp_mock()):
-                        with patch("os.unlink"):
-                            chunks = video_parser.parse(b"fake", "test.mp4")
+                    with patch.object(video_parser, "_extract_keyframes", return_value=[]):
+                        with patch("tempfile.NamedTemporaryFile", return_value=_make_tmp_mock()):
+                            with patch("os.unlink"):
+                                chunks = video_parser.parse(b"fake", "test.mp4")
 
         subtitle_chunks = [c for c in chunks if c.get("tags", {}).get("source") == "subtitle"]
         assert len(subtitle_chunks) == 1
@@ -175,11 +176,52 @@ class TestParse:
                 "duration_s": 90.0, "has_audio": False, "subtitle_streams": 0,
                 "width": 1920, "height": 1080, "fps": 30.0,
             }):
-                with patch("tempfile.NamedTemporaryFile", return_value=_make_tmp_mock()):
-                    with patch("os.unlink"):
-                        chunks = video_parser.parse(b"fake", "test.mp4")
+                with patch.object(video_parser, "_extract_keyframes", return_value=[]):
+                    with patch("tempfile.NamedTemporaryFile", return_value=_make_tmp_mock()):
+                        with patch("os.unlink"):
+                            chunks = video_parser.parse(b"fake", "test.mp4")
 
         assert len(chunks) >= 1
         tags = chunks[0]["tags"]
         assert tags["duration_s"] == 90.0
         assert tags["resolution"] == "1920x1080"
+
+    @patch("subprocess.run")
+    @patch("ffmpeg.probe")
+    def test_keyframe_ocr_creates_chunks(self, mock_probe, mock_run):
+        """v0.48.4 AC: Keyframes with OCR text → chunks with source=video_frame."""
+        mock_run.return_value = MagicMock(returncode=0)
+
+        fake_frames = [("/tmp/frames/frame_0001.jpg", 0.0), ("/tmp/frames/frame_0002.jpg", 30.0)]
+        mock_ocr_chunks = [
+            {"content_text": "Slide title", "page_or_timestamp": "page_1", "tags": {}},
+        ]
+        mock_ocr = MagicMock()
+        mock_ocr.parse = MagicMock(return_value=mock_ocr_chunks)
+
+        with patch.object(video_parser, "_check_ffmpeg"):
+            with patch.object(video_parser, "_probe_metadata", return_value={
+                "duration_s": 60.0, "has_audio": False, "subtitle_streams": 0,
+                "width": 1920, "height": 1080, "fps": 30.0,
+            }):
+                with patch.object(video_parser, "_extract_keyframes", return_value=fake_frames):
+                    with patch.object(video_parser, "_ocr_frames", return_value=[{
+                        "content_text": "Slide title",
+                        "page_or_timestamp": "frame_0s",
+                        "tags": {"source": "video_frame", "timestamp_s": 0.0, "video_filename": "test.mp4"},
+                    }]):
+                        with patch("tempfile.NamedTemporaryFile", return_value=_make_tmp_mock()):
+                            with patch("os.unlink"):
+                                with patch("shutil.rmtree"):
+                                    chunks = video_parser.parse(b"fake", "test.mp4")
+
+        frame_chunks = [c for c in chunks if c.get("tags", {}).get("source") == "video_frame"]
+        assert len(frame_chunks) >= 1
+        assert frame_chunks[0]["content_text"] == "Slide title"
+        assert frame_chunks[0]["tags"]["timestamp_s"] == 0.0
+
+    def test_extract_keyframes_failure_returns_empty(self):
+        """Keyframe extraction failure → empty list, no crash."""
+        with patch("ffmpeg.input", side_effect=Exception("ffmpeg error")):
+            frames = video_parser._extract_keyframes("/tmp/nonexistent.mp4")
+        assert frames == []
