@@ -3,6 +3,13 @@
 所有重要变更都将被记录在此文件中。
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/)。
 
+## [0.48.3] — 2026-04-03
+
+### 新增 (Added)
+- 视频解析器：`video_parser.py` 使用 FFmpeg 提取音轨交给 ASR 转文字、检测内嵌字幕创建独立 chunk、提取视频元数据（时长/分辨率/帧率），无 FFmpeg 时返回友好错误，临时文件完成后自动清理（v0.48.3）
+- 解析器注册：`video` 类型映射到 video_parser，新增 `ffmpeg-python` 依赖
+- 单元测试 10 个用例覆盖全部 6 条验收标准
+
 ## [0.48.2] — 2026-04-03
 
 ### 变更 (Changed)
