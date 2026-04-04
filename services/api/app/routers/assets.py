@@ -1,6 +1,9 @@
 """Assets router: upload, list, get endpoints with tenant isolation."""
 
+import logging
 import uuid
+
+logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,7 +23,7 @@ router = APIRouter(prefix="/v1/assets", tags=["assets"])
 
 def _asset_out(asset) -> AssetOut:
     """Build AssetOut with tags aggregated from first chunk (v0.52.10 — Gap-15 fix)."""
-    out = _asset_out(asset)
+    out = AssetOut.model_validate(asset)
     if hasattr(asset, "chunks") and asset.chunks:
         out.tags = asset.chunks[0].tags
     return out

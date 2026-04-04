@@ -349,6 +349,9 @@ def generate_docs(self, project_id: str, job_id: str) -> dict:
             # Load entity_types from pipeline config (v0.46.3)
             doc_gen_entity_types = _get_entity_types(session, project_uuid, "doc_generate")
 
+            # Load SKILL prompt once outside the loop (v0.52.3)
+            skill_prompt = _get_skill_prompt(session, project_uuid, "doc_generate")
+
             for node in nodes:
                 # Skip category nodes (they are containers, not content)
                 if node.node_type == "category":
@@ -365,7 +368,6 @@ def generate_docs(self, project_id: str, job_id: str) -> dict:
                 )
 
                 # Override with SKILL prompt_template if available (v0.52.3)
-                skill_prompt = _get_skill_prompt(session, project_uuid, "doc_generate")
                 if skill_prompt:
                     system_prompt = skill_prompt
 

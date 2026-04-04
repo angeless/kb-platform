@@ -10,7 +10,7 @@ from shared_schemas.common import DataResponse, ErrorDetail, ListResponse, Pagin
 from shared_schemas.cross_reference import RouteContentRequest
 from shared_schemas.project import ProjectCreate, ProjectOut, ProjectUpdate
 
-from app.deps import get_current_user, get_db, get_kb_id, require_role
+from app.deps import check_quota, get_current_user, get_db, get_kb_id, require_role
 from shared_models import User
 from app.services.audit_service import AuditService
 from app.services.project_service import ProjectService
@@ -41,6 +41,7 @@ async def create_project(
     db: AsyncSession = Depends(get_db),
     kb_id: uuid.UUID = Depends(get_kb_id),
     current_user: User = Depends(get_current_user),
+    _quota=check_quota("projects"),
 ):
     svc = ProjectService(db, kb_id)
     project = await svc.create(name=body.name, industry_hint=body.industry_hint)

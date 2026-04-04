@@ -297,6 +297,9 @@ def parse(content: bytes, filename: str) -> list[dict]:
                     "video_filename": filename,
                     **video_meta_tags,
                 },
+                "original_format": "video",
+                "structure_type": "metadata",
+                "extraction_confidence": 1.0,
             })
 
         logger.info(

@@ -1,17 +1,22 @@
-"""Ontology CRUD router: list concepts and relations."""
+"""Ontology CRUD router: list concepts and relations, trigger extraction."""
 
 import uuid
 
+from celery import Celery
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from shared_config.settings import get_settings
 from shared_schemas.common import DataResponse, ErrorDetail, ListResponse, PaginationMeta
 
-from app.deps import get_current_user, get_db, get_kb_id
+from app.deps import get_current_user, get_db, get_kb_id, require_role
 from shared_models import OntologyConcept, OntologyRelation, User
 
 router = APIRouter(prefix="/v1/projects/{project_id}/ontology", tags=["ontology"])
+
+# Lazy Celery app for dispatching orchestrator tasks
+_celery_app: Celery | None = None
 
 
 @router.get(
@@ -62,3 +67,34 @@ async def list_relations(
         } for r in rows],
         meta=PaginationMeta(page=1, page_size=len(rows), total=len(rows)),
     )
+
+
+# --- Trigger extraction (v0.52.7 — Gap-9 fix) ---
+
+from pydantic import BaseModel
+
+
+class ExtractOntologyRequest(BaseModel):
+    doc_id: uuid.UUID
+
+
+@router.post(
+    "/extract",
+    response_model=DataResponse,
+    status_code=202,
+    summary="Trigger ontology extraction for a document",
+)
+async def extract_ontology(
+    project_id: uuid.UUID,
+    body: ExtractOntologyRequest,
+    _user: User = require_role("editor"),
+):
+    global _celery_app
+    if _celery_app is None:
+        settings = get_settings()
+        _celery_app = Celery(broker=settings.redis_url)
+    _celery_app.send_task(
+        "orchestrator.extract_ontology",
+        args=[str(project_id), str(body.doc_id)],
+    )
+    return DataResponse(data={"status": "accepted", "doc_id": str(body.doc_id)})
