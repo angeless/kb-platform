@@ -99,6 +99,10 @@ class Settings(BaseSettings):
     # Audit
     audit_retention_days: int = 90
 
+    # ClamAV malware scanning
+    clamav_enabled: bool = False
+    clamav_socket: str = "/var/run/clamav/clamd.ctl"
+
     # Logging
     log_level: str = "INFO"
 

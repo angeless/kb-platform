@@ -3,6 +3,13 @@
 所有重要变更都将被记录在此文件中。
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/)。
 
+## [0.48.5] — 2026-04-03
+
+### 新增 (Added)
+- 文件恶意扫描：`malware_scanner.py` 通过 ClamAV daemon Unix socket 扫描上传文件，检测到恶意内容返回 400 拒绝上传，ClamAV 不可用时降级为允许上传并记录 WARNING，通过 `CLAMAV_ENABLED` 环境变量控制（默认关闭）（v0.48.5）
+- 配置项：`clamav_enabled` (bool, default=False) + `clamav_socket` (str, default=/var/run/clamav/clamd.ctl)
+- 单元测试 7 个用例覆盖全部 5 条验收标准
+
 ## [0.48.3] — 2026-04-03
 
 ### 新增 (Added)

@@ -64,6 +64,18 @@ class AssetService(TenantService):
                 message=f"文件大小超过限制 ({self.max_upload_size_bytes // (1024 * 1024)}MB)",
             )
 
+        # Malware scan (if ClamAV enabled)
+        from shared_config.settings import get_settings
+        settings = get_settings()
+        if settings.clamav_enabled:
+            from app.utils.malware_scanner import scan_file
+            is_clean, threat = scan_file(file_content, settings.clamav_socket)
+            if not is_clean:
+                raise AppException(
+                    error_code=ErrorCode.ASSET_TYPE_NOT_ALLOWED,
+                    message=f"文件被拒绝：检测到恶意内容 ({threat})",
+                )
+
         file_hash = hashlib.sha256(file_content).hexdigest()
 
         # Check duplicate
