@@ -3,6 +3,16 @@
 所有重要变更都将被记录在此文件中。
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/)。
 
+## [0.51.13] — 2026-04-04
+
+### 新增 (Added)
+- 团队文档：`docs/deployment-guide.md` 部署指南（环境变量/Docker/监控）+ `docs/developer-onboarding.md` 开发者上手指南（项目结构/本地开发/关键概念）（v0.51.13）
+
+## [0.51.12] — 2026-04-04
+
+### 新增 (Added)
+- OpenTelemetry 全链路追踪：`tracing.py` 中间件初始化 OTel TracerProvider + OTLP gRPC exporter，通过 `OTEL_EXPORTER_OTLP_ENDPOINT` 环境变量配置，SDK 未安装时自动禁用（v0.51.12）
+
 ## [0.51.11] — 2026-04-04
 
 ### 新增 (Added)
