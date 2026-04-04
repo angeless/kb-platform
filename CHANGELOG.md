@@ -3,6 +3,13 @@
 所有重要变更都将被记录在此文件中。
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/)。
 
+## [0.48.1] — 2026-04-03
+
+### 新增 (Added)
+- 网页正文提取模块：`readability.py` 使用 trafilatura 从 HTML 提取纯正文/标题/作者/日期，去除导航/广告/脚本噪音，提取失败时降级为简单 HTML 去标签（v0.48.1）
+- 新增依赖：`trafilatura` 2.0.0 + `lxml_html_clean`
+- 单元测试 8 个用例覆盖全部 5 条验收标准
+
 ## [0.47.8] — 2026-04-03
 
 ### 新增 (Added)
