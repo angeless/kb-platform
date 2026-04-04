@@ -3,6 +3,11 @@
 所有重要变更都将被记录在此文件中。
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/)。
 
+## [0.51.1] — 2026-04-04
+
+### 新增 (Added)
+- S3 存储适配：StorageClient 新增 `download_file()` + `presign_url()` 方法，`create_storage_client()` 工厂函数根据 `STORAGE_BACKEND` 环境变量选择 minio/s3 后端（纯 S3 不设 endpoint_url），新增 `storage_backend` 配置项（v0.51.1）
+
 ## [0.50.8] — 2026-04-04
 
 ### 新增 (Added)

@@ -99,6 +99,9 @@ class Settings(BaseSettings):
     # Audit
     audit_retention_days: int = 90
 
+    # Storage backend (v0.51.1)
+    storage_backend: str = "minio"  # "minio" | "s3"
+
     # ClamAV malware scanning
     clamav_enabled: bool = False
     clamav_socket: str = "/var/run/clamav/clamd.ctl"

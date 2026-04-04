@@ -63,18 +63,31 @@ def guess_asset_type(filename: str) -> str:
     return "text"
 
 
+def create_storage_client(settings: "Settings") -> "StorageClient":
+    """Factory: creates StorageClient configured for minio or s3 backend.
+
+    Both backends use the same boto3 client — the difference is only
+    in the endpoint_url (MinIO uses explicit endpoint, S3 uses default AWS).
+    """
+    if settings.storage_backend == "s3" and not settings.s3_endpoint:
+        # Pure AWS S3 — use default endpoint (no endpoint_url)
+        return StorageClient(settings, use_default_endpoint=True)
+    return StorageClient(settings)
+
+
 class StorageClient:
     """Wrapper around boto3 S3 client for MinIO/S3 operations."""
 
-    def __init__(self, settings: Settings) -> None:
+    def __init__(self, settings: Settings, use_default_endpoint: bool = False) -> None:
         self.bucket = settings.s3_bucket
-        self.client = boto3.client(
-            "s3",
-            endpoint_url=settings.s3_endpoint,
-            aws_access_key_id=settings.s3_access_key,
-            aws_secret_access_key=settings.s3_secret_key,
-            region_name=settings.s3_region,
-        )
+        kwargs: dict = {
+            "aws_access_key_id": settings.s3_access_key,
+            "aws_secret_access_key": settings.s3_secret_key,
+            "region_name": settings.s3_region,
+        }
+        if not use_default_endpoint and settings.s3_endpoint:
+            kwargs["endpoint_url"] = settings.s3_endpoint
+        self.client = boto3.client("s3", **kwargs)
 
     def ensure_bucket(self) -> None:
         """Create bucket if it does not exist."""
@@ -95,6 +108,19 @@ class StorageClient:
         )
         logger.info("Uploaded %s to bucket %s", object_key, self.bucket)
         return object_key
+
+    def download_file(self, object_key: str) -> bytes:
+        """Download file bytes from S3/MinIO."""
+        resp = self.client.get_object(Bucket=self.bucket, Key=object_key)
+        return resp["Body"].read()
+
+    def presign_url(self, object_key: str, expires_in: int = 3600) -> str:
+        """Generate a pre-signed URL for downloading a file."""
+        return self.client.generate_presigned_url(
+            "get_object",
+            Params={"Bucket": self.bucket, "Key": object_key},
+            ExpiresIn=expires_in,
+        )
 
     def delete_file(self, object_key: str) -> None:
         """Delete a file from S3/MinIO. Best-effort: logs warning on failure."""
