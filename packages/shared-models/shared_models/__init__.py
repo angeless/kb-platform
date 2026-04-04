@@ -16,6 +16,7 @@ from .pipeline_stage_config import PipelineStageConfig
 from .pipeline_stage_log import PipelineStageLog
 from .embedding import DocEmbedding
 from .refresh_token import RefreshToken
+from .review_task import ReviewTask
 from .database import engine, async_session_factory, sync_session_factory, get_db_session
 
 __all__ = [
@@ -35,5 +36,6 @@ __all__ = [
     "PipelineStageLog",
     "DocEmbedding",
     "RefreshToken",
+    "ReviewTask",
     "engine", "async_session_factory", "sync_session_factory", "get_db_session",
 ]

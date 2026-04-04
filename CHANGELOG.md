@@ -3,6 +3,11 @@
 所有重要变更都将被记录在此文件中。
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/)。
 
+## [0.50.1] — 2026-04-03
+
+### 新增 (Added)
+- 审批工作流 DB 模型：`review_task` 表（11 字段）+ 状态机（pending→assigned→approved/rejected→resubmitted→assigned），`validate_transition()` 函数校验合法转换，3 个索引，Alembic migration `x3y4z5a6b7c8`，12 个单元测试（v0.50.1）
+
 ## [0.49.9] — 2026-04-03
 
 ### 新增 (Added)
