@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from shared_config.settings import get_settings
 from shared_schemas.common import DataResponse, ErrorDetail, ListResponse, PaginationMeta
 
-from app.deps import check_feature, get_current_user, get_db, get_kb_id, require_role
+from app.deps import check_feature, ensure_project_access, get_current_user, get_db, get_kb_id, require_role
 from shared_models import OntologyConcept, OntologyRelation, User
 
 router = APIRouter(prefix="/v1/projects/{project_id}/ontology", tags=["ontology"])
@@ -42,13 +42,7 @@ async def list_concepts(
     kb_id: uuid.UUID = Depends(get_kb_id),
     _user: User = Depends(get_current_user),
 ):
-    from shared_models import Project
-    from shared_errors import NotFoundException
-    proj = (await db.execute(
-        select(Project).where(Project.id == project_id, Project.kb_id == kb_id)
-    )).scalar_one_or_none()
-    if proj is None:
-        raise NotFoundException(message="项目不存在")
+    await ensure_project_access(project_id, kb_id, db)
     rows = (await db.execute(
         select(OntologyConcept).where(OntologyConcept.project_id == project_id)
         .order_by(OntologyConcept.name)
@@ -74,13 +68,7 @@ async def list_relations(
     kb_id: uuid.UUID = Depends(get_kb_id),
     _user: User = Depends(get_current_user),
 ):
-    from shared_models import Project
-    from shared_errors import NotFoundException
-    proj = (await db.execute(
-        select(Project).where(Project.id == project_id, Project.kb_id == kb_id)
-    )).scalar_one_or_none()
-    if proj is None:
-        raise NotFoundException(message="项目不存在")
+    await ensure_project_access(project_id, kb_id, db)
     rows = (await db.execute(
         select(OntologyRelation).where(OntologyRelation.project_id == project_id)
     )).scalars().all()
@@ -119,14 +107,9 @@ async def extract_ontology(
     _user: User = require_role("editor"),
     _feature=check_feature("ontology_extraction"),
 ):
-    from shared_models import KnowledgeDoc, Project
+    from shared_models import KnowledgeDoc
     from shared_errors import NotFoundException
-    # Verify project belongs to this tenant (cross-tenant isolation)
-    proj = (await db.execute(
-        select(Project).where(Project.id == project_id, Project.kb_id == kb_id)
-    )).scalar_one_or_none()
-    if proj is None:
-        raise NotFoundException(message="项目不存在")
+    await ensure_project_access(project_id, kb_id, db)
     doc = (await db.execute(
         select(KnowledgeDoc).where(
             KnowledgeDoc.id == body.doc_id,

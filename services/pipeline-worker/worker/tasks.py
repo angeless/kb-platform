@@ -15,7 +15,6 @@ import logging
 import uuid
 from datetime import datetime, timezone
 
-import redis
 from sqlalchemy import select
 
 from shared_config.settings import get_settings

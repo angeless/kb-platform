@@ -16,12 +16,28 @@ from sqlalchemy import func as sa_func
 
 from shared_errors import ErrorCode, ForbiddenException, UnauthorizedException
 from shared_models import ApiKey, User
-
-logger = logging.getLogger(__name__)
 from shared_models.database import async_session_factory
 from shared_models.tenant import Tenant
 
+logger = logging.getLogger(__name__)
+
+from shared_models.project import Project
 from .services.auth_service import AuthService
+
+
+async def ensure_project_access(
+    project_id: uuid.UUID,
+    kb_id: uuid.UUID,
+    db: AsyncSession,
+) -> "Project":
+    """Verify that project_id belongs to the given tenant (kb_id). Raises NotFoundException if not."""
+    from shared_errors import NotFoundException
+    proj = (await db.execute(
+        select(Project).where(Project.id == project_id, Project.kb_id == kb_id)
+    )).scalar_one_or_none()
+    if proj is None:
+        raise NotFoundException(message="项目不存在")
+    return proj
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:

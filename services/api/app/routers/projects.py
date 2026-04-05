@@ -163,7 +163,8 @@ async def delete_project(
             "expires_in": conf["expires_in"],
         })
     if not verify_confirmation(confirmation_id, phrase, str(current_user.id)):
-        return JSONResponse(status_code=403, content={"error": "CONFIRMATION_INVALID", "message": "确认短语不正确或已过期"})
+        from shared_errors import ForbiddenException, ErrorCode
+        raise ForbiddenException(error_code=ErrorCode.CONFIRMATION_INVALID, message="确认短语不正确或已过期")
 
     await svc.delete(project_id)
     audit = AuditService(db, kb_id, current_user.id)

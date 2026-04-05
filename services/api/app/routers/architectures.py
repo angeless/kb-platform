@@ -126,7 +126,8 @@ async def publish_architecture(
             "expires_in": conf["expires_in"],
         })
     if not verify_confirmation(confirmation_id, phrase, str(_user.id)):
-        return JSONResponse(status_code=403, content={"error": "CONFIRMATION_INVALID", "message": "确认短语不正确或已过期"})
+        from shared_errors import ForbiddenException, ErrorCode
+        raise ForbiddenException(error_code=ErrorCode.CONFIRMATION_INVALID, message="确认短语不正确或已过期")
 
     svc = ArchitectureService(db, kb_id)
     arch = await svc.publish(arch_id)
@@ -266,7 +267,8 @@ async def rollback_architecture(
             "expires_in": conf["expires_in"],
         })
     if not verify_confirmation(confirmation_id, phrase, str(_user.id)):
-        return JSONResponse(status_code=403, content={"error": "CONFIRMATION_INVALID", "message": "确认短语不正确或已过期"})
+        from shared_errors import ForbiddenException, ErrorCode
+        raise ForbiddenException(error_code=ErrorCode.CONFIRMATION_INVALID, message="确认短语不正确或已过期")
 
     svc = ArchitectureService(db, kb_id)
     new_arch = await svc.rollback(arch_id, target_id)

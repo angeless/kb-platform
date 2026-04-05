@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from shared_errors import ErrorCode, NotFoundException
 from shared_schemas.common import DataResponse, ErrorDetail, ListResponse, PaginationMeta
 
-from app.deps import get_current_user, get_db, get_kb_id, require_role
+from app.deps import ensure_project_access, get_current_user, get_db, get_kb_id, require_role
 from shared_models import Skill, User
 
 router = APIRouter(prefix="/v1/projects/{project_id}/skills", tags=["skills"])
@@ -41,12 +41,7 @@ async def list_skills(
     kb_id: uuid.UUID = Depends(get_kb_id),
     _user: User = Depends(get_current_user),
 ):
-    from shared_models import Project
-    proj = (await db.execute(
-        select(Project).where(Project.id == project_id, Project.kb_id == kb_id)
-    )).scalar_one_or_none()
-    if proj is None:
-        raise NotFoundException(message="项目不存在")
+    await ensure_project_access(project_id, kb_id, db)
     base = select(Skill).where(Skill.project_id == project_id)
     total = (await db.execute(select(func.count()).select_from(base.subquery()))).scalar_one()
     rows = (await db.execute(
@@ -92,12 +87,7 @@ async def create_skill(
     kb_id: uuid.UUID = Depends(get_kb_id),
     _user: User = require_role("editor"),
 ):
-    from shared_models import Project
-    proj = (await db.execute(
-        select(Project).where(Project.id == project_id, Project.kb_id == kb_id)
-    )).scalar_one_or_none()
-    if proj is None:
-        raise NotFoundException(message="项目不存在")
+    await ensure_project_access(project_id, kb_id, db)
     # Auto-increment version if same project+stage already has skills
     latest = (await db.execute(
         select(func.max(Skill.version)).where(
@@ -135,12 +125,7 @@ async def update_skill(
     kb_id: uuid.UUID = Depends(get_kb_id),
     _user: User = require_role("editor"),
 ):
-    from shared_models import Project
-    proj = (await db.execute(
-        select(Project).where(Project.id == project_id, Project.kb_id == kb_id)
-    )).scalar_one_or_none()
-    if proj is None:
-        raise NotFoundException(message="项目不存在")
+    await ensure_project_access(project_id, kb_id, db)
     skill = (await db.execute(
         select(Skill).where(Skill.id == skill_id, Skill.project_id == project_id)
     )).scalar_one_or_none()
@@ -165,12 +150,7 @@ async def delete_skill(
     kb_id: uuid.UUID = Depends(get_kb_id),
     _user: User = require_role("project_admin"),
 ):
-    from shared_models import Project
-    proj = (await db.execute(
-        select(Project).where(Project.id == project_id, Project.kb_id == kb_id)
-    )).scalar_one_or_none()
-    if proj is None:
-        raise NotFoundException(message="项目不存在")
+    await ensure_project_access(project_id, kb_id, db)
     skill = (await db.execute(
         select(Skill).where(Skill.id == skill_id, Skill.project_id == project_id)
     )).scalar_one_or_none()

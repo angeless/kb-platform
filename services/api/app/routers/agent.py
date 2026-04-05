@@ -67,16 +67,16 @@ async def _check_rate_limit(
         return auth  # no limit
 
     try:
-        from shared_config.settings import get_redis_client
-        r = get_redis_client(decode_responses=True)
+        from shared_config.settings import get_async_redis_client
+        r = await get_async_redis_client(decode_responses=True)
         try:
             minute = int(time.time()) // 60
             key = f"rl:api:{api_key.id}:{minute}"
-            count = r.incr(key)
+            count = await r.incr(key)
             if count == 1:
-                r.expire(key, 120)
+                await r.expire(key, 120)
         finally:
-            r.close()
+            await r.aclose()
 
         if count > limit:
             seconds_left = 60 - (int(time.time()) % 60)

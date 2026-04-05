@@ -239,11 +239,16 @@ async def download_asset(
     svc = AssetService(db, kb_id, current_user.id)
     asset = await svc.get(asset_id)
     object_key = f"{kb_id}/{asset.project_id}/{asset.id}/{asset.filename}"
-    safe_filename = asset.filename.replace(chr(34), "_").replace(chr(13), "").replace(chr(10), "")
+    from urllib.parse import quote
+    # ASCII fallback: strip anything outside safe chars
+    ascii_name = "".join(c if c.isalnum() or c in "._- " else "_" for c in asset.filename)
+    # RFC 5987 UTF-8 encoded name for non-ASCII filenames
+    utf8_name = quote(asset.filename, safe="")
+    disposition = f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{utf8_name}"
     return StreamingResponse(
         content=storage.download_file_stream(object_key),
         media_type="application/octet-stream",
-        headers={"Content-Disposition": f'attachment; filename="{safe_filename}"'},
+        headers={"Content-Disposition": disposition},
     )
 
 

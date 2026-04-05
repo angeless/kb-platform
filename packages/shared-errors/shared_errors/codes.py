@@ -73,6 +73,9 @@ class ErrorCode(StrEnum):
     TENANT_QUOTA_EXCEEDED = "TENANT_QUOTA_EXCEEDED"
     TENANT_FEATURE_DISABLED = "TENANT_FEATURE_DISABLED"
 
+    # Confirmation
+    CONFIRMATION_INVALID = "CONFIRMATION_INVALID"
+
     # Validation
     VALIDATION_ERROR = "VALIDATION_ERROR"
 
@@ -127,6 +130,7 @@ ERROR_MESSAGES: dict[str, str] = {
     ErrorCode.EMPTY_ARCHIVE: "压缩包中没有支持的文件格式",
     ErrorCode.TENANT_QUOTA_EXCEEDED: "已达到当前套餐额度上限，请升级或联系管理员",
     ErrorCode.TENANT_FEATURE_DISABLED: "当前套餐不支持该功能，请升级套餐",
+    ErrorCode.CONFIRMATION_INVALID: "确认短语不正确或已过期",
     ErrorCode.VALIDATION_ERROR: "提交的信息有误，请检查后重试",
     ErrorCode.SYSTEM_INTERNAL_ERROR: "系统开了个小差，请稍后重试",
     ErrorCode.SYSTEM_RATE_LIMITED: "操作太频繁，请稍后再试",

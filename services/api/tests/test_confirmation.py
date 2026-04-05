@@ -50,13 +50,16 @@ class TestVerifyConfirmation:
         with _force_memory_fallback():
             assert verify_confirmation(result["confirmation_id"], "CONFIRM", "user1") is True
 
-    def test_wrong_user_returns_false(self):
+    def test_wrong_user_returns_false_but_token_survives(self):
         _memory_store.clear()
         _memory_expiry.clear()
         with _force_memory_fallback():
             result = generate_confirmation("delete", "user1", "CONFIRM")
         with _force_memory_fallback():
             assert verify_confirmation(result["confirmation_id"], "CONFIRM", "wrong_user") is False
+        # Token should survive — correct user can still verify
+        with _force_memory_fallback():
+            assert verify_confirmation(result["confirmation_id"], "CONFIRM", "user1") is True
 
     def test_one_time_use(self):
         _memory_store.clear()
