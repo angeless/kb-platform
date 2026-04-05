@@ -70,20 +70,26 @@ class Settings(BaseSettings):
 
     @property
     def celery_broker_url(self) -> str:
-        """Broker URL for Celery. Uses sentinel:// scheme when Sentinel is configured."""
+        """Broker URL for Celery. Uses sentinel:// scheme when Sentinel is configured.
+
+        Kombu expects: sentinel://:password@host1:port;host2:port/db
+        (single sentinel:// prefix, hosts separated by semicolons).
+        """
         sentinel_hosts = self.redis_sentinel_hosts.strip()
         if not sentinel_hosts:
             return self.redis_url
-        parts = []
+        host_parts = []
         for entry in sentinel_hosts.split(","):
             entry = entry.strip()
             if not entry:
                 continue
             if ":" not in entry:
                 entry = f"{entry}:26379"
-            pwd = f":{self.redis_password}@" if self.redis_password else ""
-            parts.append(f"sentinel://{pwd}{entry}/{self.redis_db}")
-        return ";".join(parts)
+            host_parts.append(entry)
+        if not host_parts:
+            return self.redis_url
+        pwd = f":{self.redis_password}@" if self.redis_password else ""
+        return f"sentinel://{pwd}{';'.join(host_parts)}/{self.redis_db}"
 
     @property
     def celery_broker_transport_options(self) -> dict:
@@ -242,6 +248,7 @@ def get_redis_client(decode_responses: bool = False):
             settings.redis_sentinel_master,
             password=settings.redis_password or None,
             db=settings.redis_db,
+            decode_responses=decode_responses,
         )
 
     return _redis.from_url(settings.redis_url, decode_responses=decode_responses)
@@ -283,6 +290,7 @@ def get_async_redis_client(decode_responses: bool = False):
             settings.redis_sentinel_master,
             password=settings.redis_password or None,
             db=settings.redis_db,
+            decode_responses=decode_responses,
         )
 
     return _aioredis.from_url(settings.redis_url, decode_responses=decode_responses)

@@ -1245,7 +1245,7 @@ def _auto_fix_format(content: str, issues: list[str]) -> tuple[str, bool]:
 # Ontology extraction (v0.52.7 — Gap-9 fix)
 # ---------------------------------------------------------------------------
 
-@celery_app.task(bind=True, name="orchestrator.extract_ontology")
+@celery_app.task(bind=True, name="orchestrator.extract_ontology", max_retries=2)
 def extract_ontology(self, project_id: str, doc_id: str) -> dict:
     """Extract concepts and relations from a knowledge document into OntologyConcept/Relation.
 

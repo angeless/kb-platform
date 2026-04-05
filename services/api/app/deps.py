@@ -165,7 +165,8 @@ def check_quota(resource: str):
             logger.warning("check_quota(%s): no Tenant row for kb_id=%s — denying", resource, current_user.kb_id)
             raise ForbiddenException(
                 error_code=ErrorCode.TENANT_QUOTA_EXCEEDED,
-                message="租户信息缺失，请联系管理员",
+                message="租户初始化中，请稍后重试或联系管理员",
+                detail={"reason": "tenant_not_found", "kb_id": str(current_user.kb_id)},
             )
 
         if resource == "projects" and tenant.quota_projects is not None:
@@ -207,7 +208,8 @@ def check_feature(feature_name: str):
             logger.warning("check_feature(%s): no Tenant row for kb_id=%s — denying", feature_name, current_user.kb_id)
             raise ForbiddenException(
                 error_code=ErrorCode.TENANT_FEATURE_DISABLED,
-                message="租户信息缺失，请联系管理员",
+                message="租户初始化中，请稍后重试或联系管理员",
+                detail={"reason": "tenant_not_found", "kb_id": str(current_user.kb_id)},
             )
         flags = tenant.feature_flags or {}
         if not flags.get(feature_name, False):

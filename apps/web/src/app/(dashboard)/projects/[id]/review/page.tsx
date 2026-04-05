@@ -139,7 +139,7 @@ function ReviewKanban({ projectId }: { projectId: string }) {
     try {
       await api.post(`/v1/projects/${projectId}/reviews/${reviewId}/approve`, {});
       await fetchAll();
-    } catch (e) { if (e instanceof ApiClientError) showErrorToast(e.message); }
+    } catch (e) { showErrorToast(e instanceof ApiClientError ? e.message : "操作失败"); }
     finally { setActionLoading(null); }
   };
 
@@ -153,7 +153,7 @@ function ReviewKanban({ projectId }: { projectId: string }) {
     try {
       await api.post(`/v1/projects/${projectId}/reviews/${reviewId}/reject`, { note: reason });
       await fetchAll();
-    } catch (e) { if (e instanceof ApiClientError) showErrorToast(e.message); }
+    } catch (e) { showErrorToast(e instanceof ApiClientError ? e.message : "操作失败"); }
     finally { setActionLoading(null); }
   };
 
@@ -162,7 +162,7 @@ function ReviewKanban({ projectId }: { projectId: string }) {
     try {
       await api.post(`/v1/projects/${projectId}/reviews/${reviewId}/resubmit`, {});
       await fetchAll();
-    } catch (e) { if (e instanceof ApiClientError) showErrorToast(e.message); }
+    } catch (e) { showErrorToast(e instanceof ApiClientError ? e.message : "操作失败"); }
     finally { setActionLoading(null); }
   };
 

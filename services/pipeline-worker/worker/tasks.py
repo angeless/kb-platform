@@ -257,6 +257,12 @@ def run_pipeline(self, project_id: str, job_id: str, asset_ids: list[str], user_
             elif current_stage == "review_notify":
                 notify_review(db, pid, doc_ids, conflict_ids, config=_get_config(current_stage))
 
+            else:
+                logger.error("Unknown pipeline stage '%s' — skipping", current_stage)
+                _log_stage_end(db, stage_log, "skipped")
+                _publish_event(pid, jid, current_stage, "skipped")
+                continue
+
             _log_stage_end(db, stage_log, "completed")
             _publish_event(pid, jid, current_stage, "completed")
             completed_stages.add(current_stage)

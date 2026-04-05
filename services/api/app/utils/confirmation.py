@@ -9,6 +9,7 @@ without requiring out-of-band delivery (email/SMS).
 """
 
 import hmac
+import json
 import logging
 import time
 import uuid
@@ -32,7 +33,7 @@ def generate_confirmation(action: str, user_id: str, expected_phrase: str) -> di
         the user for it independently (e.g. "type the project name").
     """
     confirmation_id = str(uuid.uuid4())
-    value = f"{expected_phrase}:{user_id}:{action}"
+    value = json.dumps({"phrase": expected_phrase, "user_id": user_id, "action": action})
 
     try:
         from shared_config.settings import get_redis_client
@@ -62,8 +63,8 @@ def verify_confirmation(confirmation_id: str, phrase: str, user_id: str) -> bool
             stored = r.get(key)
             if stored:
                 stored_str = stored.decode() if isinstance(stored, bytes) else stored
-                stored_phrase, stored_user, _action = stored_str.split(":", 2)
-                if hmac.compare_digest(stored_phrase, phrase) and hmac.compare_digest(stored_user, user_id):
+                data = json.loads(stored_str)
+                if hmac.compare_digest(data["phrase"], phrase) and hmac.compare_digest(data["user_id"], user_id):
                     r.delete(key)
                     return True
         finally:
@@ -72,8 +73,8 @@ def verify_confirmation(confirmation_id: str, phrase: str, user_id: str) -> bool
         logger.warning("Redis verification failed: %s — trying memory fallback", e)
         stored = _memory_store.pop(confirmation_id, None)
         if stored:
-            stored_phrase, stored_user, _action = stored.split(":", 2)
-            return hmac.compare_digest(stored_phrase, phrase) and hmac.compare_digest(stored_user, user_id)
+            data = json.loads(stored)
+            return hmac.compare_digest(data["phrase"], phrase) and hmac.compare_digest(data["user_id"], user_id)
 
     return False
 
