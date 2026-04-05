@@ -266,6 +266,7 @@ def parse(content: bytes, filename: str) -> list[dict]:
                     "structure_type": "paragraph",
                     "extraction_confidence": 0.9,
                     "language": detect_language(sub_text),
+                    "semantic_boundaries": None,
                 })
 
         # Extract keyframes → OCR (v0.48.4)
@@ -300,6 +301,8 @@ def parse(content: bytes, filename: str) -> list[dict]:
                 "original_format": "video",
                 "structure_type": "metadata",
                 "extraction_confidence": 1.0,
+                "language": None,
+                "semantic_boundaries": None,
             })
 
         logger.info(
