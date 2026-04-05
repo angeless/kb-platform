@@ -168,19 +168,20 @@ async def _batch_load_source_assets(
 
     doc_ids = [pair[0] for pair in doc_version_pairs]
 
-    # Batch-load all relevant doc_version IDs
-    dv_q = select(KnowledgeDocVersion.id, KnowledgeDocVersion.doc_id).where(
+    # Batch-load doc_version IDs filtered to current_version only
+    version_map = {pair[0]: pair[1] for pair in doc_version_pairs}
+    dv_q = select(KnowledgeDocVersion.id, KnowledgeDocVersion.doc_id, KnowledgeDocVersion.version).where(
         KnowledgeDocVersion.doc_id.in_(doc_ids)
     )
     dv_rows = (await db.execute(dv_q)).all()
 
-    # Build a set of valid (doc_id -> version -> dv_id) and filter to matching versions
-    version_map = {pair[0]: pair[1] for pair in doc_version_pairs}
     dv_id_to_doc: dict[uuid.UUID, uuid.UUID] = {}
     dv_ids: list[uuid.UUID] = []
     for row in dv_rows:
-        dv_id_to_doc[row.id] = row.doc_id
-        dv_ids.append(row.id)
+        expected_version = version_map.get(row.doc_id)
+        if expected_version is not None and row.version == expected_version:
+            dv_id_to_doc[row.id] = row.doc_id
+            dv_ids.append(row.id)
 
     if not dv_ids:
         return {}

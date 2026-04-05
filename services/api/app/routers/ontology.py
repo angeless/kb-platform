@@ -119,8 +119,14 @@ async def extract_ontology(
     _user: User = require_role("editor"),
     _feature=check_feature("ontology_extraction"),
 ):
-    from shared_models import KnowledgeDoc
+    from shared_models import KnowledgeDoc, Project
     from shared_errors import NotFoundException
+    # Verify project belongs to this tenant (cross-tenant isolation)
+    proj = (await db.execute(
+        select(Project).where(Project.id == project_id, Project.kb_id == kb_id)
+    )).scalar_one_or_none()
+    if proj is None:
+        raise NotFoundException(message="项目不存在")
     doc = (await db.execute(
         select(KnowledgeDoc).where(
             KnowledgeDoc.id == body.doc_id,

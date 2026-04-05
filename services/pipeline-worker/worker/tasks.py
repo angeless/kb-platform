@@ -288,7 +288,8 @@ def run_pipeline(self, project_id: str, job_id: str, asset_ids: list[str], user_
 
         # Update job status and log stage failure in a new session to avoid stale state
         try:
-            db.rollback()
+            if db is not None:
+                db.rollback()
             new_db = sync_session_factory()
             try:
                 job = new_db.execute(select(Job).where(Job.id == jid)).scalar_one_or_none()
@@ -296,17 +297,29 @@ def run_pipeline(self, project_id: str, job_id: str, asset_ids: list[str], user_
                     job.status = "failed"
                     job.error_message = f"Stage '{current_stage}' failed: {exc}"
 
-                # Log stage failure
+                # Update existing running log instead of creating orphaned duplicate
                 if current_stage:
-                    fail_log = PipelineStageLog(
-                        job_id=jid,
-                        stage_name=current_stage,
-                        status="failed",
-                        started_at=datetime.now(timezone.utc),
-                        finished_at=datetime.now(timezone.utc),
-                        error_message=str(exc)[:2000],
-                    )
-                    new_db.add(fail_log)
+                    existing_log = new_db.execute(
+                        select(PipelineStageLog).where(
+                            PipelineStageLog.job_id == jid,
+                            PipelineStageLog.stage_name == current_stage,
+                            PipelineStageLog.status == "running",
+                        )
+                    ).scalar_one_or_none()
+                    if existing_log:
+                        existing_log.status = "failed"
+                        existing_log.finished_at = datetime.now(timezone.utc)
+                        existing_log.error_message = str(exc)[:2000]
+                    else:
+                        fail_log = PipelineStageLog(
+                            job_id=jid,
+                            stage_name=current_stage,
+                            status="failed",
+                            started_at=datetime.now(timezone.utc),
+                            finished_at=datetime.now(timezone.utc),
+                            error_message=str(exc)[:2000],
+                        )
+                        new_db.add(fail_log)
                 new_db.commit()
             finally:
                 new_db.close()

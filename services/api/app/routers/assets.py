@@ -6,7 +6,7 @@ import uuid
 logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
-from fastapi.responses import Response
+from fastapi.responses import Response, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared_config.settings import Settings
@@ -239,12 +239,11 @@ async def download_asset(
     svc = AssetService(db, kb_id, current_user.id)
     asset = await svc.get(asset_id)
     object_key = f"{kb_id}/{asset.project_id}/{asset.id}/{asset.filename}"
-    content = storage.download_file(object_key)
-    media_type = "application/octet-stream"
-    return Response(
-        content=content,
-        media_type=media_type,
-        headers={"Content-Disposition": f'attachment; filename="{asset.filename.replace(chr(34), "_").replace(chr(13), "").replace(chr(10), "")}"'},
+    safe_filename = asset.filename.replace(chr(34), "_").replace(chr(13), "").replace(chr(10), "")
+    return StreamingResponse(
+        content=storage.download_file_stream(object_key),
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{safe_filename}"'},
     )
 
 
