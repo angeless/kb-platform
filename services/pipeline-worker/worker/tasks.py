@@ -309,7 +309,24 @@ def run_pipeline(self, project_id: str, job_id: str, asset_ids: list[str], user_
         except Exception as inner_exc:
             logger.exception("Failed to record stage failure for job %s: %s", jid, inner_exc)
 
-        _publish_event(pid, jid, current_stage, "failed")
+        if current_stage:
+            _publish_event(pid, jid, current_stage, "failed")
+        else:
+            # Exception before the stage loop — publish a generic failure event
+            try:
+                from shared_config.settings import get_redis_client
+                r = get_redis_client()
+                event = json.dumps({
+                    "type": "pipeline_stage",
+                    "job_id": str(jid),
+                    "stage": "pipeline_init",
+                    "status": "failed",
+                    "stage_index": 0,
+                    "total_stages": 9,
+                })
+                r.publish(f"job_events:{pid}", event)
+            except Exception:
+                logger.warning("Failed to publish pipeline_init failure event")
         raise self.retry(exc=exc)
 
     finally:

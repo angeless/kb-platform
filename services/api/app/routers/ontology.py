@@ -15,8 +15,19 @@ from shared_models import OntologyConcept, OntologyRelation, User
 
 router = APIRouter(prefix="/v1/projects/{project_id}/ontology", tags=["ontology"])
 
-# Lazy Celery app for dispatching orchestrator tasks
+# Module-level Celery app for dispatching orchestrator tasks
 _celery_app: Celery | None = None
+
+
+def _get_celery_app() -> Celery:
+    global _celery_app
+    if _celery_app is None:
+        settings = get_settings()
+        app = Celery(broker=settings.celery_broker_url)
+        if settings.celery_broker_transport_options:
+            app.conf.broker_transport_options = settings.celery_broker_transport_options
+        _celery_app = app
+    return _celery_app
 
 
 @router.get(
@@ -90,13 +101,7 @@ async def extract_ontology(
     _user: User = require_role("editor"),
     _feature=check_feature("ontology_extraction"),
 ):
-    global _celery_app
-    if _celery_app is None:
-        settings = get_settings()
-        _celery_app = Celery(broker=settings.celery_broker_url)
-        if settings.celery_broker_transport_options:
-            _celery_app.conf.broker_transport_options = settings.celery_broker_transport_options
-    _celery_app.send_task(
+    _get_celery_app().send_task(
         "orchestrator.extract_ontology",
         args=[str(project_id), str(body.doc_id)],
     )

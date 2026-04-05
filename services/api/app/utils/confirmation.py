@@ -71,10 +71,13 @@ def verify_confirmation(confirmation_id: str, phrase: str, user_id: str) -> bool
             r.close()
     except Exception as e:
         logger.warning("Redis verification failed: %s — trying memory fallback", e)
-        stored = _memory_store.pop(confirmation_id, None)
+        stored = _memory_store.get(confirmation_id)
         if stored:
             data = json.loads(stored)
-            return hmac.compare_digest(data["phrase"], phrase) and hmac.compare_digest(data["user_id"], user_id)
+            if hmac.compare_digest(data["phrase"], phrase) and hmac.compare_digest(data["user_id"], user_id):
+                _memory_store.pop(confirmation_id, None)
+                _memory_expiry.pop(confirmation_id, None)
+                return True
 
     return False
 
