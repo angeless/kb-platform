@@ -20,6 +20,8 @@ export const STATUS_LABELS: Record<string, string> = {
   completed: "已完成",
   running: "运行中",
   queued: "排队中",
+  assigned: "待审批",
+  approved: "已通过",
 };
 
 export const DOC_TYPE_LABELS: Record<string, string> = {

@@ -91,6 +91,22 @@ class ApiClient {
       throw new ApiClientError("登录已过期，请重新登录", "TOKEN_EXPIRED", 401);
     }
 
+    // 428 confirmation required — extract challenge info for the UI
+    if (resp.status === 428) {
+      let confirmBody: Record<string, unknown>;
+      try {
+        confirmBody = await resp.json();
+      } catch {
+        throw new ApiClientError(getUserMessage("PARSE_ERROR"), "PARSE_ERROR", 428);
+      }
+      throw new ApiConfirmationError(
+        (confirmBody.message as string) || "需要确认操作",
+        (confirmBody.confirmation_id as string) || "",
+        (confirmBody.challenge as string) || "",
+        (confirmBody.expires_in as number) || 300,
+      );
+    }
+
     let body: unknown;
     try {
       body = await resp.json();
@@ -131,8 +147,9 @@ class ApiClient {
     });
   }
 
-  async del<T>(path: string): Promise<ApiResponse<T>> {
-    return this.request<T>(path, { method: "DELETE" });
+  async del<T>(path: string, params?: Record<string, string>): Promise<ApiResponse<T>> {
+    const url = params ? `${path}?${new URLSearchParams(params)}` : path;
+    return this.request<T>(url, { method: "DELETE" });
   }
 }
 
@@ -145,6 +162,19 @@ export class ApiClientError extends Error {
   ) {
     super(message);
     this.name = "ApiClientError";
+  }
+}
+
+/** Thrown when backend returns 428 CONFIRMATION_REQUIRED. */
+export class ApiConfirmationError extends ApiClientError {
+  constructor(
+    message: string,
+    public confirmationId: string,
+    public challenge: string,
+    public expiresIn: number,
+  ) {
+    super(message, "CONFIRMATION_REQUIRED", 428);
+    this.name = "ApiConfirmationError";
   }
 }
 
