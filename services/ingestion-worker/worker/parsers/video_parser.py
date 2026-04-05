@@ -195,6 +195,8 @@ def _ocr_frames(frames: list[tuple[str, float]], filename: str) -> list[dict]:
                 chunk["tags"]["timestamp_s"] = timestamp_s
                 chunk["tags"]["video_filename"] = filename
                 chunk["page_or_timestamp"] = f"frame_{timestamp_s:.0f}s"
+                chunk["original_format"] = "video_frame"
+                chunk["semantic_boundaries"] = {"timestamp_ms": int(timestamp_s * 1000)}
                 chunks.append(chunk)
         except Exception as e:
             logger.warning("OCR failed for frame at %.0fs: %s", timestamp_s, e)
@@ -247,6 +249,8 @@ def parse(content: bytes, filename: str) -> list[dict]:
                     logger.warning("ASR processing failed for %s: %s", filename, e)
 
         # Extract embedded subtitles
+        from worker.parsers.ir_utils import detect_language
+
         for i in range(metadata.get("subtitle_streams", 0)):
             sub_text = _extract_subtitles(tmp_video, i)
             if sub_text:
@@ -258,6 +262,11 @@ def parse(content: bytes, filename: str) -> list[dict]:
                         "stream_index": i,
                         "video_filename": filename,
                     },
+                    "original_format": "subtitle",
+                    "structure_type": "paragraph",
+                    "extraction_confidence": 0.9,
+                    "language": detect_language(sub_text),
+                    "semantic_boundaries": None,
                 })
 
         # Extract keyframes → OCR (v0.48.4)
@@ -289,6 +298,11 @@ def parse(content: bytes, filename: str) -> list[dict]:
                     "video_filename": filename,
                     **video_meta_tags,
                 },
+                "original_format": "video",
+                "structure_type": "metadata",
+                "extraction_confidence": 1.0,
+                "language": None,
+                "semantic_boundaries": None,
             })
 
         logger.info(

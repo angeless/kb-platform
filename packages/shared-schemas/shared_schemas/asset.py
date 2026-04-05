@@ -17,6 +17,7 @@ class AssetOut(BaseModel):
     parse_status: str
     uploaded_by: UUID
     uploaded_at: datetime
+    tags: dict | None = None  # Aggregated from first chunk (v0.52.10 — Gap-15 fix)
 
     model_config = {"from_attributes": True}
 

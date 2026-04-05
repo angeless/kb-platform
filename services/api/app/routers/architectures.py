@@ -2,7 +2,8 @@
 
 import uuid
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
+from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared_schemas.architecture import ArchitectureOut, NodeCreate, NodeOut, NodeUpdate
@@ -107,10 +108,27 @@ async def list_nodes(
 )
 async def publish_architecture(
     arch_id: uuid.UUID,
+    confirmation_id: str | None = Query(None),
+    phrase: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
     kb_id: uuid.UUID = Depends(get_kb_id),
     _user: User = require_role("project_admin"),
 ):
+    # Confirmation phrase gate — user must type "PUBLISH" to confirm
+    from app.utils.confirmation import generate_confirmation, verify_confirmation
+    if not confirmation_id or not phrase:
+        conf = generate_confirmation("publish_architecture", str(_user.id), "PUBLISH")
+        return JSONResponse(status_code=428, content={
+            "error": "CONFIRMATION_REQUIRED",
+            "message": "请输入 PUBLISH 以确认发布",
+            "confirmation_id": conf["confirmation_id"],
+            "challenge": "请输入「PUBLISH」以确认发布架构",
+            "expires_in": conf["expires_in"],
+        })
+    if not verify_confirmation(confirmation_id, phrase, str(_user.id)):
+        from shared_errors import ForbiddenException, ErrorCode
+        raise ForbiddenException(error_code=ErrorCode.CONFIRMATION_INVALID, message="确认短语不正确或已过期")
+
     svc = ArchitectureService(db, kb_id)
     arch = await svc.publish(arch_id)
     return DataResponse(data=ArchitectureOut.model_validate(arch))
@@ -231,10 +249,27 @@ async def compare_architectures(
 async def rollback_architecture(
     arch_id: uuid.UUID,
     target_id: uuid.UUID,
+    confirmation_id: str | None = Query(None),
+    phrase: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
     kb_id: uuid.UUID = Depends(get_kb_id),
     _user: User = require_role("project_admin"),
 ):
+    # Confirmation phrase gate — user must type "ROLLBACK" to confirm
+    from app.utils.confirmation import generate_confirmation, verify_confirmation
+    if not confirmation_id or not phrase:
+        conf = generate_confirmation("rollback_architecture", str(_user.id), "ROLLBACK")
+        return JSONResponse(status_code=428, content={
+            "error": "CONFIRMATION_REQUIRED",
+            "message": "请输入 ROLLBACK 以确认回滚",
+            "confirmation_id": conf["confirmation_id"],
+            "challenge": "请输入「ROLLBACK」以确认回滚架构",
+            "expires_in": conf["expires_in"],
+        })
+    if not verify_confirmation(confirmation_id, phrase, str(_user.id)):
+        from shared_errors import ForbiddenException, ErrorCode
+        raise ForbiddenException(error_code=ErrorCode.CONFIRMATION_INVALID, message="确认短语不正确或已过期")
+
     svc = ArchitectureService(db, kb_id)
     new_arch = await svc.rollback(arch_id, target_id)
     return DataResponse(data=ArchitectureOut.model_validate(new_arch))

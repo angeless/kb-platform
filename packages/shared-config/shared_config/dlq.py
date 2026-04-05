@@ -20,8 +20,8 @@ DLQ_MAX_SIZE = 1000
 
 
 def _get_redis_client() -> redis.Redis:
-    settings = get_settings()
-    return redis.Redis.from_url(settings.redis_url, decode_responses=True)
+    from .settings import get_redis_client as _get_client
+    return _get_client(decode_responses=True)
 
 
 def _resolve_queue_name(task_name: str, default_queue: str) -> str:

@@ -3,13 +3,14 @@
 import uuid
 
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared_schemas.common import DataResponse, ErrorDetail, ListResponse, PaginationMeta
 from shared_schemas.cross_reference import RouteContentRequest
 from shared_schemas.project import ProjectCreate, ProjectOut, ProjectUpdate
 
-from app.deps import get_current_user, get_db, get_kb_id, require_role
+from app.deps import check_quota, get_current_user, get_db, get_kb_id, require_role
 from shared_models import User
 from app.services.audit_service import AuditService
 from app.services.project_service import ProjectService
@@ -40,6 +41,7 @@ async def create_project(
     db: AsyncSession = Depends(get_db),
     kb_id: uuid.UUID = Depends(get_kb_id),
     current_user: User = Depends(get_current_user),
+    _quota=check_quota("projects"),
 ):
     svc = ProjectService(db, kb_id)
     project = await svc.create(name=body.name, industry_hint=body.industry_hint)
@@ -141,11 +143,29 @@ async def update_project(
 )
 async def delete_project(
     project_id: uuid.UUID,
+    confirmation_id: str | None = Query(None),
+    phrase: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
     kb_id: uuid.UUID = Depends(get_kb_id),
     current_user: User = require_role("tenant_admin"),
 ):
+    # Confirmation phrase gate — user must type the project name to confirm
+    from app.utils.confirmation import generate_confirmation, verify_confirmation
     svc = ProjectService(db, kb_id)
+    project = await svc.get(project_id)
+    if not confirmation_id or not phrase:
+        conf = generate_confirmation("delete_project", str(current_user.id), project.name)
+        return JSONResponse(status_code=428, content={
+            "error": "CONFIRMATION_REQUIRED",
+            "message": "请输入项目名称以确认删除",
+            "confirmation_id": conf["confirmation_id"],
+            "challenge": f"请输入「{project.name}」以确认删除此项目",
+            "expires_in": conf["expires_in"],
+        })
+    if not verify_confirmation(confirmation_id, phrase, str(current_user.id)):
+        from shared_errors import ForbiddenException, ErrorCode
+        raise ForbiddenException(error_code=ErrorCode.CONFIRMATION_INVALID, message="确认短语不正确或已过期")
+
     await svc.delete(project_id)
     audit = AuditService(db, kb_id, current_user.id)
     await audit.log("delete_project", "project", project_id, project_id=project_id)

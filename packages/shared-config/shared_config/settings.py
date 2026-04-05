@@ -68,6 +68,39 @@ class Settings(BaseSettings):
             return f"redis://:{self.redis_password}@{self.redis_host}:{self.redis_port}/{self.redis_db}"
         return f"redis://{self.redis_host}:{self.redis_port}/{self.redis_db}"
 
+    @property
+    def celery_broker_url(self) -> str:
+        """Broker URL for Celery. Uses sentinel:// scheme when Sentinel is configured.
+
+        Kombu expects: sentinel://:password@host1:port;host2:port/db
+        (single sentinel:// prefix, hosts separated by semicolons).
+        """
+        sentinel_hosts = self.redis_sentinel_hosts.strip()
+        if not sentinel_hosts:
+            return self.redis_url
+        host_parts = []
+        for entry in sentinel_hosts.split(","):
+            entry = entry.strip()
+            if not entry:
+                continue
+            if ":" not in entry:
+                entry = f"{entry}:26379"
+            host_parts.append(entry)
+        if not host_parts:
+            return self.redis_url
+        pwd = f":{self.redis_password}@" if self.redis_password else ""
+        return f"sentinel://{pwd}{';'.join(host_parts)}/{self.redis_db}"
+
+    @property
+    def celery_broker_transport_options(self) -> dict:
+        """Transport options for Celery Sentinel broker. Empty dict when not using Sentinel."""
+        if not self.redis_sentinel_hosts.strip():
+            return {}
+        opts: dict = {"master_name": self.redis_sentinel_master}
+        if self.redis_password:
+            opts["sentinel_kwargs"] = {"password": self.redis_password}
+        return opts
+
     # MinIO / S3
     s3_endpoint: str = "http://localhost:9000"
     s3_access_key: str = "minioadmin"
@@ -176,3 +209,88 @@ class Settings(BaseSettings):
 @lru_cache()
 def get_settings() -> Settings:
     return Settings()
+
+
+def get_redis_client(decode_responses: bool = False):
+    """Create a Redis client, using Sentinel if configured (v0.52.6 — Gap-6 fix).
+
+    When redis_sentinel_hosts is set, connects via Sentinel to discover the master.
+    Otherwise, falls back to direct redis_url connection.
+    """
+    import redis as _redis
+
+    settings = get_settings()
+    sentinel_hosts = settings.redis_sentinel_hosts.strip()
+
+    if sentinel_hosts:
+        from redis.sentinel import Sentinel
+        sentinels = []
+        for entry in sentinel_hosts.split(","):
+            entry = entry.strip()
+            if not entry:
+                continue
+            if ":" in entry:
+                host, port_str = entry.rsplit(":", 1)
+                try:
+                    sentinels.append((host, int(port_str)))
+                except ValueError:
+                    raise ValueError(f"Invalid Redis Sentinel host format: '{entry}'. Expected 'host:port'")
+            else:
+                sentinels.append((entry, 26379))
+
+        sentinel = Sentinel(
+            sentinels,
+            password=settings.redis_password or None,
+            db=settings.redis_db,
+            decode_responses=decode_responses,
+        )
+        return sentinel.master_for(
+            settings.redis_sentinel_master,
+            password=settings.redis_password or None,
+            db=settings.redis_db,
+            decode_responses=decode_responses,
+        )
+
+    return _redis.from_url(settings.redis_url, decode_responses=decode_responses)
+
+
+def get_async_redis_client(decode_responses: bool = False):
+    """Create an async Redis client, using Sentinel if configured.
+
+    Async counterpart of get_redis_client() for FastAPI/aioredis contexts.
+    """
+    import redis.asyncio as _aioredis
+
+    settings = get_settings()
+    sentinel_hosts = settings.redis_sentinel_hosts.strip()
+
+    if sentinel_hosts:
+        from redis.asyncio.sentinel import Sentinel
+        sentinels = []
+        for entry in sentinel_hosts.split(","):
+            entry = entry.strip()
+            if not entry:
+                continue
+            if ":" in entry:
+                host, port_str = entry.rsplit(":", 1)
+                try:
+                    sentinels.append((host, int(port_str)))
+                except ValueError:
+                    raise ValueError(f"Invalid Redis Sentinel host format: '{entry}'. Expected 'host:port'")
+            else:
+                sentinels.append((entry, 26379))
+
+        sentinel = Sentinel(
+            sentinels,
+            password=settings.redis_password or None,
+            db=settings.redis_db,
+            decode_responses=decode_responses,
+        )
+        return sentinel.master_for(
+            settings.redis_sentinel_master,
+            password=settings.redis_password or None,
+            db=settings.redis_db,
+            decode_responses=decode_responses,
+        )
+
+    return _aioredis.from_url(settings.redis_url, decode_responses=decode_responses)

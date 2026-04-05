@@ -118,6 +118,23 @@ class StorageClient:
             logger.error("Failed to download %s from bucket %s: %s", object_key, self.bucket, e)
             raise
 
+    def download_file_stream(self, object_key: str, chunk_size: int = 64 * 1024):
+        """Stream file from S3/MinIO in chunks. Yields bytes chunks."""
+        try:
+            resp = self.client.get_object(Bucket=self.bucket, Key=object_key)
+            body = resp["Body"]
+            try:
+                while True:
+                    chunk = body.read(chunk_size)
+                    if not chunk:
+                        break
+                    yield chunk
+            finally:
+                body.close()
+        except ClientError as e:
+            logger.error("Failed to stream %s from bucket %s: %s", object_key, self.bucket, e)
+            raise
+
     def presign_url(self, object_key: str, expires_in: int = 3600) -> str:
         """Generate a pre-signed URL for downloading a file."""
         try:

@@ -137,6 +137,8 @@ def _make_chunk(
     heading_level: int,
     heading_text: str | None,
 ) -> dict:
+    from .ir_utils import detect_language, infer_structure_type
+
     return {
         "content_text": text,
         "page_or_timestamp": timestamp,
@@ -146,4 +148,9 @@ def _make_chunk(
             "heading_level": heading_level,
             "heading_text": heading_text,
         },
+        "original_format": "docx",
+        "structure_type": "heading" if heading_level > 0 else infer_structure_type(text),
+        "extraction_confidence": 1.0,
+        "language": detect_language(text),
+        "semantic_boundaries": None,
     }

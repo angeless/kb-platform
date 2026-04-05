@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { api, ApiClientError } from "@/lib/api";
+import { api, ApiClientError, ApiConfirmationError } from "@/lib/api";
+import { PhraseConfirmDialog } from "@/components/phrase-confirm-dialog";
 import { PermissionGuard } from "@/components/PermissionGuard";
 
 interface Project {
@@ -126,12 +127,28 @@ export default function ProjectSettingsPage() {
     }
   };
 
-  const handleDelete = async () => {
+  const [confirmDialog, setConfirmDialog] = useState<{
+    confirmationId: string;
+    challenge: string;
+  } | null>(null);
+
+  const handleDelete = async (confirmationId?: string, phrase?: string) => {
     setDeleting(true);
     try {
-      await api.del(`/v1/projects/${projectId}`);
+      const params = confirmationId && phrase
+        ? { confirmation_id: confirmationId, phrase }
+        : undefined;
+      await api.del(`/v1/projects/${projectId}`, params);
       router.push("/projects");
     } catch (e) {
+      if (e instanceof ApiConfirmationError) {
+        setConfirmDialog({
+          confirmationId: e.confirmationId,
+          challenge: e.challenge,
+        });
+        setDeleting(false);
+        return;
+      }
       setError(e instanceof ApiClientError ? e.message : "删除失败");
       setDeleting(false);
     }
@@ -432,7 +449,7 @@ export default function ProjectSettingsPage() {
           <div className="flex items-center gap-3">
             <span className="text-sm text-red-600">确认删除？此操作不可撤销。</span>
             <button
-              onClick={handleDelete}
+              onClick={() => handleDelete()}
               disabled={deleting}
               className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
             >
@@ -625,6 +642,19 @@ export default function ProjectSettingsPage() {
         </div>
         </PermissionGuard>
       )}
+
+      {/* 428 Confirmation Dialog for destructive operations */}
+      <PhraseConfirmDialog
+        open={confirmDialog !== null}
+        challenge={confirmDialog?.challenge ?? ""}
+        onConfirm={(phrase) => {
+          if (confirmDialog) {
+            handleDelete(confirmDialog.confirmationId, phrase);
+            setConfirmDialog(null);
+          }
+        }}
+        onCancel={() => setConfirmDialog(null)}
+      />
     </div>
   );
 }

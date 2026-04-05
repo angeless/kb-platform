@@ -40,9 +40,14 @@ _background_tasks: set[asyncio.Task] = set()
 
 def _fire_and_forget(coro) -> None:
     """Schedule a coroutine as a background task with GC-safe reference."""
+    def _on_done(t: asyncio.Task) -> None:
+        _background_tasks.discard(t)
+        if not t.cancelled() and t.exception():
+            logger.warning("Background task failed: %s", t.exception())
+
     task = asyncio.create_task(coro)
     _background_tasks.add(task)
-    task.add_done_callback(_background_tasks.discard)
+    task.add_done_callback(_on_done)
 
 
 _RESP_AUTH = {
@@ -62,14 +67,16 @@ async def _check_rate_limit(
         return auth  # no limit
 
     try:
-        import redis
-        r = redis.from_url(settings.redis_url, decode_responses=True)
-        minute = int(time.time()) // 60
-        key = f"rl:api:{api_key.id}:{minute}"
-        count = r.incr(key)
-        if count == 1:
-            r.expire(key, 120)
-        r.close()
+        from shared_config.settings import get_async_redis_client
+        r = await get_async_redis_client(decode_responses=True)
+        try:
+            minute = int(time.time()) // 60
+            key = f"rl:api:{api_key.id}:{minute}"
+            count = await r.incr(key)
+            if count == 1:
+                await r.expire(key, 120)
+        finally:
+            await r.aclose()
 
         if count > limit:
             seconds_left = 60 - (int(time.time()) % 60)
@@ -161,19 +168,20 @@ async def _batch_load_source_assets(
 
     doc_ids = [pair[0] for pair in doc_version_pairs]
 
-    # Batch-load all relevant doc_version IDs
-    dv_q = select(KnowledgeDocVersion.id, KnowledgeDocVersion.doc_id).where(
+    # Batch-load doc_version IDs filtered to current_version only
+    version_map = {pair[0]: pair[1] for pair in doc_version_pairs}
+    dv_q = select(KnowledgeDocVersion.id, KnowledgeDocVersion.doc_id, KnowledgeDocVersion.version).where(
         KnowledgeDocVersion.doc_id.in_(doc_ids)
     )
     dv_rows = (await db.execute(dv_q)).all()
 
-    # Build a set of valid (doc_id -> version -> dv_id) and filter to matching versions
-    version_map = {pair[0]: pair[1] for pair in doc_version_pairs}
     dv_id_to_doc: dict[uuid.UUID, uuid.UUID] = {}
     dv_ids: list[uuid.UUID] = []
     for row in dv_rows:
-        dv_id_to_doc[row.id] = row.doc_id
-        dv_ids.append(row.id)
+        expected_version = version_map.get(row.doc_id)
+        if expected_version is not None and row.version == expected_version:
+            dv_id_to_doc[row.id] = row.doc_id
+            dv_ids.append(row.id)
 
     if not dv_ids:
         return {}

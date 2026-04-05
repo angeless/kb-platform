@@ -64,6 +64,10 @@ export const ERROR_MESSAGES: Record<string, string> = {
   SYSTEM_RATE_LIMITED: "操作太频繁，请稍后再试",
   SYSTEM_SSRF_BLOCKED: "该地址不允许访问",
 
+  // Confirmation
+  CONFIRMATION_REQUIRED: "此操作需要二次确认",
+  CONFIRMATION_INVALID: "确认信息不正确或已过期",
+
   // Upload (frontend-only)
   UPLOAD_CANCELLED: "上传已取消",
   NETWORK_ERROR: "网络连接失败，请检查网络后重试",

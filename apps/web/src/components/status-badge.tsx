@@ -19,6 +19,8 @@ const statusStyles: Record<string, string> = {
   completed: "bg-green-50 text-green-700",
   unsupported: "bg-gray-100 text-gray-500",
   disabled: "bg-gray-100 text-gray-500",
+  assigned: "bg-blue-50 text-blue-600",
+  approved: "bg-green-50 text-green-700",
 };
 
 interface StatusBadgeProps {

@@ -3,6 +3,21 @@
 所有重要变更都将被记录在此文件中。
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/)。
 
+## [0.52.11] — 2026-04-04
+
+### 修复 (Fixed)
+- **v0.52.1** IR 字段补全：pdf/ocr/word/video 四个解析器填充 `original_format`/`structure_type`/`extraction_confidence`/`language`/`semantic_boundaries`（Gap-1）
+- **v0.52.2** CostTracker 接入 LLM 调用链：`call_llm()` 完成后自动调用 `CostTracker.record_usage()` 记录 token 消耗（Gap-16）
+- **v0.52.3** SKILL 运行时生效：pipeline doc_generate 阶段加载 `Skill.prompt_template` 覆盖默认 system prompt（Gap-3）
+- **v0.52.4** Stage execution_order + condition 运行时生效：pipeline runner 读取配置中的 `execution_order` 排序和 `condition` JSONB 条件评估（Gap-4）
+- **v0.52.5** 租户配额 `check_quota`/`check_feature` 依赖注入：检查项目数/用户数上限 + feature_flags 功能开关（Gap-5）
+- **v0.52.6** Redis Sentinel 连接逻辑：`get_redis_client()` 根据 `redis_sentinel_hosts` 自动使用 Sentinel 发现 master（Gap-6）
+- **v0.52.7** Ontology 提取 Celery task：`extract_ontology` 任务调用 LLM 提取概念/关系并写入 `ontology_concept`/`ontology_relation`（Gap-9）
+- **v0.52.8** SKILL CRUD 端点补全：新增 POST/PUT/DELETE `/v1/projects/{id}/skills` 端点（Gap-10）
+- **v0.52.9** 确认码接入高危路由：项目删除 + 架构发布需 6 位确认码（HTTP 428 → 验证 → 执行）（Gap-7）
+- **v0.52.10** Asset.tags 数据流修复：`AssetOut` 新增 `tags` 字段，从首个 chunk 聚合 tags 返回给前端（Gap-15）
+- **v0.52.11** Review Kanban 操作按钮：待审批卡片添加通过/驳回按钮，已驳回卡片添加重新提交按钮（Gap-11）
+
 ## [0.51.13] — 2026-04-04
 
 ### 新增 (Added)

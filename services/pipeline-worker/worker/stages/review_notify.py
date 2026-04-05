@@ -7,7 +7,6 @@ import json
 import logging
 import uuid
 
-import redis
 from sqlalchemy.orm import Session
 
 from shared_config.settings import get_settings
@@ -34,12 +33,16 @@ def notify_review(
     }
 
     try:
-        r = redis.from_url(settings.redis_url)
-        channel = f"job_events:{project_id}"
-        r.publish(channel, json.dumps(event))
-        logger.info(
-            "Pipeline complete for project %s: %d docs, %d conflicts",
-            project_id, len(doc_ids), len(conflict_ids),
-        )
+        from shared_config.settings import get_redis_client
+        r = get_redis_client()
+        try:
+            channel = f"job_events:{project_id}"
+            r.publish(channel, json.dumps(event))
+            logger.info(
+                "Pipeline complete for project %s: %d docs, %d conflicts",
+                project_id, len(doc_ids), len(conflict_ids),
+            )
+        finally:
+            r.close()
     except Exception as e:
         logger.warning("Failed to publish review notification: %s", e)

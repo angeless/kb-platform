@@ -38,9 +38,8 @@ async def get_cost_summary(
     from datetime import date
 
     try:
-        import redis
-        from shared_config.settings import get_settings
-        r = redis.from_url(get_settings().redis_url)
+        from shared_config.settings import get_async_redis_client
+        r = get_async_redis_client()
     except Exception as e:
         logger.warning("Redis unavailable for cost summary: %s", e)
         return DataResponse(data=[])
@@ -57,24 +56,30 @@ async def get_cost_summary(
     }
 
     results = []
-    for model in models:
-        key = f"cost:{model}:{today}"
-        try:
-            data = r.hgetall(key)
-            if not data:
+    try:
+        for model in models:
+            key = f"cost:{model}:{today}"
+            try:
+                data = await r.hgetall(key)
+                if not data:
+                    continue
+                pt = int(data.get(b"prompt_tokens", 0))
+                ct = int(data.get(b"completion_tokens", 0))
+                p = prices.get(model, {"prompt": 0.01, "completion": 0.03})
+                cost = pt / 1000 * p["prompt"] + ct / 1000 * p["completion"]
+                results.append(CostSummaryItem(
+                    model=model,
+                    prompt_tokens=pt,
+                    completion_tokens=ct,
+                    cost_usd=round(cost, 6),
+                ))
+            except Exception as e:
+                logger.warning("Failed to read cost for model %s: %s", model, e)
                 continue
-            pt = int(data.get(b"prompt_tokens", 0))
-            ct = int(data.get(b"completion_tokens", 0))
-            p = prices.get(model, {"prompt": 0.01, "completion": 0.03})
-            cost = pt / 1000 * p["prompt"] + ct / 1000 * p["completion"]
-            results.append(CostSummaryItem(
-                model=model,
-                prompt_tokens=pt,
-                completion_tokens=ct,
-                cost_usd=round(cost, 6),
-            ))
+    finally:
+        try:
+            await r.aclose()
         except Exception:
-            continue
+            logger.warning("Failed to close Redis connection in cost summary")
 
-    r.close()
     return DataResponse(data=results)

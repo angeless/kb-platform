@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { api, ApiClientError } from "@/lib/api";
+import { showErrorToast } from "@/components/error-toast";
 import { StatusBadge } from "@/components/status-badge";
 import { PermissionGuard } from "@/components/PermissionGuard";
 import { RejectModal } from "@/components/reject-modal";
@@ -103,34 +104,81 @@ function MeceInfoCard({ projectId }: { projectId: string }) {
   );
 }
 
-function ReviewKanban({ projectId }: { projectId: string }) {
-  const [pending, setPending] = useState<ReviewTask[]>([]);
-  const [assigned, setAssigned] = useState<ReviewTask[]>([]);
-  const [completed, setCompleted] = useState<ReviewTask[]>([]);
-  const [loading, setLoading] = useState(true);
+type KanbanColumn = "pending" | "assigned" | "completed";
 
-  const fetchAll = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [p, a, ap, rj] = await Promise.all([
-        api.get<ReviewTask[]>(`/v1/projects/${projectId}/reviews?status=pending`),
-        api.get<ReviewTask[]>(`/v1/projects/${projectId}/reviews?status=assigned`),
-        api.get<ReviewTask[]>(`/v1/projects/${projectId}/reviews?status=approved`),
-        api.get<ReviewTask[]>(`/v1/projects/${projectId}/reviews?status=rejected`),
-      ]);
-      setPending(p.data);
-      setAssigned(a.data);
-      setCompleted([...ap.data, ...rj.data]);
-    } catch {
-      // Non-critical
-    } finally {
-      setLoading(false);
-    }
-  }, [projectId]);
+interface KanbanCardProps {
+  t: ReviewTask;
+  column: KanbanColumn;
+  actionLoading: string | null;
+  onApprove: (id: string) => void;
+  onReject: (id: string) => void;
+  onResubmit: (id: string) => void;
+}
 
-  useEffect(() => { fetchAll(); }, [fetchAll]);
+function KanbanCard({ t, column, actionLoading, onApprove, onReject, onResubmit }: KanbanCardProps) {
+  return (
+    <div className="rounded-lg border border-gray-200 bg-white p-3 shadow-sm hover:shadow">
+      <div className="text-sm font-medium text-gray-800 truncate">
+        {t.doc_id.slice(0, 8)}...
+      </div>
+      <div className="mt-1 text-xs text-gray-400">
+        {new Date(t.created_at).toLocaleDateString("zh-CN")}
+      </div>
+      {t.reviewer_id && (
+        <div className="mt-1 text-xs text-primary-500">审批人: {t.reviewer_id.slice(0, 8)}...</div>
+      )}
+      {t.review_note && (
+        <div className="mt-1 text-xs text-gray-500 truncate">{t.review_note}</div>
+      )}
+      <div className="mt-1 flex items-center justify-between">
+        <StatusBadge status={t.status} />
+        <div className="flex gap-1">
+          {column === "assigned" && (
+            <>
+              <button
+                onClick={() => onApprove(t.id)}
+                disabled={actionLoading === t.id}
+                className="rounded bg-green-500 px-2 py-0.5 text-xs text-white hover:bg-green-600 disabled:opacity-50"
+              >
+                通过
+              </button>
+              <button
+                onClick={() => onReject(t.id)}
+                disabled={actionLoading === t.id}
+                className="rounded bg-red-500 px-2 py-0.5 text-xs text-white hover:bg-red-600 disabled:opacity-50"
+              >
+                驳回
+              </button>
+            </>
+          )}
+          {column === "completed" && t.status === "rejected" && (
+            <button
+              onClick={() => onResubmit(t.id)}
+              disabled={actionLoading === t.id}
+              className="rounded bg-blue-500 px-2 py-0.5 text-xs text-white hover:bg-blue-600 disabled:opacity-50"
+            >
+              重新提交
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
-  const KanbanColumn = ({ title, tasks, color }: { title: string; tasks: ReviewTask[]; color: string }) => (
+interface KanbanColumnProps {
+  title: string;
+  tasks: ReviewTask[];
+  color: string;
+  column: KanbanColumn;
+  actionLoading: string | null;
+  onApprove: (id: string) => void;
+  onReject: (id: string) => void;
+  onResubmit: (id: string) => void;
+}
+
+function KanbanColumnView({ title, tasks, color, column, actionLoading, onApprove, onReject, onResubmit }: KanbanColumnProps) {
+  return (
     <div className="flex-1 min-w-[280px]">
       <div className={`mb-3 flex items-center gap-2 border-b-2 ${color} pb-2`}>
         <h3 className="text-sm font-semibold text-gray-700">{title}</h3>
@@ -142,36 +190,103 @@ function ReviewKanban({ projectId }: { projectId: string }) {
             暂无任务
           </div>
         ) : tasks.map((t) => (
-          <div key={t.id} className="rounded-lg border border-gray-200 bg-white p-3 shadow-sm hover:shadow">
-            <div className="text-sm font-medium text-gray-800 truncate">
-              {t.doc_id.slice(0, 8)}...
-            </div>
-            <div className="mt-1 text-xs text-gray-400">
-              {new Date(t.created_at).toLocaleDateString("zh-CN")}
-            </div>
-            {t.reviewer_id && (
-              <div className="mt-1 text-xs text-primary-500">审批人: {t.reviewer_id.slice(0, 8)}...</div>
-            )}
-            {t.review_note && (
-              <div className="mt-1 text-xs text-gray-500 truncate">{t.review_note}</div>
-            )}
-            <StatusBadge status={t.status} />
-          </div>
+          <KanbanCard key={t.id} t={t} column={column} actionLoading={actionLoading} onApprove={onApprove} onReject={onReject} onResubmit={onResubmit} />
         ))}
       </div>
     </div>
   );
+}
+
+function ReviewKanban({ projectId }: { projectId: string }) {
+  const [pending, setPending] = useState<ReviewTask[]>([]);
+  const [assigned, setAssigned] = useState<ReviewTask[]>([]);
+  const [completed, setCompleted] = useState<ReviewTask[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState("");
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [rejectingId, setRejectingId] = useState<string | null>(null);
+
+  const fetchAll = useCallback(async () => {
+    setLoading(true);
+    setFetchError("");
+    try {
+      const [p, a, ap, rj] = await Promise.all([
+        api.get<ReviewTask[]>(`/v1/projects/${projectId}/reviews?status=pending`),
+        api.get<ReviewTask[]>(`/v1/projects/${projectId}/reviews?status=assigned`),
+        api.get<ReviewTask[]>(`/v1/projects/${projectId}/reviews?status=approved`),
+        api.get<ReviewTask[]>(`/v1/projects/${projectId}/reviews?status=rejected`),
+      ]);
+      setPending(p.data);
+      setAssigned(a.data);
+      setCompleted([...ap.data, ...rj.data]);
+    } catch (e) {
+      setFetchError(e instanceof ApiClientError ? e.message : "加载审批看板失败");
+    } finally {
+      setLoading(false);
+    }
+  }, [projectId]);
+
+  useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  // Kanban action handlers (v0.52.11 — Gap-11 fix)
+  const handleApprove = async (reviewId: string) => {
+    setActionLoading(reviewId);
+    try {
+      await api.post(`/v1/projects/${projectId}/reviews/${reviewId}/approve`, {});
+      await fetchAll();
+    } catch (e) { showErrorToast(e instanceof ApiClientError ? e.message : "操作失败"); }
+    finally { setActionLoading(null); }
+  };
+
+  const handleReject = (reviewId: string) => {
+    setRejectingId(reviewId);
+  };
+
+  const doReject = async (reviewId: string, reason: string) => {
+    setRejectingId(null);
+    setActionLoading(reviewId);
+    try {
+      await api.post(`/v1/projects/${projectId}/reviews/${reviewId}/reject`, { note: reason });
+      await fetchAll();
+    } catch (e) { showErrorToast(e instanceof ApiClientError ? e.message : "操作失败"); }
+    finally { setActionLoading(null); }
+  };
+
+  const handleResubmit = async (reviewId: string) => {
+    setActionLoading(reviewId);
+    try {
+      await api.post(`/v1/projects/${projectId}/reviews/${reviewId}/resubmit`, {});
+      await fetchAll();
+    } catch (e) { showErrorToast(e instanceof ApiClientError ? e.message : "操作失败"); }
+    finally { setActionLoading(null); }
+  };
 
   if (loading) return <div className="py-4 text-center text-gray-400 text-sm">加载审批看板...</div>;
+
+  if (fetchError) {
+    return (
+      <div className="mb-8">
+        <h2 className="mb-4 text-lg font-bold text-gray-900">审批看板</h2>
+        <div className="rounded-lg bg-red-50 p-3 text-sm text-red-600">{fetchError}</div>
+      </div>
+    );
+  }
 
   return (
     <div className="mb-8">
       <h2 className="mb-4 text-lg font-bold text-gray-900">审批看板</h2>
       <div className="flex gap-4 overflow-x-auto pb-2">
-        <KanbanColumn title="待分配" tasks={pending} color="border-yellow-400" />
-        <KanbanColumn title="待审批" tasks={assigned} color="border-blue-400" />
-        <KanbanColumn title="已完成" tasks={completed} color="border-green-400" />
+        <KanbanColumnView title="待分配" tasks={pending} color="border-yellow-400" column="pending" actionLoading={actionLoading} onApprove={handleApprove} onReject={handleReject} onResubmit={handleResubmit} />
+        <KanbanColumnView title="待审批" tasks={assigned} color="border-blue-400" column="assigned" actionLoading={actionLoading} onApprove={handleApprove} onReject={handleReject} onResubmit={handleResubmit} />
+        <KanbanColumnView title="已完成" tasks={completed} color="border-green-400" column="completed" actionLoading={actionLoading} onApprove={handleApprove} onReject={handleReject} onResubmit={handleResubmit} />
       </div>
+      {rejectingId && (
+        <RejectModal
+          title="驳回审批"
+          onConfirm={(reason) => doReject(rejectingId, reason)}
+          onCancel={() => setRejectingId(null)}
+        />
+      )}
     </div>
   );
 }
@@ -191,15 +306,13 @@ export default function ReviewQueuePage() {
 
   const fetchDocs = useCallback(async () => {
     setIsLoading(true);
+    setError("");
     setSelected(new Set());
     try {
-      // Use the docs list with status filter via query
-      const endpoint = `/v1/docs?project_id=${projectId}&page_size=50`;
+      const endpoint = `/v1/docs?project_id=${projectId}&status=${tab}&page_size=50`;
       const resp = await api.get<Doc[]>(endpoint);
-      // Filter client-side by status
-      const filtered = resp.data.filter((d) => d.status === tab);
-      setDocs(filtered);
-      setTotal(filtered.length);
+      setDocs(resp.data);
+      setTotal(resp.data.length);
     } catch (e) {
       setError(e instanceof ApiClientError ? e.message : "加载失败");
     } finally {
@@ -244,10 +357,12 @@ export default function ReviewQueuePage() {
 
   const handleReject = async (reason: string) => {
     setShowReject(false);
-    // Batch reject doesn't send reason per doc, so we do individual rejects
+    // Capture selected snapshot and clear immediately — avoids stale closure + stale UI
+    const ids = Array.from(selected);
+    setSelected(new Set());
     setMessage("");
     let ok = 0, fail = 0;
-    for (const docId of selected) {
+    for (const docId of ids) {
       try {
         await api.post(`/v1/docs/${docId}/reject`, { reject_reason: reason });
         ok++;
@@ -256,7 +371,6 @@ export default function ReviewQueuePage() {
       }
     }
     setMessage(`驳回成功 ${ok} 篇${fail > 0 ? `，失败 ${fail} 篇` : ""}`);
-    setSelected(new Set());
     await fetchDocs();
   };
 

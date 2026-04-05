@@ -29,9 +29,8 @@ class CostTracker:
         if self._redis:
             return self._redis
         try:
-            import redis
-            from shared_config.settings import get_settings
-            self._redis = redis.from_url(get_settings().redis_url)
+            from shared_config.settings import get_redis_client
+            self._redis = get_redis_client()
             return self._redis
         except Exception as e:
             logger.warning("Redis unavailable for cost tracking: %s", e)
@@ -98,5 +97,6 @@ class CostTracker:
             prices = DEFAULT_PRICES.get(model, DEFAULT_PRICE)
             cost = pt / 1000 * prices["prompt"] + ct / 1000 * prices["completion"]
             return {"prompt_tokens": pt, "completion_tokens": ct, "cost_usd": round(cost, 6)}
-        except Exception:
+        except Exception as e:
+            logger.warning("Failed to get usage summary for %s: %s", model, e)
             return {"prompt_tokens": 0, "completion_tokens": 0, "cost_usd": 0.0}
