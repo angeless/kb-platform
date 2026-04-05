@@ -244,7 +244,7 @@ async def download_asset(
     return Response(
         content=content,
         media_type=media_type,
-        headers={"Content-Disposition": f'attachment; filename="{asset.filename}"'},
+        headers={"Content-Disposition": f'attachment; filename="{asset.filename.replace(chr(34), "_").replace(chr(13), "").replace(chr(10), "")}"'},
     )
 
 

@@ -167,12 +167,20 @@ export function uploadWithProgress(
     const url = `${API_BASE}${path}`;
 
     // Abort support
+    let abortHandler: (() => void) | null = null;
     if (options.signal) {
-      options.signal.addEventListener("abort", () => {
+      abortHandler = () => {
         xhr.abort();
         reject(new ApiClientError("上传已取消", "UPLOAD_CANCELLED", 0));
-      });
+      };
+      options.signal.addEventListener("abort", abortHandler);
     }
+
+    const cleanup = () => {
+      if (abortHandler && options.signal) {
+        options.signal.removeEventListener("abort", abortHandler);
+      }
+    };
 
     // Progress tracking
     xhr.upload.onprogress = (e) => {
@@ -183,6 +191,7 @@ export function uploadWithProgress(
     };
 
     xhr.onload = () => {
+      cleanup();
       try {
         const body = JSON.parse(xhr.responseText);
         if (xhr.status >= 200 && xhr.status < 300) {
@@ -197,6 +206,7 @@ export function uploadWithProgress(
     };
 
     xhr.onerror = () => {
+      cleanup();
       reject(new ApiClientError(getUserMessage("NETWORK_ERROR"), "NETWORK_ERROR", 0));
     };
 

@@ -119,10 +119,11 @@ def run_pipeline(self, project_id: str, job_id: str, asset_ids: list[str], user_
     uid = uuid.UUID(user_id)
     aids = [uuid.UUID(a) for a in asset_ids]
 
-    db = sync_session_factory()
+    db = None
     current_stage = ""
 
     try:
+        db = sync_session_factory()
         # M-10 idempotency: skip if job already completed/failed
         job = db.execute(select(Job).where(Job.id == jid)).scalar_one_or_none()
         if job and job.status in ("completed", "failed"):
@@ -336,4 +337,5 @@ def run_pipeline(self, project_id: str, job_id: str, asset_ids: list[str], user_
         raise self.retry(exc=exc)
 
     finally:
-        db.close()
+        if db is not None:
+            db.close()

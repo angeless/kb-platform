@@ -39,8 +39,16 @@ def _get_celery_app() -> Celery:
 async def list_concepts(
     project_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
+    kb_id: uuid.UUID = Depends(get_kb_id),
     _user: User = Depends(get_current_user),
 ):
+    from shared_models import Project
+    from shared_errors import NotFoundException
+    proj = (await db.execute(
+        select(Project).where(Project.id == project_id, Project.kb_id == kb_id)
+    )).scalar_one_or_none()
+    if proj is None:
+        raise NotFoundException(message="项目不存在")
     rows = (await db.execute(
         select(OntologyConcept).where(OntologyConcept.project_id == project_id)
         .order_by(OntologyConcept.name)
@@ -63,8 +71,16 @@ async def list_concepts(
 async def list_relations(
     project_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
+    kb_id: uuid.UUID = Depends(get_kb_id),
     _user: User = Depends(get_current_user),
 ):
+    from shared_models import Project
+    from shared_errors import NotFoundException
+    proj = (await db.execute(
+        select(Project).where(Project.id == project_id, Project.kb_id == kb_id)
+    )).scalar_one_or_none()
+    if proj is None:
+        raise NotFoundException(message="项目不存在")
     rows = (await db.execute(
         select(OntologyRelation).where(OntologyRelation.project_id == project_id)
     )).scalars().all()

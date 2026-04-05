@@ -357,8 +357,9 @@ export default function ReviewQueuePage() {
 
   const handleReject = async (reason: string) => {
     setShowReject(false);
-    // Capture selected snapshot before async work — avoids stale closure if fetchDocs resets selected
+    // Capture selected snapshot and clear immediately — avoids stale closure + stale UI
     const ids = Array.from(selected);
+    setSelected(new Set());
     setMessage("");
     let ok = 0, fail = 0;
     for (const docId of ids) {
@@ -370,7 +371,6 @@ export default function ReviewQueuePage() {
       }
     }
     setMessage(`驳回成功 ${ok} 篇${fail > 0 ? `，失败 ${fail} 篇` : ""}`);
-    setSelected(new Set());
     await fetchDocs();
   };
 

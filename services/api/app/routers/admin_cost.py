@@ -77,6 +77,9 @@ async def get_cost_summary(
                 logger.warning("Failed to read cost for model %s: %s", model, e)
                 continue
     finally:
-        await r.aclose()
+        try:
+            await r.aclose()
+        except Exception:
+            logger.warning("Failed to close Redis connection in cost summary")
 
     return DataResponse(data=results)
