@@ -93,7 +93,9 @@ async def extract_ontology(
     global _celery_app
     if _celery_app is None:
         settings = get_settings()
-        _celery_app = Celery(broker=settings.redis_url)
+        _celery_app = Celery(broker=settings.celery_broker_url)
+        if settings.celery_broker_transport_options:
+            _celery_app.conf.broker_transport_options = settings.celery_broker_transport_options
     _celery_app.send_task(
         "orchestrator.extract_ontology",
         args=[str(project_id), str(body.doc_id)],

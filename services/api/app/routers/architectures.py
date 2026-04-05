@@ -109,24 +109,24 @@ async def list_nodes(
 async def publish_architecture(
     arch_id: uuid.UUID,
     confirmation_id: str | None = Query(None),
-    code: str | None = Query(None),
+    phrase: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
     kb_id: uuid.UUID = Depends(get_kb_id),
     _user: User = require_role("project_admin"),
 ):
-    # Confirmation code gate (v0.52.9 — Gap-7 fix)
+    # Confirmation phrase gate — user must type "PUBLISH" to confirm
     from app.utils.confirmation import generate_confirmation, verify_confirmation
-    if not confirmation_id or not code:
-        conf = generate_confirmation("publish_architecture", str(_user.id))
+    if not confirmation_id or not phrase:
+        conf = generate_confirmation("publish_architecture", str(_user.id), "PUBLISH")
         return JSONResponse(status_code=428, content={
             "error": "CONFIRMATION_REQUIRED",
-            "message": "发布架构需要确认码",
+            "message": "请输入 PUBLISH 以确认发布",
             "confirmation_id": conf["confirmation_id"],
-            "code": conf["code"],
+            "challenge": "请输入「PUBLISH」以确认发布架构",
             "expires_in": conf["expires_in"],
         })
-    if not verify_confirmation(confirmation_id, code, str(_user.id)):
-        return JSONResponse(status_code=403, content={"error": "CONFIRMATION_INVALID", "message": "确认码无效或已过期"})
+    if not verify_confirmation(confirmation_id, phrase, str(_user.id)):
+        return JSONResponse(status_code=403, content={"error": "CONFIRMATION_INVALID", "message": "确认短语不正确或已过期"})
 
     svc = ArchitectureService(db, kb_id)
     arch = await svc.publish(arch_id)
@@ -249,24 +249,24 @@ async def rollback_architecture(
     arch_id: uuid.UUID,
     target_id: uuid.UUID,
     confirmation_id: str | None = Query(None),
-    code: str | None = Query(None),
+    phrase: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
     kb_id: uuid.UUID = Depends(get_kb_id),
     _user: User = require_role("project_admin"),
 ):
-    # Confirmation code gate (v0.52 — rollback is destructive)
+    # Confirmation phrase gate — user must type "ROLLBACK" to confirm
     from app.utils.confirmation import generate_confirmation, verify_confirmation
-    if not confirmation_id or not code:
-        conf = generate_confirmation("rollback_architecture", str(_user.id))
+    if not confirmation_id or not phrase:
+        conf = generate_confirmation("rollback_architecture", str(_user.id), "ROLLBACK")
         return JSONResponse(status_code=428, content={
             "error": "CONFIRMATION_REQUIRED",
-            "message": "回滚架构需要确认码",
+            "message": "请输入 ROLLBACK 以确认回滚",
             "confirmation_id": conf["confirmation_id"],
-            "code": conf["code"],
+            "challenge": "请输入「ROLLBACK」以确认回滚架构",
             "expires_in": conf["expires_in"],
         })
-    if not verify_confirmation(confirmation_id, code, str(_user.id)):
-        return JSONResponse(status_code=403, content={"error": "CONFIRMATION_INVALID", "message": "确认码无效或已过期"})
+    if not verify_confirmation(confirmation_id, phrase, str(_user.id)):
+        return JSONResponse(status_code=403, content={"error": "CONFIRMATION_INVALID", "message": "确认短语不正确或已过期"})
 
     svc = ArchitectureService(db, kb_id)
     new_arch = await svc.rollback(arch_id, target_id)

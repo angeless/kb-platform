@@ -9,12 +9,13 @@ settings = get_settings()
 
 celery_app = Celery(
     "ingestion-worker",
-    broker=settings.redis_url,
+    broker=settings.celery_broker_url,
     backend=settings.redis_url,
     include=["worker.tasks"],
 )
 
 celery_app.conf.update(
+    broker_transport_options=settings.celery_broker_transport_options,
     task_serializer="json",
     accept_content=["json"],
     result_serializer="json",

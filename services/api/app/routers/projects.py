@@ -144,24 +144,26 @@ async def update_project(
 async def delete_project(
     project_id: uuid.UUID,
     confirmation_id: str | None = Query(None),
-    code: str | None = Query(None),
+    phrase: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
     kb_id: uuid.UUID = Depends(get_kb_id),
     current_user: User = require_role("tenant_admin"),
 ):
-    # Confirmation code gate (v0.52.9 — Gap-7 fix)
+    # Confirmation phrase gate — user must type the project name to confirm
     from app.utils.confirmation import generate_confirmation, verify_confirmation
-    if not confirmation_id or not code:
-        conf = generate_confirmation("delete_project", str(current_user.id))
+    svc = ProjectService(db, kb_id)
+    project = await svc.get(project_id)
+    if not confirmation_id or not phrase:
+        conf = generate_confirmation("delete_project", str(current_user.id), project.name)
         return JSONResponse(status_code=428, content={
             "error": "CONFIRMATION_REQUIRED",
-            "message": "此操作需要确认码",
+            "message": "请输入项目名称以确认删除",
             "confirmation_id": conf["confirmation_id"],
-            "code": conf["code"],
+            "challenge": f"请输入「{project.name}」以确认删除此项目",
             "expires_in": conf["expires_in"],
         })
-    if not verify_confirmation(confirmation_id, code, str(current_user.id)):
-        return JSONResponse(status_code=403, content={"error": "CONFIRMATION_INVALID", "message": "确认码无效或已过期"})
+    if not verify_confirmation(confirmation_id, phrase, str(current_user.id)):
+        return JSONResponse(status_code=403, content={"error": "CONFIRMATION_INVALID", "message": "确认短语不正确或已过期"})
 
     svc = ProjectService(db, kb_id)
     await svc.delete(project_id)

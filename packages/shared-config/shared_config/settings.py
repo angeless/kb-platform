@@ -68,6 +68,33 @@ class Settings(BaseSettings):
             return f"redis://:{self.redis_password}@{self.redis_host}:{self.redis_port}/{self.redis_db}"
         return f"redis://{self.redis_host}:{self.redis_port}/{self.redis_db}"
 
+    @property
+    def celery_broker_url(self) -> str:
+        """Broker URL for Celery. Uses sentinel:// scheme when Sentinel is configured."""
+        sentinel_hosts = self.redis_sentinel_hosts.strip()
+        if not sentinel_hosts:
+            return self.redis_url
+        parts = []
+        for entry in sentinel_hosts.split(","):
+            entry = entry.strip()
+            if not entry:
+                continue
+            if ":" not in entry:
+                entry = f"{entry}:26379"
+            pwd = f":{self.redis_password}@" if self.redis_password else ""
+            parts.append(f"sentinel://{pwd}{entry}/{self.redis_db}")
+        return ";".join(parts)
+
+    @property
+    def celery_broker_transport_options(self) -> dict:
+        """Transport options for Celery Sentinel broker. Empty dict when not using Sentinel."""
+        if not self.redis_sentinel_hosts.strip():
+            return {}
+        opts: dict = {"master_name": self.redis_sentinel_master}
+        if self.redis_password:
+            opts["sentinel_kwargs"] = {"password": self.redis_password}
+        return opts
+
     # MinIO / S3
     s3_endpoint: str = "http://localhost:9000"
     s3_access_key: str = "minioadmin"
