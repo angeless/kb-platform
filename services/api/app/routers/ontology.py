@@ -104,5 +104,6 @@ async def extract_ontology(
     _get_celery_app().send_task(
         "orchestrator.extract_ontology",
         args=[str(project_id), str(body.doc_id)],
+        queue="ai",
     )
     return DataResponse(data={"status": "accepted", "doc_id": str(body.doc_id)})
