@@ -54,15 +54,18 @@ def _publish_event(project_id: uuid.UUID, job_id: uuid.UUID, stage: str, status:
     try:
         from shared_config.settings import get_redis_client
         r = get_redis_client()
-        event = {
-            "type": "pipeline_stage",
-            "job_id": str(job_id),
-            "stage": stage,
-            "status": status,
-            "stage_index": STAGES.index(stage) + 3,  # Stages 3-9
-            "total_stages": 9,
-        }
-        r.publish(f"job_events:{project_id}", json.dumps(event))
+        try:
+            event = {
+                "type": "pipeline_stage",
+                "job_id": str(job_id),
+                "stage": stage,
+                "status": status,
+                "stage_index": STAGES.index(stage) + 3 if stage in STAGES else 0,
+                "total_stages": 9,
+            }
+            r.publish(f"job_events:{project_id}", json.dumps(event))
+        finally:
+            r.close()
     except Exception as e:
         logger.warning("Failed to publish stage event: %s", e)
 
@@ -316,15 +319,18 @@ def run_pipeline(self, project_id: str, job_id: str, asset_ids: list[str], user_
             try:
                 from shared_config.settings import get_redis_client
                 r = get_redis_client()
-                event = json.dumps({
-                    "type": "pipeline_stage",
-                    "job_id": str(jid),
-                    "stage": "pipeline_init",
-                    "status": "failed",
-                    "stage_index": 0,
-                    "total_stages": 9,
-                })
-                r.publish(f"job_events:{pid}", event)
+                try:
+                    event = json.dumps({
+                        "type": "pipeline_stage",
+                        "job_id": str(jid),
+                        "stage": "pipeline_init",
+                        "status": "failed",
+                        "stage_index": 0,
+                        "total_stages": 9,
+                    })
+                    r.publish(f"job_events:{pid}", event)
+                finally:
+                    r.close()
             except Exception:
                 logger.warning("Failed to publish pipeline_init failure event")
         raise self.retry(exc=exc)

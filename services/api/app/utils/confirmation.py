@@ -54,6 +54,10 @@ def verify_confirmation(confirmation_id: str, phrase: str, user_id: str) -> bool
     """Verify a typed confirmation phrase. One-time use — deleted after verification.
 
     Returns True if the phrase matches, False otherwise.
+
+    Note: If Redis is available during generate but unavailable during verify
+    (e.g. rolling restart), verification will fail until Redis recovers.
+    This is a known fail-closed limitation — the operation is blocked, not bypassed.
     """
     try:
         from shared_config.settings import get_redis_client

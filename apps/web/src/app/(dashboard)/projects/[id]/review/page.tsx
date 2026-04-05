@@ -357,10 +357,11 @@ export default function ReviewQueuePage() {
 
   const handleReject = async (reason: string) => {
     setShowReject(false);
-    // Batch reject doesn't send reason per doc, so we do individual rejects
+    // Capture selected snapshot before async work — avoids stale closure if fetchDocs resets selected
+    const ids = Array.from(selected);
     setMessage("");
     let ok = 0, fail = 0;
-    for (const docId of selected) {
+    for (const docId of ids) {
       try {
         await api.post(`/v1/docs/${docId}/reject`, { reject_reason: reason });
         ok++;

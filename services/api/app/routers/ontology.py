@@ -98,9 +98,22 @@ class ExtractOntologyRequest(BaseModel):
 async def extract_ontology(
     project_id: uuid.UUID,
     body: ExtractOntologyRequest,
+    db: AsyncSession = Depends(get_db),
+    kb_id: uuid.UUID = Depends(get_kb_id),
     _user: User = require_role("editor"),
     _feature=check_feature("ontology_extraction"),
 ):
+    from shared_models import KnowledgeDoc
+    from shared_errors import NotFoundException
+    doc = (await db.execute(
+        select(KnowledgeDoc).where(
+            KnowledgeDoc.id == body.doc_id,
+            KnowledgeDoc.project_id == project_id,
+        )
+    )).scalar_one_or_none()
+    if doc is None:
+        raise NotFoundException(message="文档不存在或不属于该项目")
+
     _get_celery_app().send_task(
         "orchestrator.extract_ontology",
         args=[str(project_id), str(body.doc_id)],

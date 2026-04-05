@@ -71,7 +71,12 @@ class ApiClient {
           headers,
           credentials: "include",
         });
-        const retryBody = await retryResp.json();
+        let retryBody: unknown;
+        try {
+          retryBody = await retryResp.json();
+        } catch {
+          throw new ApiClientError(getUserMessage("PARSE_ERROR"), "PARSE_ERROR", retryResp.status);
+        }
         if (!retryResp.ok) {
           const err = retryBody as ApiError;
           throw new ApiClientError(getUserMessage(err.error_code, err.message), err.error_code, retryResp.status, err.detail);
@@ -86,7 +91,12 @@ class ApiClient {
       throw new ApiClientError("登录已过期，请重新登录", "TOKEN_EXPIRED", 401);
     }
 
-    const body = await resp.json();
+    let body: unknown;
+    try {
+      body = await resp.json();
+    } catch {
+      throw new ApiClientError(getUserMessage("PARSE_ERROR"), "PARSE_ERROR", resp.status);
+    }
 
     if (!resp.ok) {
       const err = body as ApiError;

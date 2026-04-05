@@ -28,18 +28,22 @@ export function ToastContainer() {
   const [toasts, setToasts] = useState<Toast[]>([]);
 
   useEffect(() => {
+    const timers: ReturnType<typeof setTimeout>[] = [];
+
     addToastFn = (message: string, type: Toast["type"] = "error") => {
       const id = Date.now().toString(36) + Math.random().toString(36).slice(2);
       setToasts((prev) => [...prev.slice(-4), { id, message, type }]); // max 5 toasts
 
       // Auto-dismiss after 5 seconds
-      setTimeout(() => {
+      const timer = setTimeout(() => {
         setToasts((prev) => prev.filter((t) => t.id !== id));
       }, 5000);
+      timers.push(timer);
     };
 
     return () => {
       addToastFn = null;
+      timers.forEach(clearTimeout);
     };
   }, []);
 

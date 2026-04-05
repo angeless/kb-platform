@@ -1261,10 +1261,13 @@ def extract_ontology(self, project_id: str, doc_id: str) -> dict:
     with _get_sync_session() as session:
         try:
             doc = session.execute(
-                select(KnowledgeDoc).where(KnowledgeDoc.id == doc_uuid)
+                select(KnowledgeDoc).where(
+                    KnowledgeDoc.id == doc_uuid,
+                    KnowledgeDoc.project_id == project_uuid,
+                )
             ).scalar_one_or_none()
             if doc is None:
-                return {"status": "error", "message": f"Doc {doc_id} not found"}
+                return {"status": "error", "message": f"Doc {doc_id} not found in project {project_id}"}
 
             # Get latest version content
             version = session.execute(
