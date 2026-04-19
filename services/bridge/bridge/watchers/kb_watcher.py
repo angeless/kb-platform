@@ -231,6 +231,25 @@ def run_full_sync() -> int:
         logger.error("KB path does not exist: %s", kb_root)
         return 1
 
+    # Propagate .env into os.environ so the downstream bridge_ingest stage
+    # (which reads via os.environ.get for BRIDGE_VISUAL_* + BRIDGE_GRAPH_*)
+    # sees those values. pydantic-settings loads .env into BridgeSettings
+    # but doesn't push into os.environ, so without this load_dotenv call
+    # visual augment silently skips. Use override=False to respect any
+    # explicit shell-level overrides.
+    try:
+        from dotenv import load_dotenv as _load
+        # Find .env in current dir or parents (matches pydantic-settings behavior)
+        from pathlib import Path as _P
+        for _p in [_P.cwd(), *_P.cwd().parents]:
+            _envf = _p / ".env"
+            if _envf.is_file():
+                _load(_envf, override=False)
+                logger.info("Loaded env vars from %s", _envf)
+                break
+    except ImportError:
+        logger.debug("python-dotenv not installed; relying on shell env only")
+
     # Try to open a DB session for persistence; gracefully fall back if not reachable
     db_session = None
     bridge_ingest = None
