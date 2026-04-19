@@ -308,3 +308,22 @@ def test_augment_in_place_rejects_nonexistent(fake_kb):
                 "<!-- bridge-visual:end -->\n"
             ),
         )
+
+
+def test_augment_in_place_rejects_raw_sources_layer(fake_kb):
+    """Layer guard: raw-sources/ is immutable per SCHEMA.md (caught during v0.54 dry-run)."""
+    kb_root, repo = fake_kb
+    target = kb_root / "raw-sources" / "external.md"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text("# External Source\n", encoding="utf-8")
+    repo.git.add("--all")
+    repo.index.commit("seed raw-source")
+
+    with pytest.raises(KBWriteError, match="immutable per SCHEMA"):
+        augment_existing_in_place(
+            relative_path="raw-sources/external.md",
+            augmented_full_text=(
+                "<!-- bridge-visual:start v=1 -->\n"
+                "<!-- bridge-visual:end -->\n"
+            ),
+        )

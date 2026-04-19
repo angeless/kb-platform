@@ -265,6 +265,17 @@ def augment_existing_in_place(
             f"augment_existing_in_place: only .md files allowed, got {relative_path}"
         )
 
+    # 1b. layer guard — raw-sources/ is IMMUTABLE per Hogwarts-KB SCHEMA.md.
+    # The visual augmenter must never modify external/source documents.
+    # (Caught during v0.54 dry-run: 4 raw-sources files were qualifying.)
+    layer = relative_path.split("/", 1)[0] if "/" in relative_path else ""
+    AUGMENT_FORBIDDEN_LAYERS = {"raw-sources"}
+    if layer in AUGMENT_FORBIDDEN_LAYERS:
+        raise KBWriteError(
+            f"augment_existing_in_place: layer {layer!r} is immutable per SCHEMA.md. "
+            f"Refusing to modify {relative_path}"
+        )
+
     # 2. marker guard (proves this came from bridge-visual, not arbitrary text)
     if expected_marker_start not in augmented_full_text:
         raise KBWriteError(
