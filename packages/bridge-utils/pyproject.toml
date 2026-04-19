@@ -1,0 +1,32 @@
+[project]
+name = "bridge-utils"
+version = "0.1.0"
+description = "Bridge utilities: local summarization + path classification (LLM-minimizing)"
+requires-python = ">=3.12"
+dependencies = [
+    "sumy>=0.11",
+    "yake>=0.4.8",
+    "nltk>=3.8",
+    "python-frontmatter>=1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+]
+heavy = [
+    # Optional: KeyBERT + spaCy for higher-quality entities/tags
+    # Disabled by default to keep install lean.
+    "keybert>=0.8",
+    "spacy>=3.7",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["bridge_utils*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

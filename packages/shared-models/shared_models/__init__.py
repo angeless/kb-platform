@@ -19,6 +19,7 @@ from .refresh_token import RefreshToken
 from .review_task import ReviewTask
 from .skill import Skill
 from .ontology import OntologyConcept, OntologyRelation
+from .bridge import BridgeSyncRecord, BridgeMapping, BridgeOperation
 from .database import engine, async_session_factory, sync_session_factory, get_db_session
 
 __all__ = [
@@ -41,5 +42,6 @@ __all__ = [
     "ReviewTask",
     "Skill",
     "OntologyConcept", "OntologyRelation",
+    "BridgeSyncRecord", "BridgeMapping", "BridgeOperation",
     "engine", "async_session_factory", "sync_session_factory", "get_db_session",
 ]
