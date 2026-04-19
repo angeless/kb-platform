@@ -3,6 +3,55 @@
 所有重要变更都将被记录在此文件中。
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/)。
 
+## [0.53.0] — 2026-04-19
+
+### 新增 (Added)
+
+**Bridge 服务（KBSQL ↔ Hogwarts-KB 双向同步）**
+
+- 新服务 `services/bridge/`：双向同步 KBSQL 与 Hogwarts-KB markdown 仓库
+  - `parsers/markdown_parser.py`、`parsers/multi_format_parser.py`（markitdown + docling）
+  - `watchers/kb_watcher.py`（watchfiles 异步）
+  - `writers/kb_writer.py`（git-lock 安全写回 + 自动 commit/push）
+  - `llm/router.py`（Zhipu GLM 严格模式，拒绝退回 OpenAI/Anthropic）
+- 新服务 `services/mcp-server/`：FastMCP-based MCP 服务，8 个工具（kb_status/search/read/ingest/summarize/classify/write_summary/write_analysis），支持 stdio + streamable-http
+- 新包 `packages/bridge-utils/`：sumy 抽取式摘要 + yake 关键词分类（无 LLM）
+- REST 端点 `/v1/bridge/*`（9 个端点，注册到 services/api/app/main.py）
+- 3 个新 SQLAlchemy 模型：BridgeSyncRecord、BridgeMapping、BridgeOperation
+- Alembic migration `a6b7c8d9e0f1_add_bridge_tables.py`（revises z5a6b7c8d9e0）
+- `.env.example` + `.env` 追加 `GLM_API_KEY` / `BRIDGE_LLM_*` / `HOGWARTS_KB_*` 配置
+- Hogwarts-KB 仓配套：`.bridge-config.yml` + `wiki/{summaries,analyses}/.bridge-managed`
+- 文档：docs/api/bridge-service.md + docs/operations/bridge-deployment.md（含 v0.53 Scope Boundary）
+- Phase 8 审计报告：docs/audits/v0.53.0-bridge-audit.md（HEALTH B+）
+
+### 测试 (Tests)
+
+- 94 测试通过（services/bridge/: 59，packages/bridge-utils/: 10，services/mcp-server/: 12，services/api/test_bridge_router.py: 13）
+- 9.9 秒全部跑完
+- 含 LLM 严格模式 6 测试 + REST 路径穿越 2 测试
+
+### 决策 (ADRs)
+
+记录在 docs/dev-plans/dev-plan-v0.53.md：
+
+- ADR-001: multi_format_parser 放在 bridge 而非 ingestion-worker（关注点分离）
+- ADR-002: bridge_ingest Celery stage 推迟到 v0.54（范围控制）
+- ADR-003: write 端点 RBAC 推迟到 v0.54（CSRF + 路径白名单已提供基础防御）
+
+### 安全 (Security)
+
+- BRIDGE_LLM_STRICT 默认 true，硬阻止退回到 OpenAI/Anthropic
+- writer_allowed_paths 硬约束：仅 wiki/summaries/ + wiki/analyses/
+- REST `/v1/bridge/ingest` + MCP `kb_read` 双侧路径穿越守卫
+- 写入前等待 `.git/index.lock`（30s 上限）
+- 提交带 explicit `kbsql-bridge[bot]` author identity
+
+### 不破坏 (Preserved)
+
+- v0.52.11 全部功能未动：现有 7 stage pipeline、27 router、6 parser、25 model
+- services/api/app/main.py 仅增加 1 import 行 + 1 include_router 行
+- 待执行的 v0.51 migrations (y4z5a6b7c8d9 + z5a6b7c8d9e0) 未触碰
+
 ## [0.52.11] — 2026-04-04
 
 ### 修复 (Fixed)

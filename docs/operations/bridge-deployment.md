@@ -52,6 +52,30 @@ In your local Hogwarts-KB clone, ensure `.bridge-config.yml` exists at
 the root. It declares allowed write paths and the ignore list. The
 bridge reads this on every operation.
 
+**Enable auto-push to GitHub** (the user's stated goal):
+
+```bash
+# In your KBSQL .env:
+HOGWARTS_KB_AUTO_PUSH=true
+HOGWARTS_KB_BRANCH=main           # or feature/kbsql-bridge during integration
+HOGWARTS_KB_REMOTE=https://github.com/your-org/your-kb.git
+```
+
+Without `HOGWARTS_KB_AUTO_PUSH=true`, every bridge write commits LOCALLY
+but never reaches GitHub. Default is `false` (safer for first-time
+testing).
+
+### 3b. NLTK tokenizer data (REQUIRED for summarization)
+
+The local extractive summarizer (`sumy`) needs NLTK punkt data:
+
+```bash
+python -c "import nltk; nltk.download('punkt_tab', quiet=True); nltk.download('punkt', quiet=True)"
+```
+
+Without this, `POST /v1/bridge/summarize` and `kb_summarize` MCP tool
+will raise an NLTK LookupError on first call.
+
 ### 4. Optional: Install heavy parsers
 
 ```bash

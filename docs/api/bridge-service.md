@@ -9,6 +9,30 @@ with KBSQL via two protocols:
 Both protocols share the same underlying logic in
 `services/bridge/bridge/`. There is no duplicated business code.
 
+> **⚠️ v0.53 Scope Boundary** (read before deployment)
+>
+> v0.53 ships **detect-only watchers** and **explicit write-back**. Specifically:
+>
+> - **Direction A (KB → KBSQL)**: the watcher detects file changes and parses them,
+>   but **does NOT persist to `bridge_sync_record`** in v0.53. The
+>   `bridge_ingest` Celery stage that wires DB persistence lands in v0.54.
+>   `python -m bridge watch` will log a WARNING on startup confirming this.
+>   The `/v1/bridge/mappings` endpoint returns `[]` (stub).
+>
+> - **Direction B (KBSQL → KB)**: write-back to KB is **explicit only** —
+>   triggered by `POST /v1/bridge/write/*` or MCP `kb_write_*` tools.
+>   There is no automatic post-pipeline hook in v0.53. v0.54 will add a
+>   `pipeline.after_review_notify` hook for auto write-back.
+>
+> What does work in v0.53:
+> - Markdown + office/csv/html/PDF parsing → IR
+> - Local extractive summarization (sumy, no LLM)
+> - Path/tag classification (yake, no LLM)
+> - Safe write to `wiki/summaries/` and `wiki/analyses/` with auto-commit
+> - Optional auto-push to GitHub when `HOGWARTS_KB_AUTO_PUSH=true`
+> - GLM-4 LLM router with strict mode (refuses OpenAI fallback)
+> - REST + MCP protocol surface (full read + write tools)
+
 ## Quick Start
 
 ### Prerequisites
@@ -22,11 +46,19 @@ pip install -e ./packages/shared-config -e ./packages/shared-models \
             -e ./packages/bridge-utils \
             -e ./services/bridge -e ./services/api -e ./services/mcp-server
 
-# 2. Configure .env (already done if you ran v0.53 init)
+# 2. Install lightweight runtime deps (markitdown, watchfiles, GitPython, mcp, sumy, yake)
+pip install 'markitdown[all]' watchfiles GitPython 'mcp[cli]' \
+            python-frontmatter sumy yake nltk httpx pydantic-settings
+
+# 3. Download NLTK tokenizer data (required by sumy for extractive summarization)
+python -c "import nltk; nltk.download('punkt_tab', quiet=True); nltk.download('punkt', quiet=True)"
+
+# 4. Configure .env (already done if you ran v0.53 init)
 #    Required keys: GLM_API_KEY, HOGWARTS_KB_PATH, HOGWARTS_KB_BRANCH
+#    Optional: HOGWARTS_KB_AUTO_PUSH=true (enables auto-push to GitHub)
 #    See .env.example for full list.
 
-# 3. (One-time, when going to production) Apply pending DB migrations:
+# 5. (One-time, when going to production) Apply pending DB migrations:
 cd infra/sql && alembic upgrade head
 ```
 
@@ -121,7 +153,10 @@ Configure in your Claude Desktop's `claude_desktop_config.json`:
       "args": ["-m", "mcp_server"],
       "env": {
         "HOGWARTS_KB_PATH": "/path/to/Hogwarts-Knowledge-Base",
-        "GLM_API_KEY": "your-key-here"
+        "HOGWARTS_KB_BRANCH": "main",
+        "HOGWARTS_KB_AUTO_PUSH": "true",
+        "GLM_API_KEY": "your-key-here",
+        "BRIDGE_LLM_STRICT": "true"
       }
     }
   }

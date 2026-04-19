@@ -260,4 +260,51 @@ ffmpeg, tesseract, pandoc (optional), ocrmypdf (optional)
 
 ---
 
+## 架构决策记录（ADR — 在 Phase 8 审计后追加）
+
+### ADR-001: multi_format_parser 放在 services/bridge/ 而非 services/ingestion-worker/
+
+**Phase 8 Stage 1 审计指出原计划 §v0.53.2 的位置（ingestion-worker）与实际位置（bridge）不符。
+经评估后维持当前位置，原因如下：**
+
+- **职责分离**：现有 `services/ingestion-worker/worker/parsers/` 服务于 KBSQL 的"任务式上传管线"
+  （用户通过 REST POST /v1/ingestion 上传文件 → asset → chunk → 7 stage 处理）。bridge 服务的
+  `multi_format_parser` 用于**文件系统监听场景**（用户在 Hogwarts-KB 目录直接放文件 → fs watcher
+  → IR）。两个使用语境不同，参数化（如 LLM 提供方、并发模型）也不同。
+- **避免破坏性修改**：将新 parser 注入现有 `PARSER_REGISTRY` 需要修改 `parsers/__init__.py` —
+  这违反 "不破坏现有功能" 的硬约束。
+- **测试隔离**：bridge 自带的 53 单元测试不需要启动 Celery；放在 ingestion-worker 中将引入
+  Celery 启动开销。
+- **代码复用路径**：v0.54 当 bridge_ingest Celery stage 落地时，可以从 `bridge.parsers` 导入
+  `parse_file()`，再封装为 ingestion-worker 兼容的 parser 适配器。这种"共享底层，分别封装"的
+  模式比强行共用注册表更清晰。
+
+### ADR-002: bridge_ingest Celery stage 推迟到 v0.54
+
+**Phase 8 Stage 1+3 审计均指出此 stage 在 v0.53 缺失。维持当前现状（推迟），理由：**
+
+- **范围控制**：v0.53 的 ROI 重点是"双协议+本地 NLP+安全 git 写回" — 这三块能让 Claude Code/
+  Desktop 立即开始用。Celery stage 是更深层次的"自动 DB 持久化"，依赖 alembic migration 已部署
+  + Celery broker 已运行 + 解析结果到 Asset/AssetChunk 的 schema mapping。这三个前置条件中至少
+  alembic migration 还没在用户的 Aiven Postgres 上 apply。
+- **替代路径已足够**：v0.53 的 REST/MCP write 接口已经可以"显式触发 KB ↔ KBSQL 数据流"，
+  Claude agent 可以代替 Celery 在 prompt 周期内完成同步。
+- **风险隔离**：bridge_ingest 一旦运行错误（例如 KB schema 不兼容），会污染整个 pipeline 的
+  Job/Asset 表。v0.53 跳过此 stage 让用户在试用阶段没有 DB-side blast radius。
+
+**v0.54 任务**：
+- `services/pipeline-worker/worker/stages/bridge_ingest.py`（stage 0）
+- 在 `bridge.tasks` 添加 `bridge_ingest` Celery task
+- 修改 `bridge.watchers.kb_watcher.run_watcher()` 默认注入 enqueue_fn
+- 移除 `/v1/bridge/mappings` 的 stub 注释
+
+### ADR-003: Auth on bridge write endpoints 推迟到 v0.54
+
+`POST /v1/bridge/write/*` 暂无 admin-only 校验。原因：v0.53 的 `BridgeSettings.writer_allowed_paths`
+已经把破坏面缩到只有两个目录；同时 CSRF 中间件（已生效）阻止了非 XHR 调用。完整 RBAC 要等
+v0.54 的 `Depends(require_permission("bridge:write"))` 中间件落地。
+
+---
+
 *Drafted by Claude Code 2026-04-19 02:30 in autonomous mode following dev-governance v1.4*
+*ADRs added after Phase 8 audit, 2026-04-19 06:00*

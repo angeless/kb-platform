@@ -154,6 +154,19 @@ async def ingest(req: IngestRequest) -> IngestResponse:
     p = Path(req.path)
     if not p.is_absolute():
         p = (s.hogwarts_kb_path / p).resolve()
+    else:
+        p = p.resolve()
+
+    # Path-traversal guard: refuse anything outside HOGWARTS_KB_PATH.
+    # Mirrors the same guard in MCP kb_read tool.
+    try:
+        p.relative_to(s.hogwarts_kb_path.resolve())
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Path escapes KB root: {req.path}",
+        )
+
     if not p.is_file():
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -293,15 +306,21 @@ async def write_analysis(req: WriteSummaryRequest) -> WriteResponse:
 
 @router.post(
     "/sync",
-    summary="Trigger a one-shot full sync of HOGWARTS_KB_PATH",
-    description="Returns immediately; sync runs in background. Use /status to monitor.",
+    summary="Run one-shot full sync of HOGWARTS_KB_PATH (BLOCKING in v0.53)",
+    description=(
+        "Synchronously scans all KB files. Blocks the response until done — "
+        "use only on small KBs (<1000 files). v0.54 will dispatch to Celery. "
+        "The sync runs in a worker thread so other requests stay responsive."
+    ),
 )
 async def sync_endpoint() -> dict[str, Any]:
+    import asyncio
+
     from bridge.watchers.kb_watcher import run_full_sync
 
-    # NOTE: v0.53 runs sync inline (small KBs only). v0.54 will dispatch to
-    # Celery for KBs > 10k files.
-    rc = run_full_sync()
+    # Wrap the synchronous full-sync in a worker thread so we don't block
+    # the FastAPI event loop. Other endpoints stay responsive.
+    rc = await asyncio.to_thread(run_full_sync)
     return {"status": "ok" if rc == 0 else "error", "return_code": rc}
 
 

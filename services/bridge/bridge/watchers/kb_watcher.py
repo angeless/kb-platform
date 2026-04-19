@@ -177,13 +177,28 @@ async def _watch_loop(
 
 
 def run_watcher() -> int:
-    """Synchronous entrypoint for `python -m bridge watch`. Blocks forever."""
+    """Synchronous entrypoint for `python -m bridge watch`. Blocks forever.
+
+    NOTE (v0.53 scope boundary): this entrypoint runs the watcher with
+    NO persist_fn and NO enqueue_fn injected. That means file changes are
+    detected and parsed, but **no DB persistence happens** in v0.53.
+    The bridge_ingest Celery stage that writes BridgeSyncRecord rows lands
+    in v0.54. A WARNING is emitted on startup so silent operation isn't
+    mistaken for success.
+    """
     settings = get_settings()
     kb_root = settings.hogwarts_kb_path
 
     if not kb_root.exists():
         logger.error("KB path does not exist: %s", kb_root)
         return 1
+
+    logger.warning(
+        "v0.53 SCOPE BOUNDARY: watcher runs in detect-only mode. "
+        "Parsed IRs are discarded; BridgeSyncRecord persistence + Celery "
+        "dispatch land in v0.54. Use /v1/bridge/write/* or MCP tools for "
+        "explicit write-back in v0.53."
+    )
 
     try:
         asyncio.run(
@@ -196,13 +211,24 @@ def run_watcher() -> int:
 
 
 def run_full_sync() -> int:
-    """One-shot scan of every file in HOGWARTS_KB_PATH."""
+    """One-shot scan of every file in HOGWARTS_KB_PATH.
+
+    NOTE (v0.53 scope boundary): like run_watcher(), this discards parsed
+    IRs — DB persistence is v0.54 work. The function reports the count
+    of files it would have processed, useful for backfill planning.
+    """
     settings = get_settings()
     kb_root = settings.hogwarts_kb_path
 
     if not kb_root.exists():
         logger.error("KB path does not exist: %s", kb_root)
         return 1
+
+    logger.warning(
+        "v0.53 SCOPE BOUNDARY: full sync runs in detect-only mode. "
+        "Returned count = files scanned, NOT files persisted. "
+        "BridgeSyncRecord writes land in v0.54."
+    )
 
     handled = _get_handled_exts()
     ignore = settings.watcher_ignore_globs

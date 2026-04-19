@@ -126,18 +126,26 @@ def test_write_summary_creates_file_and_commit(fake_kb):
     assert res["wrote_bytes"] > 0
     assert res["auto_pushed"] is False
 
-    # Frontmatter validity
+    # Frontmatter validity (per Hogwarts-KB SCHEMA.md + CLAUDE.md p-chain rule)
     post = frontmatter.loads(target.read_text(encoding="utf-8"))
     assert post.metadata["title"] == "Test Summary"
     assert post.metadata["type"] == "summary"
     assert post.metadata["updated_by"] == "kbsql-bridge[bot]"
     assert post.metadata["sources"] == ["raw-sources/article.md"]
     assert "test" in post.metadata["tags"]
+    # CLAUDE.md mandate: session_id with `cc:` channel prefix for kb-index.py
+    assert post.metadata["session_id"].startswith("cc:")
+    assert "test-summary" in post.metadata["session_id"]
+    assert post.metadata["source"] == "claude-code-bridge"
+    assert post.metadata["parent_session_id"] is None
 
-    # Commit landed
+    # Commit landed with bridge bot identity
     last = repo.head.commit
     assert "bridge: add/update summary — Test Summary" in last.message
     assert "wiki/summaries/test-summary.md" in last.stats.files
+    assert last.author.name == "kbsql-bridge[bot]"
+    assert last.author.email == "bridge@kb-platform.local"
+    assert last.committer.name == "kbsql-bridge[bot]"
 
 
 def test_write_analysis_creates_file_in_analyses_folder(fake_kb):

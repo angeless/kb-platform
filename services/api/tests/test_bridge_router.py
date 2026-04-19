@@ -142,6 +142,25 @@ def test_ingest_rejects_unsupported_extension(client, fake_kb):
     assert r.status_code == 415
 
 
+def test_ingest_path_traversal_rejected(client, fake_kb):
+    """Cross-audit Stage 2 H2 fix: REST /ingest must guard against ../../etc/passwd."""
+    # Try to escape the KB root
+    r = client.post("/v1/bridge/ingest", json={"path": "../../etc/passwd"})
+    assert r.status_code == 403
+    assert "escapes KB root" in r.json()["detail"]
+
+
+def test_ingest_absolute_path_outside_kb_rejected(client, fake_kb, tmp_path):
+    """Even an absolute path outside the KB root must be rejected."""
+    outside = tmp_path.parent / "outside.md"
+    outside.write_text("# Outside\n", encoding="utf-8")
+    try:
+        r = client.post("/v1/bridge/ingest", json={"path": str(outside)})
+        assert r.status_code == 403
+    finally:
+        outside.unlink(missing_ok=True)
+
+
 # ----- write endpoints --------------------------------------------------------
 
 def test_write_summary_creates_file_and_commit(client, fake_kb):
