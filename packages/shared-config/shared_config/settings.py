@@ -37,7 +37,15 @@ class Settings(BaseSettings):
 
     @property
     def _pg_ssl_suffix(self) -> str:
+        # asyncpg uses ?ssl=require in the DSN
         return "?ssl=require" if self.postgres_ssl else ""
+
+    @property
+    def _pg_ssl_suffix_psycopg(self) -> str:
+        # psycopg2 (sync driver) uses a different keyword: sslmode=require.
+        # Without this distinction Alembic fails with
+        #   "invalid connection option 'ssl'" against Aiven/Neon/Supabase.
+        return "?sslmode=require" if self.postgres_ssl else ""
 
     @property
     def database_url(self) -> str:
@@ -49,11 +57,11 @@ class Settings(BaseSettings):
 
     @property
     def database_url_sync(self) -> str:
-        """Sync URL for Alembic migrations."""
+        """Sync URL for Alembic migrations (uses psycopg2 keyword for SSL)."""
         return (
             f"postgresql://{self.postgres_user}:{self.postgres_password}"
             f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
-            f"{self._pg_ssl_suffix}"
+            f"{self._pg_ssl_suffix_psycopg}"
         )
 
     # Redis
