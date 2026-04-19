@@ -63,6 +63,8 @@ def _classify_and_parse(path: Path, kb_root: Path) -> dict[str, Any] | None:
     Returns None instead of raising so the watcher loop doesn't die on one
     bad file. Errors are logged + persisted via BridgeOperation by caller.
     """
+    import yaml  # for YAMLError catch (S2-M5 hot-fix from Phase 8 v0.54 audit)
+
     ext = path.suffix.lower()
     try:
         if ext == ".md":
@@ -72,8 +74,13 @@ def _classify_and_parse(path: Path, kb_root: Path) -> dict[str, Any] | None:
         else:
             logger.debug("Skipping unhandled extension: %s", path)
             return None
-    except (FileNotFoundError, ValueError, UnsupportedFormat) as e:
-        logger.warning("Parse failed for %s: %s", path, e)
+    except (FileNotFoundError, ValueError, UnsupportedFormat, yaml.YAMLError,
+            UnicodeDecodeError) as e:
+        # YAMLError catches malformed frontmatter (e.g. duplicate keys, tab indent).
+        # UnicodeDecodeError catches files mis-classified as text (e.g. .md
+        # symlinks pointing at binary, or Obsidian template files with non-UTF-8 bytes).
+        # A single bad file should not crash the watcher / sync loop.
+        logger.warning("Parse failed for %s: %s", path, type(e).__name__)
         return None
 
     ir["kb_layer"] = detect_kb_layer(path, kb_root)
@@ -213,9 +220,9 @@ def run_watcher() -> int:
 def run_full_sync() -> int:
     """One-shot scan of every file in HOGWARTS_KB_PATH.
 
-    NOTE (v0.53 scope boundary): like run_watcher(), this discards parsed
-    IRs — DB persistence is v0.54 work. The function reports the count
-    of files it would have processed, useful for backfill planning.
+    v0.54+: actually persists to BridgeSyncRecord via bridge_ingest stage
+    when shared-models is importable (i.e. KBSQL DB is reachable). If DB
+    not reachable, falls back to detect-only mode + WARNING log.
     """
     settings = get_settings()
     kb_root = settings.hogwarts_kb_path
@@ -224,11 +231,28 @@ def run_full_sync() -> int:
         logger.error("KB path does not exist: %s", kb_root)
         return 1
 
-    logger.warning(
-        "v0.53 SCOPE BOUNDARY: full sync runs in detect-only mode. "
-        "Returned count = files scanned, NOT files persisted. "
-        "BridgeSyncRecord writes land in v0.54."
-    )
+    # Try to open a DB session for persistence; gracefully fall back if not reachable
+    db_session = None
+    bridge_ingest = None
+    try:
+        from sqlalchemy import create_engine
+        from sqlalchemy.orm import sessionmaker
+
+        from shared_config.settings import get_settings as _kbsql_settings
+        from worker.stages.bridge_ingest import bridge_ingest as _bi
+
+        kbsql = _kbsql_settings()
+        engine = create_engine(kbsql.database_url_sync, future=True)
+        SessionLocal = sessionmaker(bind=engine, future=True)
+        db_session = SessionLocal()
+        bridge_ingest = _bi
+        logger.info("Persistence ENABLED (KBSQL DB reachable)")
+    except Exception as e:
+        logger.warning(
+            "Persistence DISABLED — DB unreachable or worker not installed: %s. "
+            "Sync will run in detect-only mode (no BridgeSyncRecord rows written).",
+            type(e).__name__,
+        )
 
     handled = _get_handled_exts()
     ignore = settings.watcher_ignore_globs
@@ -245,10 +269,22 @@ def run_full_sync() -> int:
         if _is_ignored(str(rel), ignore):
             continue
         ir = _classify_and_parse(path, kb_root)
-        if ir is not None:
-            count += 1
-            if count % 50 == 0:
-                logger.info("Sync progress: %d files processed", count)
+        if ir is None:
+            continue
+        count += 1
+        # Persist via bridge_ingest if DB session opened above
+        if db_session is not None and bridge_ingest is not None:
+            try:
+                bridge_ingest(db_session, ir=ir, kb_root=str(kb_root))
+                # Commit per-file so a single bad file doesn't roll back all progress
+                db_session.commit()
+            except Exception as e:
+                db_session.rollback()
+                logger.warning("bridge_ingest failed for %s: %s", path, type(e).__name__)
+        if count % 50 == 0:
+            logger.info("Sync progress: %d files processed", count)
 
+    if db_session is not None:
+        db_session.close()
     logger.info("Full sync complete: %d files processed", count)
     return 0

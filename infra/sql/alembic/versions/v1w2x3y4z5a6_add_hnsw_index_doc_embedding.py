@@ -18,18 +18,24 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # Step 1: Backfill embedding_vec from JSONB embedding column
+    # Step 1: Backfill embedding_vec from JSONB embedding column.
+    # Cast via ::text first because pgvector has no direct jsonb→vector cast
+    # (fix 2026-04-19 — migration was failing on Postgres 17 + pgvector 0.8).
     op.execute("""
         UPDATE doc_embedding
-        SET embedding_vec = embedding::vector
+        SET embedding_vec = embedding::text::vector
         WHERE embedding IS NOT NULL
           AND embedding_vec IS NULL
     """)
 
-    # Step 2: Create HNSW index for cosine similarity search
-    # Using CONCURRENTLY to avoid locking the table during index build
+    # Step 2: Create HNSW index for cosine similarity search.
+    # Note: CONCURRENTLY removed (2026-04-19) because alembic wraps each
+    # migration in a transaction, and CREATE INDEX CONCURRENTLY cannot run
+    # inside one. For initial setup on empty/small tables this is fine.
+    # If you need CONCURRENTLY for a hot prod table, run that statement
+    # manually outside alembic.
     op.execute("""
-        CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_doc_embedding_vec_hnsw
+        CREATE INDEX IF NOT EXISTS idx_doc_embedding_vec_hnsw
         ON doc_embedding
         USING hnsw (embedding_vec vector_cosine_ops)
         WITH (m = 16, ef_construction = 64)
