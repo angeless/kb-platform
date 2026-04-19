@@ -1,0 +1,32 @@
+[project]
+name = "bridge-graph"
+version = "0.1.0"
+description = "Kuzu-based embedded graph layer for KBSQL bridge (v0.54+)"
+requires-python = ">=3.12"
+dependencies = [
+    "kuzu>=0.5",
+    "python-frontmatter>=1.0",
+]
+
+[project.optional-dependencies]
+ner = [
+    "spacy>=3.7",
+]
+graphiti = [
+    # graphiti-core integration is optional — adds GLM-powered extraction.
+    # Pure Kuzu + heuristic mode works without it.
+    "graphiti-core>=0.3",
+]
+dev = [
+    "pytest>=8.0",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["bridge_graph*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
