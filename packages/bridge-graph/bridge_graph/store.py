@@ -220,6 +220,12 @@ class GraphStore:
 
     def get_neighbors(self, page_name: str, depth: int = 1) -> list[dict[str, Any]]:
         """Return pages reachable from `page_name` within `depth` hops."""
+        # SECURITY: depth is interpolated into Cypher via f-string because Kuzu
+        # 0.11 doesn't support parametrized variable-length range syntax
+        # (`*1..$depth`). The two-line guard below is the ONLY protection;
+        # callers must NOT bypass it. page_name uses safe parametrized binding.
+        if not isinstance(depth, int):
+            raise GraphStoreError(f"depth must be int, got {type(depth).__name__}")
         depth = max(1, min(depth, 5))  # safety: never run a 100-hop wildcard
         # Kuzu variable-length: -[*1..N]->
         query = (
@@ -264,11 +270,21 @@ class GraphStore:
         return res.has_next() and res.get_next()[0] == 1
 
     def close(self) -> None:
-        """Release Kuzu handles."""
+        """Release Kuzu handles. Idempotent."""
         # Kuzu's Python binding doesn't expose a `close` on Connection;
         # garbage collection handles it. Provided for API symmetry.
-        del self._conn
-        del self._db
+        # Audit S2-H2: explicit close+context-manager support prevents
+        # Kuzu file-handle leaks under concurrent FastAPI requests.
+        if hasattr(self, "_conn"):
+            del self._conn
+        if hasattr(self, "_db"):
+            del self._db
+
+    def __enter__(self) -> "GraphStore":
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        self.close()
 
     @property
     def db_path(self) -> str:

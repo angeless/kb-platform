@@ -319,8 +319,9 @@ def kb_graph_stats() -> dict[str, Any]:
     from bridge_graph import GraphStore
 
     db = _graph_db_path()
-    gs = GraphStore(db)
-    s = gs.stats()
+    # Audit S2-H2: context manager releases Kuzu file handle each call
+    with GraphStore(db) as gs:
+        s = gs.stats()
     return {**{k: int(v) for k, v in s.items()}, "db_path": db}
 
 
@@ -334,8 +335,8 @@ def kb_graph_neighbors(page_name: str, depth: int = 1) -> list[dict[str, Any]]:
     """
     from bridge_graph import GraphStore
 
-    gs = GraphStore(_graph_db_path())
-    return gs.get_neighbors(page_name, depth=depth)
+    with GraphStore(_graph_db_path()) as gs:
+        return gs.get_neighbors(page_name, depth=depth)
 
 
 @mcp.tool()
@@ -343,8 +344,8 @@ def kb_graph_pchain(session_id: str) -> list[str]:
     """Trace ancestors of a session_id via parent_session_id (pchain). Newest first."""
     from bridge_graph import GraphStore
 
-    gs = GraphStore(_graph_db_path())
-    return gs.get_p_chain(session_id)
+    with GraphStore(_graph_db_path()) as gs:
+        return gs.get_p_chain(session_id)
 
 
 @mcp.tool()

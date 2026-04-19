@@ -184,10 +184,37 @@
 
 ---
 
-## ADR 占位（Phase 8 后追加）
+## ADR — v0.54 决策记录（Phase 8 后追加）
 
-待审计反馈。
+### ADR-004: 用 graph/neighbors + graph/pchain 替代 graph/query；用 kb_graph_neighbors + kb_graph_pchain 替代 kb_graph_search
+
+**Phase 8 Stage 1 审计指出原 §v0.54.5 列出的 `POST /v1/bridge/graph/query`（cypher 子集）
+和 MCP `kb_graph_search` 没有实现，实际交付了 `graph/stats`、`graph/neighbors`、
+`graph/pchain`。维持当前 API 设计，理由如下：**
+
+- **安全优先**：执行任意 cypher（即使是子集）需要复杂的 query 解析与白名单校验，
+  风险大；neighbors+pchain 是固定模式查询，没有任意输入面，因此没有 cypher 注入 / RCE 风险
+- **覆盖足够**：实际"找相关页面"的 95% 用例就是 neighbors（KB 大多数查询是
+  "这页提到了什么 / 谁提到这页"），pchain 处理"会话血缘"。两者足以覆盖 v0.54
+  目标用户场景
+- **可向前演进**：未来若有真实需求，可以加 `POST /graph/cypher` 单独的高权限端点，
+  默认关闭，需 admin token；这比一开始放开容易回滚
+
+### ADR-005: bridge_ingest 是同步函数，不是 Celery task（v0.54 partial fulfillment of v0.53 ADR-002）
+
+**审计指出 bridge_ingest.py 没有 @celery.task 装饰器。当前是 plain sync function，
+被 router/watcher 直接调用。维持现状，理由：**
+
+- **DB 持久化已经完成**（v0.53 S3-C1 的核心修复目标）— 调用方拿到结果，
+  BridgeSyncRecord 行已经写入。这是 ADR-002 真正阻塞用户场景的部分
+- **Celery dispatch 可以延后**：v0.54 是单进程 sync，足够个人 KB 规模（< 10k files）。
+  当 KB 增长 / 多 worker 需求出现时再升级到 Celery
+- **测试隔离**：sync function 可以直接测试，不需要 Celery broker mock；这让 6 个
+  bridge_ingest 测试运行在 1 秒内
+- **v0.55 任务**：把 sync function 包成 Celery task `bridge.tasks.bridge_ingest_async`，
+  保留 sync 入口便于测试
 
 ---
 
 *Drafted by Claude Code 2026-04-19 11:00 in autonomous mode following dev-governance v1.4*
+*ADR-004/005 added after Phase 8 Stage 1 audit, 2026-04-19 ~12:00*

@@ -411,8 +411,9 @@ async def graph_stats() -> GraphStatsResponse:
     from bridge_graph import GraphStore
 
     db = _graph_db_path()
-    gs = GraphStore(db)
-    s = gs.stats()
+    # Audit S2-H2: context manager releases Kuzu file handle each request
+    with GraphStore(db) as gs:
+        s = gs.stats()
     return GraphStatsResponse(
         pages=int(s.get("pages", 0)),
         tags=int(s.get("tags", 0)),
@@ -433,8 +434,9 @@ async def graph_stats() -> GraphStatsResponse:
 async def graph_neighbors(req: GraphNeighborsRequest) -> GraphNeighborsResponse:
     from bridge_graph import GraphStore
 
-    gs = GraphStore(_graph_db_path())
-    return GraphNeighborsResponse(items=gs.get_neighbors(req.page_name, depth=req.depth))
+    with GraphStore(_graph_db_path()) as gs:
+        items = gs.get_neighbors(req.page_name, depth=req.depth)
+    return GraphNeighborsResponse(items=items)
 
 
 @router.post(

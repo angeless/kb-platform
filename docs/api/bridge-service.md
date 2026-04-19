@@ -1,4 +1,9 @@
-# Bridge Service — User Guide (v0.53)
+# Bridge Service — User Guide (v0.54)
+
+> v0.54 adds: graph layer (Kuzu), reader-aware visual augmentation
+> (mermaid + outline), bridge_ingest Celery stage. See:
+> - **[bridge-graph.md](./bridge-graph.md)** for the graph layer (Kuzu)
+> - **[bridge-visual.md](./bridge-visual.md)** for visual augmentation
 
 The bridge service synchronizes a local Hogwarts-KB markdown repository
 with KBSQL via two protocols:
@@ -113,8 +118,12 @@ the rest of KBSQL).
 | POST   | `/v1/bridge/classify`       | Suggest path + tags |
 | POST   | `/v1/bridge/write/summary`  | Write summary into wiki/summaries/ + auto-commit |
 | POST   | `/v1/bridge/write/analysis` | Write analysis into wiki/analyses/ + auto-commit |
-| POST   | `/v1/bridge/sync`           | Trigger full sync (inline in v0.53) |
-| GET    | `/v1/bridge/mappings`       | List KB ↔ doc_id mappings (stub in v0.53) |
+| POST   | `/v1/bridge/sync`           | Trigger full sync (now async-safe via asyncio.to_thread) |
+| GET    | `/v1/bridge/mappings`       | List KB ↔ doc_id mappings |
+| GET    | `/v1/bridge/graph/stats`    | **v0.54** Graph DB node + relation counts |
+| POST   | `/v1/bridge/graph/neighbors`| **v0.54** Pages reachable within N hops |
+| POST   | `/v1/bridge/visual/profile` | **v0.54** Reader-readability score (no augment) |
+| POST   | `/v1/bridge/visual/augment` | **v0.54** Inject mermaid + outline |
 
 ### curl examples
 
@@ -186,6 +195,11 @@ transport (replaces SSE). Use the official MCP client library to connect.
 | `kb_classify`       | Suggest path + tags |
 | `kb_write_summary`  | Write to wiki/summaries/ + auto-commit |
 | `kb_write_analysis` | Write to wiki/analyses/ + auto-commit |
+| `kb_graph_stats`    | **v0.54** Graph DB stats |
+| `kb_graph_neighbors`| **v0.54** Pages reachable within N hops |
+| `kb_graph_pchain`   | **v0.54** Session ancestor chain |
+| `kb_visual_profile` | **v0.54** Reader score (no augment) |
+| `kb_visual_augment` | **v0.54** Inject mermaid + outline |
 
 ## Safety Contract
 

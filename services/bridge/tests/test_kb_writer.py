@@ -213,3 +213,98 @@ def test_write_fails_when_kb_path_not_a_repo(tmp_path, monkeypatch):
 
     with pytest.raises(KBWriteError, match="not a git repo"):
         write_summary_to_kb(title="x", body="y\n")
+
+
+# =================================================================
+# v0.54 — augment_existing_in_place tests
+# =================================================================
+
+from bridge.writers.kb_writer import augment_existing_in_place
+
+
+def test_augment_in_place_writes_when_marker_present(fake_kb):
+    kb_root, repo = fake_kb
+    # Create an existing wiki/howtos file
+    target = kb_root / "wiki" / "howtos" / "test.md"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    original = "# Title\n\nOriginal body.\n"
+    target.write_text(original, encoding="utf-8")
+    repo.git.add("--all")
+    repo.index.commit("seed file")
+
+    augmented = (
+        "# Title\n\n"
+        "<!-- bridge-visual:start v=1 audience=0.7 -->\n"
+        "```mermaid\nflowchart TD\nA-->B\n```\n"
+        "<!-- bridge-visual:end -->\n\n"
+        "Original body.\n"
+    )
+    res = augment_existing_in_place(
+        relative_path="wiki/howtos/test.md",
+        augmented_full_text=augmented,
+    )
+    assert res["skipped"] is False
+    assert (kb_root / "wiki" / "howtos" / "test.md").read_text() == augmented
+
+
+def test_augment_in_place_skipped_when_unchanged(fake_kb):
+    kb_root, repo = fake_kb
+    target = kb_root / "wiki" / "howtos" / "test.md"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    augmented = (
+        "# Title\n\n"
+        "<!-- bridge-visual:start v=1 audience=0.7 -->\n"
+        "<!-- bridge-visual:end -->\n"
+    )
+    target.write_text(augmented, encoding="utf-8")
+    repo.git.add("--all")
+    repo.index.commit("seed already-augmented file")
+
+    res = augment_existing_in_place(
+        relative_path="wiki/howtos/test.md",
+        augmented_full_text=augmented,
+    )
+    assert res["skipped"] is True
+    assert res["wrote_bytes"] == 0
+
+
+def test_augment_in_place_rejects_missing_marker(fake_kb):
+    kb_root, repo = fake_kb
+    target = kb_root / "wiki" / "howtos" / "test.md"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text("# Title\nOriginal\n", encoding="utf-8")
+    repo.git.add("--all")
+    repo.index.commit("seed")
+
+    with pytest.raises(KBWriteError, match="missing bridge-visual marker"):
+        augment_existing_in_place(
+            relative_path="wiki/howtos/test.md",
+            augmented_full_text="# Title\n\nNo marker here.\n",
+        )
+
+
+def test_augment_in_place_rejects_non_markdown(fake_kb):
+    with pytest.raises(KBWriteError, match="only .md files"):
+        augment_existing_in_place(
+            relative_path="wiki/howtos/test.txt",
+            augmented_full_text="<!-- bridge-visual:start -->\n<!-- bridge-visual:end -->",
+        )
+
+
+def test_augment_in_place_rejects_path_traversal(fake_kb):
+    with pytest.raises(KBWriteError, match="escapes KB root"):
+        augment_existing_in_place(
+            relative_path="../../etc/passwd.md",
+            augmented_full_text="<!-- bridge-visual:start -->\nx\n<!-- bridge-visual:end -->",
+        )
+
+
+def test_augment_in_place_rejects_nonexistent(fake_kb):
+    with pytest.raises(KBWriteError, match="does not exist"):
+        augment_existing_in_place(
+            relative_path="wiki/howtos/never-existed.md",
+            augmented_full_text=(
+                "<!-- bridge-visual:start v=1 -->\n"
+                "<!-- bridge-visual:end -->\n"
+            ),
+        )

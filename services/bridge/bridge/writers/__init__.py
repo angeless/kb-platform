@@ -3,6 +3,7 @@
 from .kb_writer import (
     write_summary_to_kb,
     write_analysis_to_kb,
+    augment_existing_in_place,
     KBWriteError,
     GitLockTimeout,
 )
@@ -10,6 +11,7 @@ from .kb_writer import (
 __all__ = [
     "write_summary_to_kb",
     "write_analysis_to_kb",
+    "augment_existing_in_place",
     "KBWriteError",
     "GitLockTimeout",
 ]

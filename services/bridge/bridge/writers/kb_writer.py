@@ -219,6 +219,112 @@ def write_analysis_to_kb(
     )
 
 
+def augment_existing_in_place(
+    *,
+    relative_path: str,
+    augmented_full_text: str,
+    expected_marker_start: str = "<!-- bridge-visual:start",
+    expected_marker_end: str = "<!-- bridge-visual:end -->",
+) -> dict[str, Any]:
+    """Overwrite an existing markdown file with a bridge-visual-augmented version.
+
+    SAFETY CONTRACT (v0.54+):
+    1. Target MUST already exist (we don't create new files via this path)
+    2. Target MUST be a .md file
+    3. Target MUST live anywhere INSIDE kb_root (any layer — concept/howto/etc.)
+       BUT the augmented_full_text MUST contain bridge-visual markers
+       (proves it actually came from the augmenter and not arbitrary input)
+    4. Bytes diff outside the markers should be zero (we DON'T enforce this
+       at runtime — augmenter guarantees it; if a buggy augmenter modifies
+       non-marker content, the user's git diff will catch it)
+    5. Auto-commit + optional push (same git lock contract as other writers)
+
+    This is the ONLY public API that can modify wiki/concepts/, wiki/howtos/,
+    wiki/entities/, lessons/, memory/, raw-sources/. ALL other writes still go
+    through write_summary_to_kb / write_analysis_to_kb (restricted folders).
+
+    Args:
+        relative_path: KB-relative path (e.g. "wiki/howtos/foo.md")
+        augmented_full_text: full file content with frontmatter + body
+        expected_marker_start / _end: safety check — must appear in text
+
+    Returns:
+        {"path", "commit_sha", "wrote_bytes", "auto_pushed", "skipped"}
+        where skipped=True means content was identical (no commit).
+    """
+    settings = get_settings()
+    kb_root = settings.hogwarts_kb_path
+    if not kb_root.exists():
+        raise KBWriteError(f"KB path does not exist: {kb_root}")
+    if not (kb_root / ".git").exists():
+        raise KBWriteError(f"KB path is not a git repo: {kb_root}")
+
+    # 1. file extension guard
+    if not relative_path.endswith(".md"):
+        raise KBWriteError(
+            f"augment_existing_in_place: only .md files allowed, got {relative_path}"
+        )
+
+    # 2. marker guard (proves this came from bridge-visual, not arbitrary text)
+    if expected_marker_start not in augmented_full_text:
+        raise KBWriteError(
+            "augment_existing_in_place: text missing bridge-visual marker; "
+            "refusing to write (safety check)."
+        )
+    if expected_marker_end not in augmented_full_text:
+        raise KBWriteError(
+            "augment_existing_in_place: text missing bridge-visual end marker; "
+            "refusing to write."
+        )
+
+    target = (kb_root / relative_path).resolve()
+    # 3. path traversal guard
+    try:
+        target.relative_to(kb_root.resolve())
+    except ValueError as e:
+        raise KBWriteError(
+            f"Path escapes KB root: {relative_path}"
+        ) from e
+    # 4. existence guard
+    if not target.is_file():
+        raise KBWriteError(
+            f"Target file does not exist (use write_summary_to_kb / write_analysis_to_kb "
+            f"to create new files): {relative_path}"
+        )
+
+    _wait_for_git_lock(kb_root, settings.writer_git_lock_timeout_s)
+
+    # Idempotent skip if content already identical
+    current = target.read_text(encoding="utf-8")
+    if current == augmented_full_text:
+        return {
+            "path": relative_path,
+            "commit_sha": "(unchanged)",
+            "wrote_bytes": 0,
+            "auto_pushed": False,
+            "skipped": True,
+        }
+
+    target.write_text(augmented_full_text, encoding="utf-8")
+    wrote = target.stat().st_size
+
+    commit_sha = _commit_and_push(
+        kb_root,
+        target,
+        f"bridge-visual: augment {relative_path}",
+        auto_push=settings.hogwarts_kb_auto_push,
+        branch=settings.hogwarts_kb_branch,
+    )
+
+    return {
+        "path": relative_path,
+        "commit_sha": commit_sha,
+        "wrote_bytes": wrote,
+        "auto_pushed": settings.hogwarts_kb_auto_push,
+        "skipped": False,
+    }
+
+
 def _slugify(s: str) -> str:
     import re
     s = s.strip().lower()

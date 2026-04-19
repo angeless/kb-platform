@@ -139,9 +139,12 @@ def bridge_ingest(
         except Exception as e:
             logger.warning("graph upsert failed for %s: %s", rel, e)
 
-    # 3) Optional: visual augmentation (DRY-RUN ONLY — returns suggestion;
-    #    caller decides if/when to write back via kb_writer)
+    # 3) Optional: visual augmentation
+    #    By default writes the augmented result back IN-PLACE to the source
+    #    file (per user goal "在收入库的同时也为文章内容增加流程图").
+    #    Set BRIDGE_VISUAL_DRYRUN=true to skip the write-back.
     visual_augmented = False
+    visual_written_back = False
     if enable_visual and status != "unchanged" and ir.get("content_md"):
         try:
             import frontmatter as _fm
@@ -154,6 +157,22 @@ def bridge_ingest(
             full_md = _fm.dumps(_fm.Post(ir["content_md"], **fm_dict)) + "\n"
             res = augment_markdown(full_md)
             visual_augmented = res.augmented
+
+            # Auto write-back unless dry-run mode or content didn't actually change
+            dryrun = os.environ.get("BRIDGE_VISUAL_DRYRUN", "false").lower() == "true"
+            if visual_augmented and not dryrun:
+                from bridge.writers import augment_existing_in_place
+
+                try:
+                    write_res = augment_existing_in_place(
+                        relative_path=rel,
+                        augmented_full_text=res.output,
+                    )
+                    visual_written_back = not write_res.get("skipped", False)
+                except Exception as wb_err:
+                    # Don't fail the whole ingest if write-back fails — log
+                    # the issue (visible in BridgeOperation.detail) and continue
+                    logger.warning("visual write-back failed for %s: %s", rel, wb_err)
         except Exception as e:
             logger.warning("visual augment failed for %s: %s", rel, e)
 
@@ -171,6 +190,7 @@ def bridge_ingest(
                 "visual_enabled": enable_visual,
                 "triples_upserted": triples_count,
                 "visual_augmented": visual_augmented,
+                "visual_written_back": visual_written_back,
             },
             duration_ms=duration_ms,
         )
@@ -181,5 +201,6 @@ def bridge_ingest(
         "sync_record_id": str(existing.id),
         "graph_triples_upserted": triples_count,
         "visual_augmented": visual_augmented,
+        "visual_written_back": visual_written_back,
         "duration_ms": duration_ms,
     }

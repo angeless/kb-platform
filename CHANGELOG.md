@@ -3,6 +3,101 @@
 所有重要变更都将被记录在此文件中。
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/)。
 
+## [0.54.0] — 2026-04-19
+
+### 新增 (Added)
+
+**Graph 层 + 读者感知视觉增强**
+
+- **新包 `packages/bridge-graph/`** — Kuzu 嵌入式图 DB
+  - `GraphStore` (Page/Tag/Episode 节点 + references_/tagged_with/produced_in/pchain 边)
+  - 上下文管理器支持（`with GraphStore() as gs:`），防止文件句柄泄漏
+  - `extract_triples` (heuristic / NER_LIGHT / LLM_DEEP[v0.55])
+  - 17 单元测试
+
+- **新包 `packages/bridge-visual/`** — 读者感知视觉增强
+  - `profile_reader` — 7 个加权信号 → audience_score 0-1 + rationale dict
+  - `generate_mermaid` — flowchart (steps) / stateDiagram (transitions) / 不生成（避免造假）
+  - `generate_outline` — 折叠 `<details>` TOC（CJK 锚点支持）
+  - `augment_markdown` — 幂等注入 `<!-- bridge-visual:start/end -->` 块
+  - 18 单元测试
+
+- **REST 4 个新端点** (`services/api/app/routers/bridge.py`)
+  - `GET /v1/bridge/graph/stats` — 图 DB 统计
+  - `POST /v1/bridge/graph/neighbors` — N-hop 可达页面（depth 1-5）
+  - `POST /v1/bridge/visual/profile` — 读者画像（无修改）
+  - `POST /v1/bridge/visual/augment` — 注入 mermaid + outline
+
+- **MCP 5 个新工具** (`services/mcp-server/mcp_server/server.py`)
+  - `kb_graph_stats` / `kb_graph_neighbors` / `kb_graph_pchain`
+  - `kb_visual_profile` / `kb_visual_augment`
+  - 全部用 `with GraphStore()` 包裹（释放 Kuzu 句柄）
+
+- **bridge_ingest Celery stage** (`services/pipeline-worker/worker/stages/bridge_ingest.py`)
+  - 落地 v0.53 ADR-002 deferred 项
+  - 持久化 BridgeSyncRecord（content_hash 去重）
+  - `BRIDGE_GRAPH_ENABLED=true` → 自动 upsert 三元组到 Kuzu
+  - `BRIDGE_VISUAL_ENABLED=true` → 自动 augment + **写回 KB 源文件**
+    （通过 `kb_writer.augment_existing_in_place` 严格安全契约）
+  - 6 单元测试
+
+- **新文档**
+  - `docs/api/bridge-graph.md` — Kuzu 用户指南
+  - `docs/api/bridge-visual.md` — 视觉增强用户指南
+  - `docs/dev-plans/dev-plan-v0.54.md` — 完整 8-子版本计划 + 5 ADR
+  - `docs/audits/v0.54.0-bridge-audit.md` — Phase 8 审计报告（HEALTH B+）
+
+- **配置更新**
+  - `services/api/app/main.py` CORS allow_headers 加 `X-Requested-With`
+  - Hogwarts-KB `.bridge-config.yml` 新增 `v054.graph` + `v054.visual` 配置块
+  - Hogwarts-KB `.gitignore` 加 `.bridge-state/` + `*.kuzu`（防止 Kuzu DB 文件被提交）
+  - Hogwarts-KB `wiki/howtos/kbsql-bridge-v054-handoff.md` 新交接文档
+
+### 修复 (Fixed)
+
+- `bridge.parsers.markdown_parser` 时序属性弃用警告
+- `services/api/app/routers/bridge.py /sync` 端点不再阻塞事件循环（asyncio.to_thread）
+
+### 安全 (Security)
+
+- CORS 加 X-Requested-With 防止浏览器跨域 POST 被 preflight 静默拦截
+- Cypher f-string 注入防御：get_neighbors 加 isinstance 守卫
+- GraphStore 上下文管理器防止 Kuzu 文件句柄泄漏
+- `kb_writer.augment_existing_in_place` 4 道安全检查：
+  1. 仅 `.md` 文件
+  2. 必须含 bridge-visual marker（防止任意文件覆盖）
+  3. 路径穿越守卫
+  4. 目标必须已存在（不能创建新文件）
+
+### 决策 (ADRs)
+
+- ADR-001 (v0.53): multi_format_parser 在 bridge 而非 ingestion-worker
+- ADR-002 (v0.53→v0.54): bridge_ingest Celery stage — DB 持久化已落地，Celery 包装 v0.55
+- ADR-003 (v0.53): write 端点 RBAC 推迟 v0.54 - 仍延后 v0.55
+- ADR-004 (v0.54): graph/query 替换为 graph/neighbors+pchain（安全优先）
+- ADR-005 (v0.54): bridge_ingest 是 sync function，不是 Celery task（v0.55 包装）
+
+### 测试 (Tests)
+
+- 153 测试通过 (22.3 秒)
+  - bridge: 65 (was 59) — +6 augment_existing_in_place
+  - bridge-utils: 10
+  - bridge-graph: 17
+  - bridge-visual: 18
+  - mcp-server: 18
+  - api/test_bridge_router: 18
+  - pipeline-worker/test_bridge_ingest: 6
+- 较 v0.53 增加 59 测试 (94 → 153)
+
+### 不破坏 (Preserved)
+
+- v0.52/v0.53 全部代码未动
+- services/bridge/ 现有文件未触
+- 7 个现有 pipeline stage 仅追加 1 个（bridge_ingest）
+- 27 个现有 router 仅追加 4 个新端点（同一文件 append）
+- 25 个 SQLAlchemy 模型未动
+- 0 新的 alembic migration（v0.54 无 SQL 表新增；图 DB 是文件）
+
 ## [0.53.0] — 2026-04-19
 
 ### 新增 (Added)

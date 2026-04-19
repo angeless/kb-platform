@@ -76,6 +76,35 @@ python -c "import nltk; nltk.download('punkt_tab', quiet=True); nltk.download('p
 Without this, `POST /v1/bridge/summarize` and `kb_summarize` MCP tool
 will raise an NLTK LookupError on first call.
 
+### 3c. v0.54 — Graph layer + visual augmentation (OPTIONAL)
+
+To enable the new v0.54 capabilities:
+
+```bash
+# Install the new packages
+pip install -e ./packages/bridge-graph -e ./packages/bridge-visual
+
+# In .env:
+BRIDGE_GRAPH_ENABLED=true                                 # default: false
+BRIDGE_VISUAL_ENABLED=true                                # default: false
+BRIDGE_GRAPH_DB_PATH=$HOGWARTS_KB_PATH/.bridge-state/.graph.kuzu  # default
+BRIDGE_VISUAL_DRYRUN=false                                # default: false (real write-back)
+```
+
+⚠️ **CRITICAL**: Add `.bridge-state/` to your Hogwarts-KB `.gitignore`
+BEFORE enabling `BRIDGE_GRAPH_ENABLED=true`. The Kuzu graph file is
+derived/rebuildable and should never be committed:
+
+```bash
+echo -e ".bridge-state/\n*.kuzu" >> $HOGWARTS_KB_PATH/.gitignore
+```
+
+When `BRIDGE_VISUAL_ENABLED=true`, qualifying files (audience_score ≥ 0.6)
+get a Mermaid + outline block injected in-place via auto-commit. This
+modifies your KB markdown sources. The change is wrapped in
+`<!-- bridge-visual:start ... -->` markers so it's idempotent and
+reversible.
+
 ### 4. Optional: Install heavy parsers
 
 ```bash

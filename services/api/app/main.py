@@ -92,7 +92,15 @@ def create_app() -> FastAPI:
         allow_origins=origins,
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-        allow_headers=["Content-Type", "Authorization", "X-Request-ID"],
+        allow_headers=[
+            "Content-Type",
+            "Authorization",
+            "X-Request-ID",
+            # v0.54: required by CsrfMiddleware for all state-changing requests.
+            # Without this, browser cross-origin POSTs are silently blocked at
+            # the preflight before CSRF check can succeed.
+            "X-Requested-With",
+        ],
     )
 
     # Exception handlers
