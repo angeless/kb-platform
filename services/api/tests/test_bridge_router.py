@@ -193,3 +193,115 @@ def test_mappings_endpoint_returns_stub(client):
     body = r.json()
     assert body["items"] == []
     assert "v0.53 stub" in body["_note"]
+
+
+# =================================================================
+# v0.54 — graph + visual endpoint tests
+# =================================================================
+
+@pytest.fixture()
+def fake_kb_with_graph(tmp_path: Path, monkeypatch):
+    """fake_kb fixture variant that ALSO points BRIDGE_GRAPH_DB_PATH at tmp."""
+    repo = Repo.init(tmp_path)
+    with repo.config_writer() as cfg:
+        cfg.set_value("user", "name", "Test")
+        cfg.set_value("user", "email", "test@example.local")
+    for sub in ["wiki/summaries", "wiki/analyses"]:
+        d = tmp_path / sub
+        d.mkdir(parents=True, exist_ok=True)
+        (d / ".gitkeep").touch()
+    repo.git.add("--all")
+    repo.index.commit("initial")
+
+    from bridge import config as bridge_config
+    from bridge.writers import kb_writer
+
+    class FakeSettings:
+        hogwarts_kb_path = tmp_path
+        hogwarts_kb_branch = repo.active_branch.name
+        hogwarts_kb_auto_push = False
+        glm_api_key = "test-key"
+        bridge_llm_provider = "glm"
+        bridge_llm_strict = True
+        bridge_llm_model = "glm-4-flash"
+        bridge_llm_base_url = "https://x.test"
+        writer_allowed_paths = ["wiki/summaries", "wiki/analyses"]
+        writer_git_lock_timeout_s = 1
+        watcher_ignore_globs = [".git/*"]
+
+    monkeypatch.setattr(bridge_config, "get_settings", lambda: FakeSettings())
+    monkeypatch.setattr(kb_writer, "get_settings", lambda: FakeSettings())
+    monkeypatch.setenv("BRIDGE_GRAPH_DB_PATH", str(tmp_path / ".graph.kuzu"))
+    return tmp_path
+
+
+def test_graph_stats_empty(client, fake_kb_with_graph):
+    r = client.get("/v1/bridge/graph/stats")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["pages"] == 0
+    assert body["episodes"] == 0
+    assert body["db_path"].endswith(".graph.kuzu")
+
+
+def test_graph_neighbors_returns_empty_for_unknown(client, fake_kb_with_graph):
+    r = client.post(
+        "/v1/bridge/graph/neighbors",
+        json={"page_name": "wiki/concepts/nonexistent", "depth": 1},
+    )
+    assert r.status_code == 200
+    assert r.json()["items"] == []
+
+
+def test_visual_profile_returns_score(client):
+    r = client.post(
+        "/v1/bridge/visual/profile",
+        json={"markdown": "## Step 1: foo\n## Step 2: bar\n## Step 3: baz\n"},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert "audience_score" in body
+    assert body["has_steps"] is True
+
+
+def test_visual_augment_inserts_block(client):
+    body_padding = "Detailed paragraph. " * 50
+    md = f"""---
+type: howto
+---
+
+# Title
+
+## Overview
+
+{body_padding}
+
+## Step 1: Do it
+
+{body_padding}
+
+## Step 2: Check
+
+{body_padding}
+
+## Step 3: Done
+
+{body_padding}
+"""
+    r = client.post("/v1/bridge/visual/augment", json={"markdown": md})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["augmented"] is True
+    assert "<!-- bridge-visual:start" in body["output"]
+    assert "```mermaid" in body["output"]
+
+
+def test_visual_augment_below_threshold(client):
+    r = client.post(
+        "/v1/bridge/visual/augment",
+        json={"markdown": "short"},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["augmented"] is False
+    assert body["skipped_reason"]

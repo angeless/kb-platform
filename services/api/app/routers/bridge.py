@@ -339,3 +339,151 @@ async def list_mappings(limit: int = 50, offset: int = 0) -> dict[str, Any]:
         "total": 0,
         "_note": "v0.53 stub: bridge_ingest persistence lands in v0.54",
     }
+
+
+# =================================================================
+# v0.54 — Graph + Visual augmentation endpoints
+# =================================================================
+
+class GraphStatsResponse(BaseModel):
+    pages: int
+    tags: int
+    episodes: int
+    references_: int
+    tagged_with: int
+    produced_in: int
+    pchain: int
+    db_path: str
+
+
+class GraphNeighborsRequest(BaseModel):
+    page_name: str = Field(..., description="KB-relative path (e.g. 'wiki/concepts/foo')")
+    depth: int = Field(default=1, ge=1, le=5)
+
+
+class GraphNeighborsResponse(BaseModel):
+    items: list[dict[str, Any]]
+
+
+class VisualProfileRequest(BaseModel):
+    markdown: str = Field(..., min_length=1)
+
+
+class VisualProfileResponse(BaseModel):
+    audience_score: float
+    has_steps: bool
+    has_branches: bool
+    has_state_machine: bool
+    has_outline_value: bool
+    heading_count: int
+    char_count: int
+    rationale: dict[str, float]
+
+
+class VisualAugmentRequest(BaseModel):
+    markdown: str = Field(..., min_length=1)
+    threshold: float | None = Field(default=None, ge=0.0, le=1.0)
+
+
+class VisualAugmentResponse(BaseModel):
+    augmented: bool
+    output: str
+    skipped_reason: str | None
+    profile: VisualProfileResponse
+
+
+def _graph_db_path() -> str:
+    """Resolve the Kuzu graph DB path from config (deferred env read)."""
+    import os
+    from bridge.config import get_settings
+
+    s = get_settings()
+    default = str(s.hogwarts_kb_path / ".bridge-state" / ".graph.kuzu")
+    return os.environ.get("BRIDGE_GRAPH_DB_PATH", default)
+
+
+@router.get(
+    "/graph/stats",
+    response_model=GraphStatsResponse,
+    summary="Graph DB node + relation counts",
+)
+async def graph_stats() -> GraphStatsResponse:
+    from bridge_graph import GraphStore
+
+    db = _graph_db_path()
+    gs = GraphStore(db)
+    s = gs.stats()
+    return GraphStatsResponse(
+        pages=int(s.get("pages", 0)),
+        tags=int(s.get("tags", 0)),
+        episodes=int(s.get("episodes", 0)),
+        references_=int(s.get("references_", 0)),
+        tagged_with=int(s.get("tagged_with", 0)),
+        produced_in=int(s.get("produced_in", 0)),
+        pchain=int(s.get("pchain", 0)),
+        db_path=db,
+    )
+
+
+@router.post(
+    "/graph/neighbors",
+    response_model=GraphNeighborsResponse,
+    summary="Pages reachable from a given page within `depth` hops",
+)
+async def graph_neighbors(req: GraphNeighborsRequest) -> GraphNeighborsResponse:
+    from bridge_graph import GraphStore
+
+    gs = GraphStore(_graph_db_path())
+    return GraphNeighborsResponse(items=gs.get_neighbors(req.page_name, depth=req.depth))
+
+
+@router.post(
+    "/visual/profile",
+    response_model=VisualProfileResponse,
+    summary="Score human-readability of a markdown article (no augmentation)",
+)
+async def visual_profile(req: VisualProfileRequest) -> VisualProfileResponse:
+    from bridge_visual import profile_reader
+
+    p = profile_reader(req.markdown)
+    return VisualProfileResponse(
+        audience_score=p.audience_score,
+        has_steps=p.has_steps,
+        has_branches=p.has_branches,
+        has_state_machine=p.has_state_machine,
+        has_outline_value=p.has_outline_value,
+        heading_count=p.heading_count,
+        char_count=p.char_count,
+        rationale=p.rationale,
+    )
+
+
+@router.post(
+    "/visual/augment",
+    response_model=VisualAugmentResponse,
+    summary="Inject mermaid + outline into markdown when audience score >= threshold",
+)
+async def visual_augment(req: VisualAugmentRequest) -> VisualAugmentResponse:
+    from bridge_visual import (
+        AUDIENCE_HUMAN_THRESHOLD_DEFAULT,
+        augment_markdown,
+    )
+
+    threshold = req.threshold if req.threshold is not None else AUDIENCE_HUMAN_THRESHOLD_DEFAULT
+    res = augment_markdown(req.markdown, threshold=threshold)
+    p = res.profile
+    return VisualAugmentResponse(
+        augmented=res.augmented,
+        output=res.output,
+        skipped_reason=res.skipped_reason,
+        profile=VisualProfileResponse(
+            audience_score=p.audience_score,
+            has_steps=p.has_steps,
+            has_branches=p.has_branches,
+            has_state_machine=p.has_state_machine,
+            has_outline_value=p.has_outline_value,
+            heading_count=p.heading_count,
+            char_count=p.char_count,
+            rationale=p.rationale,
+        ),
+    )

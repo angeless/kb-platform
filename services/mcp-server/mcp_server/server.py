@@ -297,3 +297,111 @@ def kb_status_resource() -> str:
 def get_server() -> FastMCP:
     """Return the FastMCP instance. Used by tests + alternative entrypoints."""
     return mcp
+
+
+# =================================================================
+# v0.54 — Graph + Visual augmentation tools
+# =================================================================
+
+def _graph_db_path() -> str:
+    """Resolve the Kuzu graph DB path from config (deferred env read)."""
+    import os as _os
+    from bridge.config import get_settings as _gs
+
+    s = _gs()
+    default = str(s.hogwarts_kb_path / ".bridge-state" / ".graph.kuzu")
+    return _os.environ.get("BRIDGE_GRAPH_DB_PATH", default)
+
+
+@mcp.tool()
+def kb_graph_stats() -> dict[str, Any]:
+    """Return current Kuzu graph DB stats: node + relation counts."""
+    from bridge_graph import GraphStore
+
+    db = _graph_db_path()
+    gs = GraphStore(db)
+    s = gs.stats()
+    return {**{k: int(v) for k, v in s.items()}, "db_path": db}
+
+
+@mcp.tool()
+def kb_graph_neighbors(page_name: str, depth: int = 1) -> list[dict[str, Any]]:
+    """Return Pages reachable from `page_name` within `depth` hops (max 5).
+
+    Args:
+        page_name: KB-relative path (e.g. 'wiki/concepts/foo')
+        depth: 1-5
+    """
+    from bridge_graph import GraphStore
+
+    gs = GraphStore(_graph_db_path())
+    return gs.get_neighbors(page_name, depth=depth)
+
+
+@mcp.tool()
+def kb_graph_pchain(session_id: str) -> list[str]:
+    """Trace ancestors of a session_id via parent_session_id (pchain). Newest first."""
+    from bridge_graph import GraphStore
+
+    gs = GraphStore(_graph_db_path())
+    return gs.get_p_chain(session_id)
+
+
+@mcp.tool()
+def kb_visual_profile(markdown: str) -> dict[str, Any]:
+    """Score the human-readability of a markdown article.
+
+    Args:
+        markdown: full text (frontmatter included is fine)
+
+    Returns:
+        {audience_score, has_steps, has_branches, has_state_machine,
+         has_outline_value, heading_count, char_count, rationale}
+    """
+    from bridge_visual import profile_reader
+
+    p = profile_reader(markdown)
+    return {
+        "audience_score": p.audience_score,
+        "has_steps": p.has_steps,
+        "has_branches": p.has_branches,
+        "has_state_machine": p.has_state_machine,
+        "has_outline_value": p.has_outline_value,
+        "heading_count": p.heading_count,
+        "char_count": p.char_count,
+        "rationale": p.rationale,
+    }
+
+
+@mcp.tool()
+def kb_visual_augment(markdown: str, threshold: float | None = None) -> dict[str, Any]:
+    """Inject mermaid + outline into markdown when audience_score >= threshold.
+
+    Args:
+        markdown: full text (frontmatter included)
+        threshold: 0.0-1.0; default = AUDIENCE_HUMAN_THRESHOLD_DEFAULT (0.6)
+
+    Returns:
+        {augmented, output, skipped_reason, profile}
+    """
+    from bridge_visual import (
+        AUDIENCE_HUMAN_THRESHOLD_DEFAULT,
+        augment_markdown,
+    )
+
+    t = threshold if threshold is not None else AUDIENCE_HUMAN_THRESHOLD_DEFAULT
+    res = augment_markdown(markdown, threshold=t)
+    return {
+        "augmented": res.augmented,
+        "output": res.output,
+        "skipped_reason": res.skipped_reason,
+        "profile": {
+            "audience_score": res.profile.audience_score,
+            "has_steps": res.profile.has_steps,
+            "has_branches": res.profile.has_branches,
+            "has_state_machine": res.profile.has_state_machine,
+            "has_outline_value": res.profile.has_outline_value,
+            "heading_count": res.profile.heading_count,
+            "char_count": res.profile.char_count,
+        },
+    }

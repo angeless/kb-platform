@@ -188,3 +188,93 @@ def test_kb_write_analysis_creates_file(fake_kb):
     res = fn(title="MCP Analysis", body="Comparison body.\n")
     assert "error" not in res
     assert res["path"] == "wiki/analyses/mcp-analysis.md"
+
+
+# =================================================================
+# v0.54 — graph + visual tool tests
+# =================================================================
+
+@pytest.fixture()
+def fake_kb_with_graph(tmp_path: Path, monkeypatch):
+    """fake_kb variant that ALSO sets BRIDGE_GRAPH_DB_PATH."""
+    repo = _init_fake_kb(tmp_path)
+    from bridge import config as bridge_config
+    from bridge.writers import kb_writer
+
+    class FakeSettings:
+        hogwarts_kb_path = tmp_path
+        hogwarts_kb_branch = repo.active_branch.name
+        hogwarts_kb_auto_push = False
+        glm_api_key = "test-key"
+        bridge_llm_provider = "glm"
+        bridge_llm_strict = True
+        bridge_llm_model = "glm-4-flash"
+        bridge_llm_base_url = "https://x.test"
+        writer_allowed_paths = ["wiki/summaries", "wiki/analyses"]
+        writer_git_lock_timeout_s = 1
+        watcher_ignore_globs = [".git/*", ".obsidian/*"]
+
+    monkeypatch.setattr(bridge_config, "get_settings", lambda: FakeSettings())
+    monkeypatch.setattr(kb_writer, "get_settings", lambda: FakeSettings())
+    monkeypatch.setenv("BRIDGE_GRAPH_DB_PATH", str(tmp_path / ".graph.kuzu"))
+    return tmp_path
+
+
+def test_v054_tools_registered():
+    expected = {
+        "kb_graph_stats", "kb_graph_neighbors", "kb_graph_pchain",
+        "kb_visual_profile", "kb_visual_augment",
+    }
+    actual = {t.name for t in mcp._tool_manager.list_tools()}
+    missing = expected - actual
+    assert not missing, f"Missing v0.54 tools: {missing}"
+
+
+def test_kb_graph_stats_empty(fake_kb_with_graph):
+    fn = _get_tool("kb_graph_stats")
+    res = fn()
+    assert res["pages"] == 0
+    assert res["episodes"] == 0
+    assert res["db_path"].endswith(".graph.kuzu")
+
+
+def test_kb_graph_neighbors_unknown_returns_empty(fake_kb_with_graph):
+    fn = _get_tool("kb_graph_neighbors")
+    assert fn("wiki/concepts/nope", depth=1) == []
+
+
+def test_kb_graph_pchain_unknown_returns_empty(fake_kb_with_graph):
+    fn = _get_tool("kb_graph_pchain")
+    # Empty session_id never seen → empty chain
+    assert fn("cc:nonexistent") == []
+
+
+def test_kb_visual_profile():
+    fn = _get_tool("kb_visual_profile")
+    text = "## Step 1: foo\n## Step 2: bar\n## Step 3: baz\n"
+    res = fn(text)
+    assert "audience_score" in res
+    assert res["has_steps"] is True
+
+
+def test_kb_visual_augment_below_threshold():
+    fn = _get_tool("kb_visual_augment")
+    res = fn("short text")
+    assert res["augmented"] is False
+    assert res["skipped_reason"]
+
+
+def test_kb_visual_augment_inserts_block():
+    fn = _get_tool("kb_visual_augment")
+    body_padding = "Detailed paragraph. " * 50
+    md = (
+        "---\ntype: howto\n---\n\n"
+        "# Title\n\n## Overview\n\n" + body_padding +
+        "\n\n## Step 1: A\n\n" + body_padding +
+        "\n\n## Step 2: B\n\n" + body_padding +
+        "\n\n## Step 3: C\n\n" + body_padding + "\n"
+    )
+    res = fn(md)
+    assert res["augmented"] is True
+    assert "<!-- bridge-visual:start" in res["output"]
+    assert "```mermaid" in res["output"]
