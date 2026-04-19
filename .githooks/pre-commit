@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# KBSQL pre-commit hook — secrets prevention.
+# Bypass with `git commit --no-verify` if absolutely necessary.
+
+set -e
+
+PY=$(command -v python3 || command -v python || true)
+if [[ -z "$PY" ]]; then
+  echo "kbsql-lint: no python3 found in PATH; skipping" >&2
+  exit 0
+fi
+
+HOOK_DIR=$(cd "$(dirname "$0")" && pwd)
+"$PY" "$HOOK_DIR/_kbsql_lint.py"
